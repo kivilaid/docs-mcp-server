@@ -38,6 +38,7 @@ export function registerNewJobRoutes(
           ignoreErrors?: "on" | undefined;
           includePatterns?: string;
           excludePatterns?: string;
+          "header[]"?: string[] | string; // Added header field for custom headers
         };
       }>,
       reply
@@ -67,6 +68,24 @@ export function registerNewJobRoutes(
             .filter((s) => s.length > 0);
         }
 
+        // Parse custom headers from repeated header[] fields (format: name:value)
+        function parseHeaders(
+          input?: string[] | string
+        ): Record<string, string> | undefined {
+          if (!input) return undefined;
+          const arr = Array.isArray(input) ? input : [input];
+          const headers: Record<string, string> = {};
+          for (const entry of arr) {
+            const idx = entry.indexOf(":");
+            if (idx > 0) {
+              const name = entry.slice(0, idx).trim();
+              const value = entry.slice(idx + 1).trim();
+              if (name) headers[name] = value;
+            }
+          }
+          return Object.keys(headers).length > 0 ? headers : undefined;
+        }
+
         // Prepare options for ScrapeTool
         const scrapeOptions = {
           url: body.url,
@@ -87,6 +106,7 @@ export function registerNewJobRoutes(
             ignoreErrors: body.ignoreErrors === "on",
             includePatterns: parsePatterns(body.includePatterns),
             excludePatterns: parsePatterns(body.excludePatterns),
+            headers: parseHeaders(body["header[]"]), // <-- propagate custom headers from web UI
           },
         };
 

@@ -10,6 +10,9 @@ import {
 } from "./EmbeddingFactory";
 import { FixedDimensionEmbeddings } from "./FixedDimensionEmbeddings";
 
+// Suppress logger output during tests
+vi.mock("../../utils/logger");
+
 // Mock process.env for each test
 const originalEnv = process.env;
 
@@ -148,5 +151,19 @@ describe("createEmbeddingModel", () => {
     expect(() => createEmbeddingModel("aws:amazon.titan-embed-text-v1")).toThrow(
       ModelConfigurationError,
     );
+  });
+
+  test("should create AWS Bedrock embeddings with only AWS_PROFILE set", () => {
+    vi.stubGlobal("process", {
+      env: {
+        AWS_PROFILE: "test-profile",
+        BEDROCK_AWS_REGION: "us-east-1",
+      },
+    });
+    const model = createEmbeddingModel("aws:amazon.titan-embed-text-v1");
+    expect(model).toBeInstanceOf(BedrockEmbeddings);
+    expect(model).toMatchObject({
+      model: "amazon.titan-embed-text-v1",
+    });
   });
 });

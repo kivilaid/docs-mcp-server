@@ -46,7 +46,7 @@ export class PipelineManager {
    */
   async start(): Promise<void> {
     if (this.isRunning) {
-      logger.warn("⚠️ PipelineManager is already running.");
+      logger.warn("⚠️  PipelineManager is already running.");
       return;
     }
     this.isRunning = true;
@@ -61,7 +61,7 @@ export class PipelineManager {
    */
   async stop(): Promise<void> {
     if (!this.isRunning) {
-      logger.warn("⚠️ PipelineManager is not running.");
+      logger.warn("⚠️  PipelineManager is not running.");
       return;
     }
     this.isRunning = false;
@@ -70,13 +70,43 @@ export class PipelineManager {
   }
 
   /**
-   * Enqueues a new document processing job.
+   * Finds jobs by library, version, and optional status.
+   */
+  findJobsByLibraryVersion(
+    library: string,
+    version: string,
+    statuses?: PipelineJobStatus[],
+  ): PipelineJob[] {
+    return Array.from(this.jobMap.values()).filter(
+      (job) =>
+        job.library === library &&
+        job.version === version &&
+        (!statuses || statuses.includes(job.status)),
+    );
+  }
+
+  /**
+   * Enqueues a new document processing job, aborting any existing QUEUED/RUNNING job for the same library+version (including unversioned).
    */
   async enqueueJob(
     library: string,
-    version: string,
+    version: string | undefined | null,
     options: ScraperOptions,
   ): Promise<string> {
+    // Normalize version: treat undefined/null as "" (unversioned)
+    const normalizedVersion = version ?? "";
+    // Abort any existing QUEUED or RUNNING job for the same library+version
+    const duplicateJobs = this.findJobsByLibraryVersion(library, normalizedVersion, [
+      PipelineJobStatus.QUEUED,
+      PipelineJobStatus.RUNNING,
+    ]);
+    for (const job of duplicateJobs) {
+      logger.info(
+        `🚫 Aborting duplicate job for ${library}@${normalizedVersion}: ${job.id}`,
+      );
+      await this.cancelJob(job.id);
+    }
+
     const jobId = uuidv4();
     const abortController = new AbortController();
     let resolveCompletion!: () => void;
@@ -90,7 +120,7 @@ export class PipelineManager {
     const job: PipelineJob = {
       id: jobId,
       library,
-      version,
+      version: normalizedVersion,
       options,
       status: PipelineJobStatus.QUEUED,
       progress: null,
@@ -107,7 +137,7 @@ export class PipelineManager {
     this.jobMap.set(jobId, job);
     this.jobQueue.push(jobId);
     logger.info(
-      `📝 Job enqueued: ${jobId} for ${library}${version ? `@${version}` : ""}`,
+      `📝 Job enqueued: ${jobId} for ${library}${normalizedVersion ? `@${normalizedVersion}` : " (unversioned)"}`,
     );
 
     await this.callbacks.onJobStatusChange?.(job);
@@ -140,13 +170,27 @@ export class PipelineManager {
 
   /**
    * Returns a promise that resolves when the specified job completes, fails, or is cancelled.
+   * For cancelled jobs, this resolves successfully rather than rejecting.
    */
   async waitForJobCompletion(jobId: string): Promise<void> {
     const job = this.jobMap.get(jobId);
     if (!job) {
       throw new PipelineStateError(`Job not found: ${jobId}`);
     }
-    await job.completionPromise;
+
+    try {
+      await job.completionPromise;
+    } catch (error) {
+      // If the job was cancelled, treat it as successful completion
+      if (
+        error instanceof CancellationError ||
+        job.status === PipelineJobStatus.CANCELLED
+      ) {
+        return; // Resolve successfully for cancelled jobs
+      }
+      // Re-throw other errors (failed jobs)
+      throw error;
+    }
   }
 
   /**
@@ -184,7 +228,7 @@ export class PipelineManager {
       case PipelineJobStatus.CANCELLED:
       case PipelineJobStatus.CANCELLING:
         logger.warn(
-          `⚠️ Job ${jobId} cannot be cancelled in its current state: ${job.status}`,
+          `⚠️  Job ${jobId} cannot be cancelled in its current state: ${job.status}`,
         );
         break;
 
@@ -192,6 +236,43 @@ export class PipelineManager {
         logger.error(`❌ Unhandled job status for cancellation: ${job.status}`);
         break;
     }
+  }
+
+  /**
+   * Removes all jobs that are in a final state (completed, cancelled, or failed).
+   * Only removes jobs that are not currently in the queue or actively running.
+   * @returns The number of jobs that were cleared.
+   */
+  async clearCompletedJobs(): Promise<number> {
+    const completedStatuses = [
+      PipelineJobStatus.COMPLETED,
+      PipelineJobStatus.CANCELLED,
+      PipelineJobStatus.FAILED,
+    ];
+
+    let clearedCount = 0;
+    const jobsToRemove: string[] = [];
+
+    // Find all jobs that can be cleared
+    for (const [jobId, job] of this.jobMap.entries()) {
+      if (completedStatuses.includes(job.status)) {
+        jobsToRemove.push(jobId);
+        clearedCount++;
+      }
+    }
+
+    // Remove the jobs from the map
+    for (const jobId of jobsToRemove) {
+      this.jobMap.delete(jobId);
+    }
+
+    if (clearedCount > 0) {
+      logger.info(`🧹 Cleared ${clearedCount} completed job(s) from the queue`);
+    } else {
+      logger.debug("No completed jobs to clear");
+    }
+
+    return clearedCount;
   }
 
   // --- Private Methods ---
@@ -272,14 +353,14 @@ export class PipelineManager {
         // Explicitly check for CancellationError or if the signal was aborted
         job.status = PipelineJobStatus.CANCELLED;
         job.finishedAt = new Date();
-        // Use the caught error if it's a CancellationError, otherwise create a new one
-        job.error =
+        // Don't set job.error for cancellations - cancellation is not an error condition
+        const cancellationError =
           error instanceof CancellationError
             ? error
             : new CancellationError("Job cancelled by signal");
-        logger.info(`🚫 Job execution cancelled: ${jobId}: ${job.error.message}`);
+        logger.info(`🚫 Job execution cancelled: ${jobId}: ${cancellationError.message}`);
         await this.callbacks.onJobStatusChange?.(job);
-        job.rejectCompletion(job.error);
+        job.rejectCompletion(cancellationError);
       } else {
         // Handle other errors
         job.status = PipelineJobStatus.FAILED;

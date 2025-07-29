@@ -108,6 +108,60 @@ describe("HtmlPipeline", () => {
     expect(result.textContent).toContain("abc");
   });
 
+  it("process decodes Buffer content with UTF-16LE BOM", async () => {
+    const pipeline = new HtmlPipeline();
+    // UTF-16LE BOM: 0xFF 0xFE, then 'abc' as UTF-16LE
+    const buf = Buffer.from([0xff, 0xfe, 0x61, 0x00, 0x62, 0x00, 0x63, 0x00]);
+    const raw: RawContent = {
+      content: buf,
+      mimeType: "text/html",
+      charset: "utf-16le",
+      source: "http://test",
+    };
+    const result = await pipeline.process(raw, {} as ScraperOptions);
+    expect(result.textContent).toContain("abc");
+  });
+
+  it("process decodes Buffer content with UTF-8 BOM", async () => {
+    const pipeline = new HtmlPipeline();
+    // UTF-8 BOM: 0xEF 0xBB 0xBF, then 'abc'
+    const buf = Buffer.from([0xef, 0xbb, 0xbf, 0x61, 0x62, 0x63]);
+    const raw: RawContent = {
+      content: buf,
+      mimeType: "text/html",
+      charset: "utf-8",
+      source: "http://test",
+    };
+    const result = await pipeline.process(raw, {} as ScraperOptions);
+    expect(result.textContent).toContain("abc");
+  });
+
+  it("process decodes Buffer content with Japanese UTF-8 text", async () => {
+    const pipeline = new HtmlPipeline();
+    const japanese = "<html><body>こんにちは世界</body></html>"; // "Hello, world" in Japanese
+    const raw: RawContent = {
+      content: Buffer.from(japanese, "utf-8"),
+      mimeType: "text/html",
+      charset: "utf-8",
+      source: "http://test",
+    };
+    const result = await pipeline.process(raw, {} as ScraperOptions);
+    expect(result.textContent).toContain("こんにちは世界");
+  });
+
+  it("process decodes Buffer content with Russian UTF-8 text", async () => {
+    const pipeline = new HtmlPipeline();
+    const russian = "<html><body>Привет, мир</body></html>"; // "Hello, world" in Russian
+    const raw: RawContent = {
+      content: Buffer.from(russian, "utf-8"),
+      mimeType: "text/html",
+      charset: "utf-8",
+      source: "http://test",
+    };
+    const result = await pipeline.process(raw, {} as ScraperOptions);
+    expect(result.textContent).toContain("Привет, мир");
+  });
+
   it("process calls middleware in order and aggregates results", async () => {
     const pipeline = new HtmlPipeline();
     const html = `

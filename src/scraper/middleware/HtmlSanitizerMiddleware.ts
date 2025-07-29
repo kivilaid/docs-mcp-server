@@ -110,7 +110,7 @@ export class HtmlSanitizerMiddleware implements ContentProcessorMiddleware {
           // Log invalid selectors but continue with others
           // Cheerio is generally more tolerant of invalid selectors than querySelectorAll
           logger.warn(
-            `⚠️ Potentially invalid selector "${selector}" during element removal: ${selectorError}`,
+            `⚠️  Potentially invalid selector "${selector}" during element removal: ${selectorError}`,
           );
           context.errors.push(
             new Error(`Invalid selector "${selector}": ${selectorError}`),

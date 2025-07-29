@@ -99,6 +99,7 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          platforms: linux/amd64,linux/arm64 # Build for both x86_64 and arm64 (Mac Silicon)
 
       - name: Generate artifact attestation
         uses: actions/attest-build-provenance@v1

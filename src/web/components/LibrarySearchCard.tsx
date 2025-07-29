@@ -1,4 +1,3 @@
-import semver from "semver";
 import type { LibraryInfo } from "../../tools/ListLibrariesTool";
 import LoadingSpinner from "./LoadingSpinner"; // Import spinner
 
@@ -15,16 +14,6 @@ interface LibrarySearchCardProps {
  * @param props - Component props including the library information.
  */
 const LibrarySearchCard = ({ library }: LibrarySearchCardProps) => {
-  // Sort versions for the dropdown: unversioned first, then newest semver first.
-  const sortedVersions = library.versions.sort((a, b) => {
-    if (!a.version) return -1;
-    if (!b.version) return 1;
-    return semver.compare(
-      semver.coerce(b.version)?.version ?? "0.0.0",
-      semver.coerce(a.version)?.version ?? "0.0.0"
-    );
-  });
-
   return (
     <div class="block p-4 bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-300 dark:border-gray-600 mb-4">
       <h2 class="text-xl font-semibold mb-2 text-gray-900 dark:text-white" safe>
@@ -42,7 +31,7 @@ const LibrarySearchCard = ({ library }: LibrarySearchCardProps) => {
           class="w-40 bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500"
         >
           <option value="">Latest</option> {/* Default to latest */}
-          {sortedVersions.map((version) => (
+          {library.versions.map((version) => (
             <option value={version.version || "unversioned"} safe>
               {version.version || "Unversioned"}
             </option>

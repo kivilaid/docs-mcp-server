@@ -65,6 +65,11 @@ export interface ScraperOptions {
    * Patterns for excluding URLs during scraping. Exclude takes precedence over include.
    */
   excludePatterns?: string[];
+  /**
+   * Custom HTTP headers to send with each HTTP request (e.g., for authentication).
+   * Keys are header names, values are header values.
+   */
+  headers?: Record<string, string>;
 }
 
 /**

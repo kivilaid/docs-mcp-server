@@ -1,49 +1,44 @@
 # Docs MCP Server: Your AI's Up-to-Date Documentation Expert
 
-AI coding assistants often struggle with outdated documentation, leading to incorrect suggestions or hallucinated code examples. Verifying AI responses against specific library versions can be time-consuming and inefficient.
+AI coding assistants often struggle with outdated documentation and hallucinations. The **Docs MCP Server** solves this by providing a personal, always-current knowledge base for your AI. It **indexes 3rd party documentation** from various sources (websites, GitHub, npm, PyPI, local files) and offers powerful, version-aware search tools via the Model Context Protocol (MCP).
 
-The **Docs MCP Server** solves this by acting as a personal, always-current knowledge base for your AI assistant. Its primary purpose is to **index 3rd party documentation** – the libraries you actually use in your codebase. It scrapes websites, GitHub repositories, package managers (npm, PyPI), and even local files, cataloging the docs locally. It then provides powerful search tools via the Model Context Protocol (MCP) to your coding agent.
-
-This enables your LLM agent to access the **latest official documentation** for any library you add, dramatically improving the quality and reliability of generated code and integration details.
-
-By grounding AI responses in accurate, version-aware context, the Docs MCP Server enables you to receive concise and relevant integration details and code snippets, improving the reliability and efficiency of LLM-assisted development.
-
-It's **free**, **open-source**, runs **locally** for privacy, and integrates seamlessly into your development workflow.
+This enables your AI agent to access the **latest official documentation**, dramatically improving the quality and reliability of generated code and integration details. It's **free**, **open-source**, runs **locally** for privacy, and integrates seamlessly into your development workflow.
 
 ## Why Use the Docs MCP Server?
 
 LLM-assisted coding promises speed and efficiency, but often falls short due to:
 
-- 🌀 **Stale Knowledge:** LLMs train on snapshots of the internet, quickly falling behind new library releases and API changes.
+- 🌀 **Stale Knowledge:** LLMs train on snapshots of the internet and quickly fall behind new library releases and API changes.
 - 👻 **Code Hallucinations:** AI can invent plausible-looking code that is syntactically correct but functionally wrong or uses non-existent APIs.
-- ❓ **Version Ambiguity:** Generic answers rarely account for the specific version dependencies in _your_ project, leading to subtle bugs.
+- ❓ **Version Ambiguity:** Generic answers rarely account for the specific version dependencies in your project, leading to subtle bugs.
 - ⏳ **Verification Overhead:** Developers spend valuable time double-checking AI suggestions against official documentation.
 
-**The Docs MCP Server tackles these problems head-on by:**
+**Docs MCP Server solves these problems by:**
 
-- ✅ **Providing Always Up-to-Date Context:** It fetches and indexes documentation _directly_ from official sources (websites, GitHub, npm, PyPI, local files) on demand.
-- 🎯 **Delivering Version-Specific Answers:** Search queries can target exact library versions, ensuring the information aligns with your project's dependencies.
-- 💡 **Reducing Hallucinations:** By grounding the LLM in real documentation, it provides accurate examples and integration details.
+- ✅ **Providing Up-to-Date Context:** Fetches and indexes documentation directly from official sources (websites, GitHub, npm, PyPI, local files) on demand.
+- 🎯 **Delivering Version-Specific Answers:** Search queries can target exact library versions, ensuring information matches your project's dependencies.
+- 💡 **Reducing Hallucinations:** Grounds the LLM in real documentation for accurate examples and integration details.
 - ⚡ **Boosting Productivity:** Get trustworthy answers faster, integrated directly into your AI assistant workflow.
 
 ## ✨ Key Features
 
-- **Up-to-Date Knowledge:** Fetches the latest documentation directly from the source.
-- **Version-Aware Search:** Get answers relevant to specific library versions (e.g., `react@18.2.0` vs `react@17.0.0`).
-- **Accurate Snippets:** Reduces AI hallucinations by using context from official docs.
-- **Web Interface:** Provides a easy-to-use web interface for searching and managing documentation.
-- **Broad Source Compatibility:** Scrapes websites, GitHub repos, package manager sites (npm, PyPI), and even local file directories.
-- **Intelligent Processing:** Automatically chunks documentation semantically and generates embeddings.
-- **Flexible Embedding Models:** Supports OpenAI (incl. compatible APIs like Ollama), Google Gemini/Vertex AI, Azure OpenAI, AWS Bedrock, and more.
-- **Powerful Hybrid Search:** Combines vector similarity with full-text search for relevance.
-- **Local & Private:** Runs entirely on your machine, keeping your data and queries private.
-- **Free & Open Source:** Built for the community, by the community.
+- **Accurate & Version-Aware AI Responses:** Provides up-to-date, version-specific documentation to reduce AI hallucinations and improve code accuracy.
+- **Broad Source Compatibility:** Scrapes documentation from websites, GitHub repos, package manager sites (npm, PyPI), and local file directories.
+- **Advanced Search & Processing:** Intelligently chunks documentation semantically, generates embeddings, and combines vector similarity with full-text search.
+- **Flexible Embedding Models:** Supports various providers including OpenAI (and compatible APIs), Google Gemini/Vertex AI, Azure OpenAI, and AWS Bedrock.
+- **Web Interface:** Easy-to-use web interface for searching and managing documentation.
+- **Local & Private:** Runs entirely on your machine, ensuring data and queries remain private.
+- **Free & Open Source:** Community-driven and freely available.
 - **Simple Deployment:** Easy setup via Docker or `npx`.
 - **Seamless Integration:** Works with MCP-compatible clients (like Claude, Cline, Roo).
 
+> **What is semantic chunking?**
+>
+> Semantic chunking splits documentation into meaningful sections based on structure—like headings, code blocks, and tables—rather than arbitrary text size. Docs MCP Server preserves logical boundaries, keeps code and tables intact, and removes navigation clutter from HTML docs. This ensures LLMs receive coherent, context-rich information for more accurate and relevant answers.
+
 ## How to Run the Docs MCP Server
 
-Get up and running quickly! We recommend using Docker Desktop (Docker Compose) for the easiest setup and management.
+Get started quickly:
 
 - [Recommended: Docker Desktop](#recommended-docker-desktop)
 - [Alternative: Using Docker](#alternative-using-docker)
@@ -51,100 +46,102 @@ Get up and running quickly! We recommend using Docker Desktop (Docker Compose) f
 
 ## Recommended: Docker Desktop
 
-This method provides a persistent local setup by running the server and web interface using Docker Compose. It requires cloning the repository but simplifies managing both services together.
+Run the server and web interface together using Docker Compose.
 
-1.  **Ensure Docker and Docker Compose are installed and running.**
-2.  **Clone the repository:**
-    ```bash
-    git clone https://github.com/arabold/docs-mcp-server.git
-    cd docs-mcp-server
-    ```
-3.  **Set up your environment:**
-    Copy the example environment file and edit it to add your OpenAI API key (required):
+1. **Install Docker and Docker Compose.**
+2. **Clone the repository:**
+   ```bash
+   git clone https://github.com/arabold/docs-mcp-server.git
+   cd docs-mcp-server
+   ```
+3. **Set up your environment:**
+   Copy the example environment file and add your OpenAI API key:
+   ```bash
+   cp .env.example .env
+   # Edit .env and set your OpenAI API key
+   ```
+4. **Start the services:**
+   ```bash
+   docker compose up -d
+   ```
+   - Use `-d` for detached mode. Omit to see logs in your terminal.
+   - To rebuild after updates: `docker compose up -d --build`.
+5. **Configure your MCP client:**
+   Add this to your MCP settings:
+   ```json
+   {
+     "mcpServers": {
+       "docs-mcp-server": {
+         "url": "http://localhost:6280/sse",
+         "disabled": false,
+         "autoApprove": []
+       }
+     }
+   }
+   ```
+   Restart your AI assistant after updating the config.
+6. **Access the Web Interface:**
+   Open `http://localhost:6281` in your browser.
 
-    ```bash
-    cp .env.example .env
-    # Edit the .env file and set your OpenAI API key:
-    ```
+**Benefits:**
 
-    Example `.env`:
+- One command runs both server and web UI
+- Persistent data storage via Docker volume
+- Easy config via `.env`
 
-    ```
-    OPENAI_API_KEY=your-api-key-here
-    ```
-
-    For additional configuration options (e.g., other providers, advanced settings), see the [Configuration](#configuration) section.
-
-4.  **Launch the services:**
-    Run this command from the repository's root directory. It will build the images (if necessary) and start the server and web interface in the background.
-
-    ```bash
-    docker compose up -d
-    ```
-
-    - `-d`: Runs the containers in detached mode (in the background). Omit this to see logs directly in your terminal.
-
-    **Note:** If you pull updates for the repository (e.g., using `git pull`), you'll need to rebuild the Docker images to include the changes by running `docker compose up -d --build`.
-
-5.  **Configure your MCP client:**
-    Add the following configuration block to your MCP settings file (e.g., for Claude, Cline, Roo):
-
-    ```json
-    {
-      "mcpServers": {
-        "docs-mcp-server": {
-          "url": "http://localhost:6280/sse", // Connects via HTTP to the Docker Compose service
-          "disabled": false,
-          "autoApprove": []
-        }
-      }
-    }
-    ```
-
-    Restart your AI assistant application after updating the configuration.
-
-    Note: The Docker Compose setup runs the Docs MCP Server in HTTP mode (via SSE) by design, as it's intended as a standalone, connectable instance. It does not support stdio communication.
-
-6.  **Access the Web Interface:**
-    The web interface will be available at `http://localhost:6281`.
-
-**Benefits of this method:**
-
-- Runs both the server and web UI with a single command.
-- Uses the local source code (rebuilds automatically if code changes and you run `docker compose up --build`).
-- Persistent data storage via the `docs-mcp-data` Docker volume.
-- Easy configuration management via the `.env` file.
-
-To stop the services, run `docker compose down` from the repository directory.
+To stop, run `docker compose down`.
 
 ### Adding Library Documentation
 
+1. Open the Web Interface at `http://localhost:6281`.
+2. Use the "Queue New Scrape Job" form.
+3. Enter the documentation URL, library name, and (optionally) version.
+4. Click "Queue Job". Monitor progress in the Job Queue.
+5. Repeat for each library you want indexed.
+
+Once a job completes, the docs are searchable via your AI assistant or the Web UI.
+
 ![Docs MCP Server Web Interface](docs/docs-mcp-server.png)
 
-Once the Docs MCP Server is running, you can use the Web Interface to **add new documentation** to be indexed or **search existing documentation**.
+## Scraping Local Files and Folders
 
-1.  **Open the Web Interface:** If you used the recommended Docker Compose setup, navigate your browser to `http://localhost:6281`.
-2.  **Find the "Queue New Scrape Job" Form:** This is usually prominently displayed on the main page.
-3.  **Enter the Details:**
-    - **URL:** Provide the starting URL for the documentation you want to index (e.g., `https://react.dev/reference/react`, `https://github.com/expressjs/express`, `https://docs.python.org/3/`).
-    - **Library Name:** Give it a short, memorable name (e.g., `react`, `express`, `python`). This is how you'll refer to it in searches.
-    - **Version (Optional):** If you want to index a specific version, enter it here (e.g., `18.2.0`, `4.17.1`, `3.11`). If left blank, the server often tries to detect the latest version or indexes it as unversioned.
-    - **(Optional) Advanced Settings:** Adjust `Scope` (e.g., 'Subpages', 'Hostname', 'Domain'), `Max Pages`, `Max Depth`, and `Follow Redirects` if needed. Defaults are usually sufficient.
-4.  **Click "Queue Job":** The server will start a background job to fetch, process, and index the documentation. You can monitor its progress in the "Job Queue" section of the Web UI.
-5.  **Repeat:** Repeat steps 3-4 for every library whose documentation you want the server to manage.
+You can index documentation from your local filesystem by using a `file://` URL as the source. This works in both the Web UI and CLI.
 
-**That's it!** Once a job completes successfully, the documentation for that library and version becomes available for searching through your connected AI coding assistant (using the `search_docs` tool) or directly in the Web UI by clicking on the library name in the "Indexed Documenation" section.
+**Examples:**
+
+- Web: `https://react.dev/reference/react`
+- Local file: `file:///Users/me/docs/index.html`
+- Local folder: `file:///Users/me/docs/my-library`
+
+**Requirements:**
+
+- All files with a MIME type of `text/*` are processed. This includes HTML, Markdown, plain text, and source code files such as `.js`, `.ts`, `.tsx`, `.css`, etc. Binary files, PDFs, images, and other non-text formats are ignored.
+- You must use the `file://` prefix for local files/folders.
+- The path must be accessible to the server process.
+- **If running in Docker or Docker Compose:**
+  - You must mount the local folder into the container and use the container path in your `file://` URL.
+  - Example Docker run:
+    ```bash
+    docker run --rm \
+      -e OPENAI_API_KEY="your-key" \
+      -v /absolute/path/to/docs:/docs:ro \
+      -v docs-mcp-data:/data \
+      ghcr.io/arabold/docs-mcp-server:latest \
+      scrape mylib file:///docs/my-library
+    ```
+  - In the Web UI, enter the path as `file:///docs/my-library` (matching the container path).
+
+See the tooltips in the Web UI and CLI help for more details.
 
 ## Alternative: Using Docker
 
-This approach is easy, straightforward, and doesn't require cloning the repository.
+> **Note:** The published Docker images support both x86_64 (amd64) and Mac Silicon (arm64).
 
-1. **Ensure Docker is installed and running.**
-2. **Configure your MCP settings:**
+This method is simple and doesn't require cloning the repository.
 
-   **Claude/Cline/Roo Configuration Example:**
-   Add the following configuration block to your MCP settings file (adjust path as needed):
-
+1. **Install and start Docker.**
+2. **Configure your MCP client:**
+   Add this block to your MCP settings (adjust as needed):
    ```json
    {
      "mcpServers": {
@@ -161,7 +158,7 @@ This approach is easy, straightforward, and doesn't require cloning the reposito
            "ghcr.io/arabold/docs-mcp-server:latest"
          ],
          "env": {
-           "OPENAI_API_KEY": "sk-proj-..." // Required if using OpenAI (default)
+           "OPENAI_API_KEY": "sk-proj-..." // Your OpenAI API key
          },
          "disabled": false,
          "autoApprove": []
@@ -169,56 +166,52 @@ This approach is easy, straightforward, and doesn't require cloning the reposito
      }
    }
    ```
-
-   Remember to replace `"sk-proj-..."` with your actual OpenAI API key and restart the application.
-
-3. **That's it!** The server will now be available to your AI assistant.
+   Replace `sk-proj-...` with your OpenAI API key. Restart your application.
+3. **Done!** The server is now available to your AI assistant.
 
 **Docker Container Settings:**
 
-- `-i`: Keep STDIN open, crucial for MCP communication over stdio.
-- `--rm`: Automatically remove the container when it exits.
-- `-e OPENAI_API_KEY`: **Required.** Set your OpenAI API key.
-- `-v docs-mcp-data:/data`: **Required for persistence.** Mounts a Docker named volume `docs-mcp-data` to store the database. You can replace with a specific host path if preferred (e.g., `-v /path/on/host:/data`).
+- `-i`: Keeps STDIN open for MCP communication.
+- `--rm`: Removes the container on exit.
+- `-e OPENAI_API_KEY`: **Required.**
+- `-v docs-mcp-data:/data`: **Required for persistence.**
 
-Any of the configuration environment variables (see [Configuration](#configuration) above) can be passed to the container using the `-e` flag. For example:
+You can pass any configuration environment variable (see [Configuration](#configuration)) using `-e`.
+
+**Examples:**
 
 ```bash
-# Example 1: Using OpenAI embeddings (default)
+# OpenAI embeddings (default)
 docker run -i --rm \
-  -e OPENAI_API_KEY="your-key-here" \
+  -e OPENAI_API_KEY="your-key" \
   -e DOCS_MCP_EMBEDDING_MODEL="text-embedding-3-small" \
   -v docs-mcp-data:/data \
-  ghcr.io/arabold/docs-mcp-server:latest # Runs MCP server (stdio by default)
-  # To run MCP server in HTTP mode on port 6280, append to the line above:
-  # --protocol http --port 6280
+  ghcr.io/arabold/docs-mcp-server:latest
 
-# Example 2: Using OpenAI-compatible API (like Ollama)
+# OpenAI-compatible API (Ollama)
 docker run -i --rm \
-  -e OPENAI_API_KEY="your-key-here" \
+  -e OPENAI_API_KEY="your-key" \
   -e OPENAI_API_BASE="http://localhost:11434/v1" \
   -e DOCS_MCP_EMBEDDING_MODEL="embeddings" \
   -v docs-mcp-data:/data \
   ghcr.io/arabold/docs-mcp-server:latest
 
-# Example 3a: Using Google Cloud Vertex AI embeddings
+# Google Vertex AI
 docker run -i --rm \
-  -e OPENAI_API_KEY="your-openai-key" \  # For OpenAI provider
   -e DOCS_MCP_EMBEDDING_MODEL="vertex:text-embedding-004" \
   -e GOOGLE_APPLICATION_CREDENTIALS="/app/gcp-key.json" \
   -v docs-mcp-data:/data \
   -v /path/to/gcp-key.json:/app/gcp-key.json:ro \
   ghcr.io/arabold/docs-mcp-server:latest
 
-# Example 3b: Using Google Generative AI (Gemini) embeddings
+# Google Gemini
 docker run -i --rm \
-  -e OPENAI_API_KEY="your-openai-key" \  # For OpenAI provider
   -e DOCS_MCP_EMBEDDING_MODEL="gemini:embedding-001" \
   -e GOOGLE_API_KEY="your-google-api-key" \
   -v docs-mcp-data:/data \
   ghcr.io/arabold/docs-mcp-server:latest
 
-# Example 4: Using AWS Bedrock embeddings
+# AWS Bedrock
 docker run -i --rm \
   -e AWS_ACCESS_KEY_ID="your-aws-key" \
   -e AWS_SECRET_ACCESS_KEY="your-aws-secret" \
@@ -227,7 +220,7 @@ docker run -i --rm \
   -v docs-mcp-data:/data \
   ghcr.io/arabold/docs-mcp-server:latest
 
-# Example 5: Using Azure OpenAI embeddings
+# Azure OpenAI
 docker run -i --rm \
   -e AZURE_OPENAI_API_KEY="your-azure-key" \
   -e AZURE_OPENAI_API_INSTANCE_NAME="your-instance" \
@@ -238,236 +231,144 @@ docker run -i --rm \
   ghcr.io/arabold/docs-mcp-server:latest
 ```
 
-### Launching Web Interface
+### Web Interface via Docker
 
-You can access a web-based GUI at `http://localhost:6281` to manage and search library documentation through your browser.
-
-If you're running the server with Docker, use Docker for the web interface as well:
+Access the web UI at `http://localhost:6281`:
 
 ```bash
 docker run --rm \
-  -e OPENAI_API_KEY="your-openai-api-key-here" \
+  -e OPENAI_API_KEY="your-openai-api-key" \
   -v docs-mcp-data:/data \
   -p 6281:6281 \
   ghcr.io/arabold/docs-mcp-server:latest \
   web --port 6281
 ```
 
-Make sure to:
+- Use the same volume name as your server.
+- Map port 6281 with `-p 6281:6281`.
+- Pass config variables with `-e` as needed.
 
-- Use the same volume name (`docs-mcp-data` in this example) as your server
-- Map port 6281 with `-p 6281:6281`
-- Pass any configuration environment variables with `-e` flags
+### CLI via Docker
 
-### Using the CLI
-
-You can use the CLI to manage documentation directly via Docker by passing CLI commands after the image name:
+Run CLI commands by appending them after the image name:
 
 ```bash
 docker run --rm \
-  -e OPENAI_API_KEY="your-openai-api-key-here" \
+  -e OPENAI_API_KEY="your-openai-api-key" \
   -v docs-mcp-data:/data \
   ghcr.io/arabold/docs-mcp-server:latest \
-  <command> [options] # e.g., list, scrape <library> <url>, search <library> <query>
+  <command> [options]
 ```
 
 Example:
 
 ```bash
 docker run --rm \
-  -e OPENAI_API_KEY="your-openai-api-key-here" \
+  -e OPENAI_API_KEY="your-openai-api-key" \
   -v docs-mcp-data:/data \
   ghcr.io/arabold/docs-mcp-server:latest \
   list
 ```
 
-Make sure to use the same volume name (`docs-mcp-data` in this example) as your MCP server container if you want them to share data. Any of the configuration environment variables (see [Configuration](#configuration) above) can be passed using `-e` flags.
+Use the same volume for data sharing. For command help, run:
 
-The main commands available are:
-
-- `scrape`: Scrapes and indexes documentation from a URL.
-- `search`: Searches the indexed documentation.
-- `list`: Lists all indexed libraries.
-- `remove`: Removes indexed documentation.
-- `fetch-url`: Fetches a single URL and converts to Markdown.
-- `find-version`: Finds the best matching version for a library.
-
-For detailed command usage, run the CLI with the --help flag (e.g., `docker run ... ghcr.io/arabold/docs-mcp-server:latest --help`).
+```bash
+docker run --rm ghcr.io/arabold/docs-mcp-server:latest --help
+```
 
 ## Alternative: Using npx
 
-This approach is useful when you need local file access (e.g., indexing documentation from your local file system). While this can also be achieved by mounting paths into a Docker container, using `npx` is simpler but requires a Node.js installation.
+You can run the Docs MCP Server without installing or cloning the repo:
 
-1. **Ensure Node.js is installed.**
-2. **Configure your MCP settings:**
-
-   **Claude/Cline/Roo Configuration Example:**
-   Add the following configuration block to your MCP settings file:
-
-   ```json
-   {
-     "mcpServers": {
-       "docs-mcp-server": {
-         "command": "npx",
-         "args": ["-y", "@arabold/docs-mcp-server"],
-         // This will run the default MCP server (stdio).
-         // To run in HTTP mode, add arguments: e.g.
-         // "args": ["-y", "@arabold/docs-mcp-server", "--protocol", "http", "--port", "6280"],
-         "env": {
-           "OPENAI_API_KEY": "sk-proj-..." // Required if using OpenAI (default)
-         },
-         "disabled": false,
-         "autoApprove": []
-       }
-     }
-   }
+1. **Run the server:**
+   ```bash
+   npx @arabold/docs-mcp-server@latest
    ```
+2. **Set your OpenAI API key:**
+   - Use the `OPENAI_API_KEY` environment variable.
+   - Example:
+     ```bash
+     OPENAI_API_KEY="sk-proj-..." npx @arabold/docs-mcp-server@latest
+     ```
+3. **Configure your MCP client:**
+   - Use the same settings as in the Docker example, but replace the `command` and `args` with the `npx` command above.
 
-   Remember to replace `"sk-proj-..."` with your actual OpenAI API key and restart the application.
+**Note:** Data is stored in a temporary directory and will not persist between runs. For persistent storage, use Docker or a local install.
 
-3. **That's it!** The server will now be available to your AI assistant.
+### CLI via npx
 
-### Launching Web Interface
-
-If you're running the MCP server with `npx` (as shown above, it runs by default), use `npx` for the web interface as well:
-
-```bash
-npx -y @arabold/docs-mcp-server web --port 6281
-```
-
-You can specify a different port for the web interface using its `--port` flag.
-
-The `npx` approach will use the default data directory on your system (typically in your home directory), ensuring consistency between server and web interface.
-
-### Using the CLI
-
-If you're running the MCP server with `npx`, you can also use `npx` for CLI commands:
+You can run CLI commands directly with npx, without installing the package globally:
 
 ```bash
-npx -y @arabold/docs-mcp-server <command> [options]
+npx @arabold/docs-mcp-server@latest <command> [options]
 ```
 
 Example:
 
 ```bash
-npx -y @arabold/docs-mcp-server list
+npx @arabold/docs-mcp-server@latest list
 ```
 
-The `npx` approach will use the default data directory on your system (typically in your home directory), ensuring consistency.
+For command help, run:
 
-For detailed command usage, run the CLI with the --help flag (e.g., `npx -y @arabold/docs-mcp-server --help`).
+```bash
+npx @arabold/docs-mcp-server@latest --help
+```
 
 ## Configuration
 
-The following environment variables are supported to configure the embedding model behavior. Specify them in your `.env` file or pass them as `-e` flags when running the server via Docker or npx.
+The Docs MCP Server is configured via environment variables. Set these in your shell, Docker, or MCP client config.
 
-### Embedding Model Configuration
+| Variable                           | Description                                           |
+| ---------------------------------- | ----------------------------------------------------- |
+| `DOCS_MCP_EMBEDDING_MODEL`         | Embedding model to use (see below for options).       |
+| `OPENAI_API_KEY`                   | OpenAI API key for embeddings.                        |
+| `OPENAI_API_BASE`                  | Custom OpenAI-compatible API endpoint (e.g., Ollama). |
+| `GOOGLE_API_KEY`                   | Google API key for Gemini embeddings.                 |
+| `GOOGLE_APPLICATION_CREDENTIALS`   | Path to Google service account JSON for Vertex AI.    |
+| `AWS_ACCESS_KEY_ID`                | AWS key for Bedrock embeddings.                       |
+| `AWS_SECRET_ACCESS_KEY`            | AWS secret for Bedrock embeddings.                    |
+| `AWS_REGION`                       | AWS region for Bedrock.                               |
+| `AZURE_OPENAI_API_KEY`             | Azure OpenAI API key.                                 |
+| `AZURE_OPENAI_API_INSTANCE_NAME`   | Azure OpenAI instance name.                           |
+| `AZURE_OPENAI_API_DEPLOYMENT_NAME` | Azure OpenAI deployment name.                         |
+| `AZURE_OPENAI_API_VERSION`         | Azure OpenAI API version.                             |
+| `DOCS_MCP_DATA_DIR`                | Data directory (default: `./data`).                   |
+| `DOCS_MCP_PORT`                    | Server port (default: `6281`).                        |
 
-- `DOCS_MCP_EMBEDDING_MODEL`: **Optional.** Format: `provider:model_name` or just `model_name` (defaults to `text-embedding-3-small`). Supported providers and their required environment variables:
+See [examples above](#alternative-using-docker) for usage.
 
-  - `openai` (default provider): Uses OpenAI's embedding models.
+### Embedding Model Options
 
-    - `OPENAI_API_KEY`: Your OpenAI API key. **Required if `openai` is the active provider.**
-    - `OPENAI_ORG_ID`: **Optional.** Your OpenAI Organization ID
-    - `OPENAI_API_BASE`: **Optional.** Custom base URL for OpenAI-compatible APIs (e.g., Ollama).
+Set `DOCS_MCP_EMBEDDING_MODEL` to one of:
 
-  - `vertex`: Uses Google Cloud Vertex AI embeddings
+- `text-embedding-3-small` (default, OpenAI)
+- `openai:llama2` (OpenAI-compatible, Ollama)
+- `vertex:text-embedding-004` (Google Vertex AI)
+- `gemini:embedding-001` (Google Gemini)
+- `aws:amazon.titan-embed-text-v1` (AWS Bedrock)
+- `microsoft:text-embedding-ada-002` (Azure OpenAI)
+- Or any OpenAI-compatible model name
 
-    - `GOOGLE_APPLICATION_CREDENTIALS`: **Required.** Path to service account JSON key file
-
-  - `gemini`: Uses Google Generative AI (Gemini) embeddings
-
-    - `GOOGLE_API_KEY`: **Required.** Your Google API key
-
-  - `aws`: Uses AWS Bedrock embeddings
-
-    - `AWS_ACCESS_KEY_ID`: **Required.** AWS access key
-    - `AWS_SECRET_ACCESS_KEY`: **Required.** AWS secret key
-    - `AWS_REGION` or `BEDROCK_AWS_REGION`: **Required.** AWS region for Bedrock
-
-  - `microsoft`: Uses Azure OpenAI embeddings
-    - `AZURE_OPENAI_API_KEY`: **Required.** Azure OpenAI API key
-    - `AZURE_OPENAI_API_INSTANCE_NAME`: **Required.** Azure instance name
-    - `AZURE_OPENAI_API_DEPLOYMENT_NAME`: **Required.** Azure deployment name
-    - `AZURE_OPENAI_API_VERSION`: **Required.** Azure API version
-
-### Vector Dimensions
-
-The database schema uses a fixed dimension of 1536 for embedding vectors. Only models that produce vectors with dimension ≤ 1536 are supported, except for certain providers (like Gemini) that support dimension reduction.
-
-For OpenAI-compatible APIs (like Ollama), use the `openai` provider with `OPENAI_API_BASE` pointing to your endpoint.
+For more, see the [ARCHITECTURE.md](ARCHITECTURE.md) and [examples above](#alternative-using-docker).
 
 ## Development
 
-This section covers running the server/CLI directly from the source code for development purposes. The primary usage method is via the public Docker image (`ghcr.io/arabold/docs-mcp-server:latest`), as detailed in the "Alternative: Using Docker" section, or via Docker Compose as described in the "Recommended: Docker Desktop" section.
+To develop or contribute to the Docs MCP Server:
 
-### Running from Source
+- Fork the repository and create a feature branch.
+- Follow the code conventions in [ARCHITECTURE.md](ARCHITECTURE.md).
+- Write clear commit messages (see Git guidelines above).
+- Open a pull request with a clear description of your changes.
 
-This provides an isolated environment and exposes the server via HTTP endpoints.
-
-This method is useful for contributing to the project or running un-published versions.
-
-1.  **Clone the repository:**
-    ```bash
-    git clone https://github.com/arabold/docs-mcp-server.git # Replace with actual URL if different
-    cd docs-mcp-server
-    ```
-2.  **Install dependencies:**
-    ```bash
-    npm install
-    ```
-3.  **Build the project:**
-    This compiles TypeScript to JavaScript in the `dist/` directory.
-    ```bash
-    npm run build
-    ```
-4.  **Setup Environment:**
-    Create and configure your `.env` file as described in the [Configuration](#configuration) section. This is crucial for providing the `OPENAI_API_KEY`.
-
-5.  **Run:**
-    - **Default MCP Server (Development):**
-      - Stdio mode (default): `npm run dev:server`
-      - HTTP mode: `npm run dev:server:http` (uses default port)
-      - Custom HTTP: `vite-node src/index.ts -- --protocol http --port <your_port>`
-    - **Web Interface (Development):** `npm run dev:web`
-      - This starts the web server (e.g., on port 6281) and watches for asset changes.
-    - **CLI Commands (Development):** `npm run dev:cli -- <command> [options]`
-      - Example: `npm run dev:cli -- list`
-      - Example: `vite-node src/index.ts scrape <library> <url>`
-    - **Production Mode (after `npm run build`):**
-      - Default MCP Server (stdio): `npm run start` (or `node dist/index.js`)
-      - MCP Server (HTTP): `npm run start -- --protocol http --port <your_port>` (or `node dist/index.js --protocol http --port <your_port>`)
-      - Web Interface: `npm run web -- --port <web_port>` (or `node dist/index.js web --port <web_port>`)
-      - CLI Commands: `npm run cli -- <command> [options]` (or `node dist/index.js <command> [options]`)
-
-### Testing
-
-Since MCP servers communicate over stdio when run directly via Node.js (or `vite-node`), debugging can be challenging. We recommend using the [MCP Inspector](https://github.com/modelcontextprotocol/inspector).
-
-After building the project (`npm run build`):
-
-```bash
-# For stdio mode (default)
-npx @modelcontextprotocol/inspector node dist/index.js
-
-# For HTTP mode (e.g., on port 6280)
-npx @modelcontextprotocol/inspector node dist/index.js -- --protocol http --port 6280
-```
-
-If using `vite-node` for development:
-
-```bash
-# For stdio mode (default)
-npx @modelcontextprotocol/inspector vite-node src/index.ts
-
-# For HTTP mode (e.g., on port 6280)
-npx @modelcontextprotocol/inspector vite-node src/index.ts -- --protocol http --port 6280
-```
-
-The Inspector will provide a URL to access debugging tools in your browser.
+For questions or suggestions, open an issue.
 
 ### Architecture
 
 For details on the project's architecture and design principles, please see [ARCHITECTURE.md](ARCHITECTURE.md).
 
 _Notably, the vast majority of this project's code was generated by the AI assistant Cline, leveraging the capabilities of this very MCP server._
+
+## License
+
+This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.

@@ -7,9 +7,6 @@ import packageJson from "./package.json";
 export default defineConfig({
   // No need for dts plugin for frontend assets
   plugins: [tailwindcss()],
-  define: {
-    __APP_VERSION__: JSON.stringify(packageJson.version),
-  },
   resolve: {
     // Keep existing resolve extensions
     extensions: [".ts", ".tsx", ".js", ".jsx", ".json"],

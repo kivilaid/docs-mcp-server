@@ -27,7 +27,8 @@ const VersionDetailsRow = ({
     : "N/A";
   // Display 'Unversioned' if version string is empty
   const versionLabel = version.version || "Unversioned";
-  const versionParam = version.version || "unversioned"; // Use consistent param for URL
+  // Use empty string for unversioned in param and rowId
+  const versionParam = version.version || "";
 
   // Sanitize both libraryName and versionParam for valid CSS selector
   const sanitizedLibraryName = libraryName.replace(/[^a-zA-Z0-9-_]/g, "-");
@@ -80,34 +81,48 @@ const VersionDetailsRow = ({
         </span>
       </div>
 
-      {/* Conditionally render the delete button */}
+      {/**
+       * Conditionally renders a delete button for the version row.
+       * The button has three states:
+       * 1. Default: Displays a trash icon.
+       * 2. Confirming: Displays a confirmation text with an accessible label.
+       * 3. Deleting: Displays a spinner icon indicating the deletion process.
+       * The button uses AlpineJS for state management and htmx for server interaction.
+       */}
       {showDelete && (
         <button
           type="button"
           class="ml-2 font-medium rounded-lg text-sm p-1 text-center inline-flex items-center transition-colors duration-150 ease-in-out"
           title="Remove this version"
-          x-data="{ confirming: false, isDeleting: false, timeoutId: null }" // Minimal state in x-data
-          x-bind:class={`confirming ? "${confirmingStateClasses}" : "${defaultStateClasses}"`} // Toggle between state classes
-          x-bind:disabled="isDeleting"
-          x-on:click="
-            if (confirming) {
-              clearTimeout(timeoutId);
-              timeoutId = null;
-              isDeleting = true; // Set deleting state directly
-              // Dispatch a standard browser event instead of calling htmx directly
+          x-data="{}"
+          x-bind:class={`$store.confirmingAction.type === 'version-delete' && $store.confirmingAction.id === '${libraryName}:${versionParam}' ? '${confirmingStateClasses}' : '${defaultStateClasses}'`}
+          x-bind:disabled={`$store.confirmingAction.type === 'version-delete' && $store.confirmingAction.id === '${libraryName}:${versionParam}' && $store.confirmingAction.isDeleting`}
+          x-on:click={`
+            if ($store.confirmingAction.type === 'version-delete' && $store.confirmingAction.id === '${libraryName}:${versionParam}') {
+              $store.confirmingAction.isDeleting = true;
               $el.dispatchEvent(new CustomEvent('confirmed-delete', { bubbles: true }));
             } else {
-              confirming = true;
-              timeoutId = setTimeout(() => { confirming = false; timeoutId = null; }, 3000);
+              if ($store.confirmingAction.timeoutId) { clearTimeout($store.confirmingAction.timeoutId); $store.confirmingAction.timeoutId = null; }
+              $store.confirmingAction.type = 'version-delete';
+              $store.confirmingAction.id = '${libraryName}:${versionParam}';
+              $store.confirmingAction.isDeleting = false;
+              $store.confirmingAction.timeoutId = setTimeout(() => {
+                $store.confirmingAction.type = null;
+                $store.confirmingAction.id = null;
+                $store.confirmingAction.isDeleting = false;
+                $store.confirmingAction.timeoutId = null;
+              }, 3000);
             }
-          "
+          `}
           hx-delete={`/api/libraries/${encodeURIComponent(libraryName)}/versions/${encodeURIComponent(versionParam)}`}
           hx-target={`#${rowId}`}
           hx-swap="outerHTML"
-          hx-trigger="confirmed-delete" // Listen for the standard browser event
+          hx-trigger="confirmed-delete"
         >
           {/* Default State: Trash Icon */}
-          <span x-show="!confirming && !isDeleting">
+          <span
+            x-show={`!($store.confirmingAction.type === 'version-delete' && $store.confirmingAction.id === '${libraryName}:${versionParam}' && $store.confirmingAction.isDeleting)`}
+          >
             <svg
               class="w-4 h-4"
               aria-hidden="true"
@@ -120,17 +135,23 @@ const VersionDetailsRow = ({
                 stroke-linecap="round"
                 stroke-linejoin="round"
                 stroke-width="2"
-                d="M1 5h16M7 8v8m4-8v8M7 1h4a1 1 0 0 1 1 1v3H6V2a1 1 0 0 1 1-1ZM3 5h12v13a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V5Z"
+                d="M1 5h16M7 8v8m4-8v8M7 1h4a1 1 0 0 1 1 1v3H6V2a1 1 0 0 1-1-1ZM3 5h12v13a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V5Z"
               />
             </svg>
             <span class="sr-only">Remove version</span>
           </span>
 
           {/* Confirming State: Text */}
-          <span x-show="confirming && !isDeleting">Confirm?</span>
+          <span
+            x-show={`$store.confirmingAction.type === 'version-delete' && $store.confirmingAction.id === '${libraryName}:${versionParam}' && !$store.confirmingAction.isDeleting`}
+          >
+            Confirm?<span class="sr-only">Confirm delete</span>
+          </span>
 
           {/* Deleting State: Spinner Icon */}
-          <span x-show="isDeleting">
+          <span
+            x-show={`$store.confirmingAction.type === 'version-delete' && $store.confirmingAction.id === '${libraryName}:${versionParam}' && $store.confirmingAction.isDeleting`}
+          >
             <LoadingSpinner />
             <span class="sr-only">Loading...</span>
           </span>

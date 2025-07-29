@@ -70,7 +70,7 @@ export async function stopServer() {
   // DocumentManagementService and PipelineManager instances are managed and shut down by src/index.ts.
 
   if (hadError) {
-    logger.warn("⚠️ MCP Server instance stopped with errors.");
+    logger.warn("⚠️  MCP Server instance stopped with errors.");
   } else {
     logger.info("✅ MCP Server instance stopped.");
   }

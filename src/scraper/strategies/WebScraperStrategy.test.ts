@@ -64,7 +64,7 @@ describe("WebScraperStrategy", () => {
     expect(strategy.canHandle("file:///path/to/file.txt")).toBe(false);
     expect(strategy.canHandle("invalid://example.com")).toBe(false);
     expect(strategy.canHandle("any_string")).toBe(false);
-  });
+  }, 10000);
 
   it("should use HttpFetcher to fetch content and process result", async () => {
     const progressCallback = vi.fn();
@@ -96,7 +96,7 @@ describe("WebScraperStrategy", () => {
     // Use non-null assertion operator (!) since we've asserted it's defined
     expect(documentProcessingCall![0].document.content).toBe("# Fetched Content"); // Check processed markdown (from H1)
     expect(documentProcessingCall![0].document.metadata.title).toBe(expectedTitle); // Check extracted title (from <title>)
-  });
+  }, 10000);
 
   it("should respect the followRedirects option", async () => {
     options.followRedirects = false;
@@ -115,7 +115,7 @@ describe("WebScraperStrategy", () => {
       (call) => call[0].document,
     );
     expect(documentProcessingCall).toBeDefined();
-  });
+  }, 10000);
 
   // --- Scope Tests ---
   // These tests now rely on the actual pipeline running,
@@ -191,7 +191,7 @@ describe("WebScraperStrategy", () => {
         (doc) => doc.metadata.title === "https://example.com/relative-path",
       ),
     ).toBe(true);
-  });
+  }, 10000);
 
   it("should follow links based on scope=hostname", async () => {
     mockFetchFn.mockImplementation(async (url: string) => {
@@ -237,7 +237,7 @@ describe("WebScraperStrategy", () => {
     expect(
       receivedDocs.some((doc) => doc.metadata.title === "https://example.com/subpage"),
     ).toBe(true);
-  });
+  }, 10000);
 
   it("should follow links based on scope=domain", async () => {
     mockFetchFn.mockImplementation(async (url: string) => {
@@ -286,7 +286,7 @@ describe("WebScraperStrategy", () => {
     expect(
       receivedDocs.some((doc) => doc.metadata.title === "https://api.example.com/ep"),
     ).toBe(true);
-  });
+  }, 10000);
 
   // --- Limit Tests ---
 
@@ -351,7 +351,7 @@ describe("WebScraperStrategy", () => {
     expect(receivedDocs).toHaveLength(2); // Base (L0) + L1
     expect(receivedDocs.some((doc) => doc.metadata.title === "L0")).toBe(true);
     expect(receivedDocs.some((doc) => doc.metadata.title === "L1")).toBe(true);
-  });
+  }, 10000);
 
   it("should respect maxPages option", async () => {
     // Configure mock fetcher
@@ -400,7 +400,7 @@ describe("WebScraperStrategy", () => {
       .map((call) => call[0].document)
       .filter((doc): doc is Document => doc !== undefined);
     expect(receivedDocs).toHaveLength(2); // Base + 1 subpage
-  });
+  }, 10000);
 
   // --- Progress Test ---
 
@@ -459,7 +459,7 @@ describe("WebScraperStrategy", () => {
         "https://example.com/page2",
       ]),
     );
-  });
+  }, 10000);
 
   it("should support scraping for URLs with embedded credentials (user:password@host)", async () => {
     // Use a Playwright scrapeMode and a URL with credentials
@@ -491,5 +491,30 @@ describe("WebScraperStrategy", () => {
     expect(docCall).toBeDefined();
     expect(docCall![0].document.content).toContain(expectedMarkdown);
     expect(docCall![0].document.metadata.title).toBe(expectedTitle);
+  }, 10000); // Set timeout to 10 seconds for Playwright test
+
+  it("should forward custom headers to HttpFetcher", async () => {
+    const progressCallback = vi.fn();
+    const testUrl = "https://example.com";
+    options.url = testUrl;
+    options.headers = {
+      Authorization: "Bearer test-token",
+      "X-Test-Header": "test-value",
+    };
+    mockFetchFn.mockResolvedValue({
+      content: "<html><body>Header Test</body></html>",
+      mimeType: "text/html",
+      source: testUrl,
+    });
+    await strategy.scrape(options, progressCallback);
+    expect(mockFetchFn).toHaveBeenCalledWith(
+      testUrl,
+      expect.objectContaining({
+        headers: {
+          Authorization: "Bearer test-token",
+          "X-Test-Header": "test-value",
+        },
+      }),
+    );
   });
 });

@@ -76,7 +76,7 @@ export class DocumentManagementService {
     } catch (error) {
       // Log potential error during directory creation but proceed
       // The DocumentStore constructor might handle DB file creation errors
-      logger.error(`⚠️ Failed to create database directory ${dbDir}: ${error}`);
+      logger.error(`⚠️  Failed to create database directory ${dbDir}: ${error}`);
     }
 
     this.store = new DocumentStore(dbPath);
@@ -126,7 +126,7 @@ export class DocumentManagementService {
     const hasUnversioned = await this.exists(normalizedLibrary, ""); // Check explicitly for unversioned
 
     if (versions.length === 0 && !hasUnversioned) {
-      logger.warn(`⚠️ Library '${library}' not found.`);
+      logger.warn(`⚠️  Library '${library}' not found.`);
 
       // Library doesn't exist, fetch all libraries to provide suggestions
       const allLibraries = await this.listLibraries();
@@ -200,7 +200,7 @@ export class DocumentManagementService {
         return { bestMatch: null, hasUnversioned: true };
       }
       // Throw error only if NO versions (semver or unversioned) exist
-      logger.warn(`⚠️ No valid versions found for ${library}`);
+      logger.warn(`⚠️  No valid versions found for ${library}`);
       // Fetch detailed versions to pass to the error constructor
       const allLibraryDetails = await this.store.queryLibraryVersions();
       const libraryDetails = allLibraryDetails.get(library) ?? [];
@@ -215,7 +215,7 @@ export class DocumentManagementService {
     } else {
       const versionRegex = /^(\d+)(?:\.(?:x(?:\.x)?|\d+(?:\.(?:x|\d+))?))?$|^$/;
       if (!versionRegex.test(targetVersion)) {
-        logger.warn(`⚠️ Invalid target version format: ${targetVersion}`);
+        logger.warn(`⚠️  Invalid target version format: ${targetVersion}`);
         // Don't throw yet, maybe unversioned exists
       } else {
         // Restore the previous logic with fallback
@@ -237,7 +237,7 @@ export class DocumentManagementService {
         `✅ Found best match version ${bestMatch} for ${library}@${targetVersion}`,
       );
     } else {
-      logger.warn(`⚠️ No matching semver version found for ${library}@${targetVersion}`);
+      logger.warn(`⚠️  No matching semver version found for ${library}@${targetVersion}`);
     }
 
     // If no semver match found, but unversioned exists, return that info.
@@ -301,7 +301,7 @@ export class DocumentManagementService {
         path: chunk.section.path,
       },
     }));
-    logger.info(`📄 Split document into ${splitDocs.length} chunks`);
+    logger.info(`✂️  Split document into ${splitDocs.length} chunks`);
 
     // Add split documents to store
     await this.store.addDocuments(library, normalizedVersion, splitDocs);

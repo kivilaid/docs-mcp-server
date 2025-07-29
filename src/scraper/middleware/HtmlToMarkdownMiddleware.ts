@@ -104,7 +104,7 @@ export class HtmlToMarkdownMiddleware implements ContentProcessorMiddleware {
       if (!markdown) {
         // If conversion results in empty markdown, log a warning but treat as valid empty markdown
         const warnMsg = `HTML to Markdown conversion resulted in empty content for ${context.source}.`;
-        logger.warn(`⚠️ ${warnMsg}`);
+        logger.warn(`⚠️  ${warnMsg}`);
         context.content = "";
       } else {
         // Conversion successful and produced non-empty markdown

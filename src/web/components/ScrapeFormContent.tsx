@@ -19,6 +19,7 @@ const ScrapeFormContent = () => (
       x-data="{
         url: '',
         hasPath: false,
+        headers: [],
         checkUrlPath() {
           try {
             const url = new URL(this.url);
@@ -37,7 +38,21 @@ const ScrapeFormContent = () => (
           >
             URL
           </label>
-          <Tooltip text="Enter the URL of the documentation you want to scrape. This will be the starting point for the scraper." />
+          <Tooltip
+            text={
+              <div>
+                <p>Enter the URL of the documentation you want to scrape.</p>
+                <p class="mt-2">
+                  For local files/folders, you must use the <code>file://</code>{" "}
+                  prefix and ensure the path is accessible to the server.
+                </p>
+                <p class="mt-2">
+                  If running in Docker, <b>mount the folder</b> (see README for
+                  details).
+                </p>
+              </div>
+            }
+          />
         </div>
         <input
           type="url"
@@ -50,7 +65,7 @@ const ScrapeFormContent = () => (
           class="mt-0.5 block w-full px-2 py-1 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
         />
         <div
-          x-show="hasPath"
+          x-show="hasPath && !(url.startsWith('file://'))"
           x-cloak
           x-transition:enter="transition ease-out duration-300"
           x-transition:enter-start="opacity-0 transform -translate-y-2"
@@ -104,7 +119,7 @@ const ScrapeFormContent = () => (
         <summary class="cursor-pointer text-sm font-medium text-gray-600 dark:text-gray-400">
           Advanced Options
         </summary>
-        <div class="mt-2 space-y-2">
+        <div class="mt-2 space-y-2" x-data="{ headers: [] }">
           <div>
             <div class="flex items-center">
               <label
@@ -255,6 +270,55 @@ const ScrapeFormContent = () => (
               <option value={ScrapeMode.Fetch}>Fetch</option>
               <option value={ScrapeMode.Playwright}>Playwright</option>
             </select>
+          </div>
+          <div>
+            <div class="flex items-center mb-1">
+              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                Custom HTTP Headers
+              </label>
+              <Tooltip text="Add custom HTTP headers (e.g., for authentication). These will be sent with every HTTP request." />
+            </div>
+            <div>
+              {/* AlpineJS dynamic header rows */}
+              <template x-for="(header, idx) in headers">
+                <div class="flex space-x-2 mb-1">
+                  <input
+                    type="text"
+                    class="w-1/3 px-2 py-1 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-xs"
+                    placeholder="Header Name"
+                    x-model="header.name"
+                    required
+                  />
+                  <span class="text-gray-500">:</span>
+                  <input
+                    type="text"
+                    class="w-1/2 px-2 py-1 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-xs"
+                    placeholder="Header Value"
+                    x-model="header.value"
+                    required
+                  />
+                  <button
+                    type="button"
+                    class="text-red-500 hover:text-red-700 text-xs"
+                    x-on:click="headers.splice(idx, 1)"
+                  >
+                    Remove
+                  </button>
+                  <input
+                    type="hidden"
+                    name="header[]"
+                    x-bind:value="header.name && header.value ? header.name + ':' + header.value : ''"
+                  />
+                </div>
+              </template>
+              <button
+                type="button"
+                class="mt-1 px-2 py-0.5 bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-200 rounded text-xs"
+                x-on:click="headers.push({ name: '', value: '' })"
+              >
+                + Add Header
+              </button>
+            </div>
           </div>
           <div class="flex items-center">
             <input

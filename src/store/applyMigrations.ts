@@ -103,7 +103,7 @@ export async function applyMigrations(db: Database): Promise<void> {
       if ((error as any)?.code === "SQLITE_BUSY" && retries < MIGRATION_MAX_RETRIES) {
         retries++;
         logger.warn(
-          `⚠️ Migrations busy (SQLITE_BUSY), retrying attempt ${retries}/${MIGRATION_MAX_RETRIES} in ${MIGRATION_RETRY_DELAY_MS}ms...`,
+          `⚠️  Migrations busy (SQLITE_BUSY), retrying attempt ${retries}/${MIGRATION_MAX_RETRIES} in ${MIGRATION_RETRY_DELAY_MS}ms...`,
         );
         await new Promise((resolve) => setTimeout(resolve, MIGRATION_RETRY_DELAY_MS));
       } else {

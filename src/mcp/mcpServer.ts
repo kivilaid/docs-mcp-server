@@ -32,31 +32,36 @@ export function createMcpServerInstance(tools: McpServerTools): McpServer {
   // Scrape docs tool
   server.tool(
     "scrape_docs",
-    "Scrape and index documentation from a URL",
+    "Scrape and index documentation from a URL for a library. Use this tool to index a new library or a new version.",
     {
-      url: z.string().url().describe("URL of the documentation to scrape"),
-      library: z.string().describe("Name of the library"),
-      version: z.string().optional().describe("Version of the library"),
+      url: z.string().url().describe("Documentation root URL to scrape."),
+      library: z.string().describe("Library name."),
+      version: z.string().optional().describe("Library version (optional)."),
       maxPages: z
         .number()
         .optional()
         .default(DEFAULT_MAX_PAGES)
-        .describe(`Maximum number of pages to scrape (default: ${DEFAULT_MAX_PAGES})`),
+        .describe(`Maximum number of pages to scrape (default: ${DEFAULT_MAX_PAGES}).`),
       maxDepth: z
         .number()
         .optional()
         .default(DEFAULT_MAX_DEPTH)
-        .describe(`Maximum navigation depth (default: ${DEFAULT_MAX_DEPTH})`),
+        .describe(`Maximum navigation depth (default: ${DEFAULT_MAX_DEPTH}).`),
       scope: z
         .enum(["subpages", "hostname", "domain"])
         .optional()
         .default("subpages")
-        .describe("Defines the crawling boundary: 'subpages', 'hostname', or 'domain'"),
+        .describe("Crawling boundary: 'subpages', 'hostname', or 'domain'."),
       followRedirects: z
         .boolean()
         .optional()
         .default(true)
-        .describe("Whether to follow HTTP redirects (3xx responses)"),
+        .describe("Follow HTTP redirects (3xx responses)."),
+    },
+    {
+      title: "Scrape New Library Documentation",
+      destructiveHint: true, // replaces existing docs
+      openWorldHint: true, // requires internet access
     },
     async ({ url, library, version, maxPages, maxDepth, scope, followRedirects }) => {
       try {
@@ -98,21 +103,24 @@ export function createMcpServerInstance(tools: McpServerTools): McpServer {
   // Search docs tool
   server.tool(
     "search_docs",
-    "Searches up-to-date documentation for a library. Examples:\n\n" +
+    "Search up-to-date documentation for a library or package. Examples:\n\n" +
       '- {library: "react", query: "hooks lifecycle"} -> matches latest version of React\n' +
       '- {library: "react", version: "18.0.0", query: "hooks lifecycle"} -> matches React 18.0.0 or earlier\n' +
       '- {library: "typescript", version: "5.x", query: "ReturnType example"} -> any TypeScript 5.x.x version\n' +
       '- {library: "typescript", version: "5.2.x", query: "ReturnType example"} -> any TypeScript 5.2.x version',
     {
-      library: z.string().describe("Name of the library"),
+      library: z.string().describe("Library name."),
       version: z
         .string()
         .optional()
-        .describe(
-          "Version of the library (supports exact versions like '18.0.0' or X-Range patterns like '5.x', '5.2.x')",
-        ),
-      query: z.string().describe("Search query"),
-      limit: z.number().optional().default(5).describe("Maximum number of results"),
+        .describe("Library version (exact or X-Range, optional)."),
+      query: z.string().describe("Documentation search query."),
+      limit: z.number().optional().default(5).describe("Maximum number of results."),
+    },
+    {
+      title: "Search Library Documentation",
+      readOnlyHint: true,
+      destructiveHint: false,
     },
     async ({ library, version, query, limit }) => {
       try {
@@ -137,10 +145,7 @@ ${r.content}\n`,
             `No results found for '${query}' in ${library}. Try to use a different or more general query.`,
           );
         }
-        return createResponse(
-          `Search results for '${query}' in ${library}:
-${formattedResults.join("")}`,
-        );
+        return createResponse(formattedResults.join(""));
       } catch (error) {
         if (error instanceof LibraryNotFoundError) {
           return createResponse(
@@ -173,37 +178,52 @@ ${formattedResults.join("")}`,
   );
 
   // List libraries tool
-  server.tool("list_libraries", "List all indexed libraries", {}, async () => {
-    try {
-      const result = await tools.listLibraries.execute();
-      if (result.libraries.length === 0) {
-        return createResponse("No libraries indexed yet.");
-      }
+  server.tool(
+    "list_libraries",
+    "List all indexed libraries.",
+    {
+      // no params
+    },
+    {
+      title: "List Libraries",
+      readOnlyHint: true,
+      destructiveHint: false,
+    },
+    async () => {
+      try {
+        const result = await tools.listLibraries.execute();
+        if (result.libraries.length === 0) {
+          return createResponse("No libraries indexed yet.");
+        }
 
-      return createResponse(
-        `Indexed libraries:\n\n${result.libraries.map((lib: { name: string }) => `- ${lib.name}`).join("\n")}`,
-      );
-    } catch (error) {
-      return createError(
-        `Failed to list libraries: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
-      );
-    }
-  });
+        return createResponse(
+          `Indexed libraries:\n\n${result.libraries.map((lib: { name: string }) => `- ${lib.name}`).join("\n")}`,
+        );
+      } catch (error) {
+        return createError(
+          `Failed to list libraries: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+      }
+    },
+  );
 
   // Find version tool
   server.tool(
     "find_version",
-    "Find best matching version for a library",
+    "Find the best matching version for a library. Use to identify available or closest versions.",
     {
-      library: z.string().describe("Name of the library"),
+      library: z.string().describe("Library name."),
       targetVersion: z
         .string()
         .optional()
-        .describe(
-          "Pattern to match (supports exact versions like '18.0.0' or X-Range patterns like '5.x', '5.2.x')",
-        ),
+        .describe("Version pattern to match (exact or X-Range, optional)."),
+    },
+    {
+      title: "Find Library Version",
+      readOnlyHint: true,
+      destructiveHint: false,
     },
     async ({ library, targetVersion }) => {
       try {
@@ -230,12 +250,17 @@ ${formattedResults.join("")}`,
   // List jobs tool
   server.tool(
     "list_jobs",
-    "List pipeline jobs, optionally filtering by status.",
+    "List all indexing jobs. Optionally filter by status.",
     {
       status: z
         .nativeEnum(PipelineJobStatus)
         .optional()
-        .describe("Optional status to filter jobs by."),
+        .describe("Filter jobs by status (optional)."),
+    },
+    {
+      title: "List Indexing Jobs",
+      readOnlyHint: true,
+      destructiveHint: false,
     },
     async ({ status }) => {
       try {
@@ -263,9 +288,14 @@ ${formattedResults.join("")}`,
   // Get job info tool
   server.tool(
     "get_job_info",
-    "Get the simplified info for a specific pipeline job.",
+    "Get details for a specific indexing job. Use the 'list_jobs' tool to find the job ID.",
     {
-      jobId: z.string().uuid().describe("The ID of the job to query."),
+      jobId: z.string().uuid().describe("Job ID to query."),
+    },
+    {
+      title: "Get Indexing Job Info",
+      readOnlyHint: true,
+      destructiveHint: false,
     },
     async ({ jobId }) => {
       try {
@@ -286,36 +316,16 @@ ${formattedResults.join("")}`,
     },
   );
 
-  // Fetch URL tool
-  server.tool(
-    "fetch_url",
-    "Fetch a single URL and convert its content to Markdown",
-    {
-      url: z.string().url().describe("The URL to fetch and convert to markdown"),
-      followRedirects: z
-        .boolean()
-        .optional()
-        .default(true)
-        .describe("Whether to follow HTTP redirects (3xx responses)"),
-    },
-    async ({ url, followRedirects }) => {
-      try {
-        const result = await tools.fetchUrl.execute({ url, followRedirects });
-        return createResponse(result);
-      } catch (error) {
-        return createError(
-          `Failed to fetch URL: ${error instanceof Error ? error.message : String(error)}`,
-        );
-      }
-    },
-  );
-
   // Cancel job tool
   server.tool(
     "cancel_job",
-    "Attempt to cancel a queued or running pipeline job.",
+    "Cancel a queued or running indexing job. Use the 'list_jobs' tool to find the job ID.",
     {
-      jobId: z.string().uuid().describe("The ID of the job to cancel."),
+      jobId: z.string().uuid().describe("Job ID to cancel."),
+    },
+    {
+      title: "Cancel Indexing Job",
+      destructiveHint: true,
     },
     async ({ jobId }) => {
       try {
@@ -340,13 +350,17 @@ ${formattedResults.join("")}`,
   // Remove docs tool
   server.tool(
     "remove_docs",
-    "Remove indexed documentation for a library version.",
+    "Remove indexed documentation for a library version. Use only if explicitly instructed.",
     {
-      library: z.string().describe("Name of the library"),
+      library: z.string().describe("Library name."),
       version: z
         .string()
         .optional()
-        .describe("Version of the library (optional, removes unversioned if omitted)"),
+        .describe("Library version (optional, removes unversioned if omitted)."),
+    },
+    {
+      title: "Remove Library Documentation",
+      destructiveHint: true,
     },
     async ({ library, version }) => {
       try {
@@ -365,26 +379,33 @@ ${formattedResults.join("")}`,
     },
   );
 
-  server.prompt(
-    "docs",
-    "Search indexed documentation",
+  // Fetch URL tool
+  server.tool(
+    "fetch_url",
+    "Fetch a single URL and convert its content to Markdown. Use this tool to read the content of any web page.",
     {
-      library: z.string().describe("Name of the library"),
-      version: z.string().optional().describe("Version of the library"),
-      query: z.string().describe("Search query"),
+      url: z.string().url().describe("URL to fetch and convert to Markdown."),
+      followRedirects: z
+        .boolean()
+        .optional()
+        .default(true)
+        .describe("Follow HTTP redirects (3xx responses)."),
     },
-    async ({ library, version, query }) => {
-      return {
-        messages: [
-          {
-            role: "user",
-            content: {
-              type: "text",
-              text: `Please search ${library} ${version || ""} documentation for this query: ${query}`,
-            },
-          },
-        ],
-      };
+    {
+      title: "Fetch URL",
+      readOnlyHint: true,
+      destructiveHint: false,
+      openWorldHint: true, // requires internet access
+    },
+    async ({ url, followRedirects }) => {
+      try {
+        const result = await tools.fetchUrl.execute({ url, followRedirects });
+        return createResponse(result);
+      } catch (error) {
+        return createError(
+          `Failed to fetch URL: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
     },
   );
 
@@ -440,7 +461,7 @@ ${formattedResults.join("")}`,
     "jobs",
     "docs://jobs",
     {
-      description: "List pipeline jobs, optionally filtering by status.",
+      description: "List indexing jobs, optionally filtering by status.",
       mimeType: "application/json",
     },
     async (uri: URL) => {
@@ -456,7 +477,7 @@ ${formattedResults.join("")}`,
           // Handle invalid status - perhaps return an error or ignore?
           // For simplicity, let's ignore invalid status for now and return all jobs.
           // Alternatively, could throw an McpError or return specific error content.
-          logger.warn(`⚠️ Invalid status parameter received: ${statusParam}`);
+          logger.warn(`⚠️  Invalid status parameter received: ${statusParam}`);
         }
       }
 
@@ -464,13 +485,17 @@ ${formattedResults.join("")}`,
       const result = await tools.listJobs.execute({ status: statusFilter });
 
       return {
-        contents: [
-          {
-            uri: uri.href,
-            mimeType: "application/json",
-            text: JSON.stringify(result.jobs, null, 2), // Stringify the simplified jobs array
-          },
-        ],
+        contents: result.jobs.map((job) => ({
+          uri: new URL(job.id, uri).href,
+          mimeType: "application/json",
+          text: JSON.stringify({
+            id: job.id,
+            library: job.library,
+            version: job.version,
+            status: job.status,
+            error: job.error || undefined,
+          }),
+        })),
       };
     },
   );
@@ -483,14 +508,14 @@ ${formattedResults.join("")}`,
     "job", // A distinct name for this specific resource type
     new ResourceTemplate("docs://jobs/{jobId}", { list: undefined }),
     {
-      description: "Get details for a specific pipeline job by ID.",
+      description: "Get details for a specific indexing job by ID.",
       mimeType: "application/json",
     },
     async (uri: URL, { jobId }) => {
       // Validate jobId format if necessary (basic check)
       if (typeof jobId !== "string" || jobId.length === 0) {
         // Handle invalid jobId format - return empty or error
-        logger.warn(`⚠️ Invalid jobId received in URI: ${jobId}`);
+        logger.warn(`⚠️  Invalid jobId received in URI: ${jobId}`);
         return { contents: [] }; // Return empty content for invalid ID format
       }
 
@@ -509,7 +534,13 @@ ${formattedResults.join("")}`,
           {
             uri: uri.href,
             mimeType: "application/json",
-            text: JSON.stringify(result.job, null, 2), // Stringify the simplified job object
+            text: JSON.stringify({
+              id: result.job.id,
+              library: result.job.library,
+              version: result.job.version,
+              status: result.job.status,
+              error: result.job.error || undefined,
+            }),
           },
         ],
       };

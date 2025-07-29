@@ -21,6 +21,11 @@ export const DEFAULT_HTTP_PORT = 6280;
 export const DEFAULT_WEB_PORT = 6281;
 
 /**
+ * Default timeout in milliseconds for page operations (e.g., Playwright waitForSelector).
+ */
+export const DEFAULT_PAGE_TIMEOUT = 5000;
+
+/**
  * Maximum number of retries for HTTP fetcher requests.
  */
 export const FETCHER_MAX_RETRIES = 6;

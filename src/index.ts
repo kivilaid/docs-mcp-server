@@ -1,7 +1,10 @@
 #!/usr/bin/env node
+import { execSync } from "node:child_process";
+import { existsSync } from "node:fs";
 import "dotenv/config";
 import { Command } from "commander";
 import type { FastifyInstance } from "fastify";
+import { chromium, devices } from "playwright";
 import packageJson from "../package.json";
 import { startServer as startMcpServer, stopServer as stopMcpServer } from "./mcp";
 import { PipelineManager } from "./pipeline/PipelineManager";
@@ -24,7 +27,49 @@ import {
   DEFAULT_WEB_PORT,
 } from "./utils/config";
 import { LogLevel, logger, setLogLevel } from "./utils/logger";
+import { getProjectRoot } from "./utils/paths";
 import { startWebServer, stopWebServer } from "./web/web";
+
+/**
+ * Ensures that the Playwright browsers are installed, unless a system Chromium path is set.
+ */
+function ensurePlaywrightBrowsersInstalled(): void {
+  // If PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH is set, skip install
+  const chromiumEnvPath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH;
+  if (chromiumEnvPath && existsSync(chromiumEnvPath)) {
+    logger.debug(
+      `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH is set to '${chromiumEnvPath}', skipping Playwright browser install.`,
+    );
+    return;
+  }
+  try {
+    // Dynamically require Playwright and check for Chromium browser
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const chromiumPath = chromium.executablePath();
+    if (!chromiumPath || !existsSync(chromiumPath)) {
+      throw new Error("Playwright Chromium browser not found");
+    }
+  } catch (err) {
+    // Not installed or not found, attempt to install
+    logger.debug(
+      "Playwright browsers not found. Installing Chromium browser for dynamic scraping (this may take a minute)...",
+    );
+    try {
+      logger.debug("Installing Playwright Chromium browser...");
+      execSync("npm exec -y playwright install --no-shell --with-deps chromium", {
+        stdio: "ignore", // Suppress output
+        cwd: getProjectRoot(),
+      });
+    } catch (installErr) {
+      console.error(
+        "❌ Failed to install Playwright browsers automatically. Please run:\n  npx playwright install --no-shell --with-deps chromium\nand try again.",
+      );
+      process.exit(1);
+    }
+  }
+}
+
+ensurePlaywrightBrowsersInstalled();
 
 const formatOutput = (data: unknown) => JSON.stringify(data, null, 2);
 
@@ -121,6 +166,7 @@ async function main() {
       .option("--verbose", "Enable verbose (debug) logging", false)
       .option("--silent", "Disable all logging except errors", false)
       .enablePositionalOptions()
+      .showHelpAfterError(true)
       .option(
         "--protocol <type>",
         "Protocol for MCP server (stdio or http)",
@@ -160,11 +206,18 @@ async function main() {
         await new Promise(() => {}); // Keep alive
       });
 
-    // ... (All other CLI command definitions: scrape, search, list, find-version, remove, fetch-url - remain unchanged) ...
     // --- Scrape Command ---
     program
       .command("scrape <library> <url>")
-      .description("Scrape and index documentation from a URL")
+      .description(
+        "Scrape and index documentation from a URL or local folder.\n\n" +
+          "To scrape local files or folders, use a file:// URL.\n" +
+          "Examples:\n" +
+          "  scrape mylib https://react.dev/reference/react\n" +
+          "  scrape mylib file:///Users/me/docs/index.html\n" +
+          "  scrape mylib file:///Users/me/docs/my-library\n" +
+          "\nNote: For local files/folders, you must use the file:// prefix. If running in Docker, mount the folder and use the container path. See README for details.",
+      )
       .option("-v, --version <string>", "Version of the library (optional)")
       .option(
         "-p, --max-pages <number>",
@@ -226,6 +279,12 @@ async function main() {
         (val: string, prev: string[] = []) => prev.concat([val]),
         [] as string[],
       )
+      .option(
+        "--header <name:value>",
+        "Custom HTTP header to send with each request (can be specified multiple times)",
+        (val: string, prev: string[] = []) => prev.concat([val]),
+        [] as string[],
+      )
       .action(async (library, url, options) => {
         commandExecuted = true; // Ensure this is set for CLI commands
         const docService = new DocumentManagementService();
@@ -235,6 +294,20 @@ async function main() {
           pipelineManager = new PipelineManager(docService);
           await pipelineManager.start();
           const scrapeTool = new ScrapeTool(docService, pipelineManager);
+
+          // Parse headers from CLI options
+          const headers: Record<string, string> = {};
+          if (Array.isArray(options.header)) {
+            for (const entry of options.header) {
+              const idx = entry.indexOf(":");
+              if (idx > 0) {
+                const name = entry.slice(0, idx).trim();
+                const value = entry.slice(idx + 1).trim();
+                if (name) headers[name] = value;
+              }
+            }
+          }
+
           const result = await scrapeTool.execute({
             url,
             library,
@@ -255,6 +328,7 @@ async function main() {
                 Array.isArray(options.excludePattern) && options.excludePattern.length > 0
                   ? options.excludePattern
                   : undefined,
+              headers: Object.keys(headers).length > 0 ? headers : undefined,
             },
           });
           if ("pagesScraped" in result)
@@ -395,14 +469,33 @@ async function main() {
         },
         ScrapeMode.Auto,
       )
+      .option(
+        "--header <name:value>",
+        "Custom HTTP header to send with the request (can be specified multiple times)",
+        (val: string, prev: string[] = []) => prev.concat([val]),
+        [] as string[],
+      )
       .action(async (url, options) => {
         commandExecuted = true; // Ensure this is set
+        // Parse headers from CLI options
+        const headers: Record<string, string> = {};
+        if (Array.isArray(options.header)) {
+          for (const entry of options.header) {
+            const idx = entry.indexOf(":");
+            if (idx > 0) {
+              const name = entry.slice(0, idx).trim();
+              const value = entry.slice(idx + 1).trim();
+              if (name) headers[name] = value;
+            }
+          }
+        }
         // FetchUrlTool does not require DocumentManagementService or PipelineManager
         const fetchUrlTool = new FetchUrlTool(new HttpFetcher(), new FileFetcher());
         const content = await fetchUrlTool.execute({
           url,
           followRedirects: options.followRedirects,
           scrapeMode: options.scrapeMode,
+          headers: Object.keys(headers).length > 0 ? headers : undefined,
         });
         console.log(content);
       });

@@ -265,7 +265,7 @@ describe("PipelineWorker", () => {
 
     // Call executeJob once and check the specific error message
     await expect(worker.executeJob(mockJob, mockCallbacks)).rejects.toThrow(
-      "Job cancelled shortly after scraping finished",
+      "Job cancelled",
     );
     // Also verify it's an instance of CancellationError if needed
     // await expect(worker.executeJob(mockJob, mockCallbacks)).rejects.toBeInstanceOf(CancellationError);

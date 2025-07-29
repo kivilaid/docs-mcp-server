@@ -182,5 +182,26 @@ describe("ScrapeTool", () => {
     expect(mockManagerInstance.enqueueJob).toHaveBeenCalledOnce(); // Job was still enqueued
   });
 
-  // --- Callback Tests --- (Removed as onProgress is deprecated and removed)
+  it("should pass custom headers to the pipeline manager", async () => {
+    const options: ScrapeToolOptions = {
+      ...getBaseOptions("2.0.0"),
+      options: {
+        headers: {
+          Authorization: "Bearer test-token",
+          "X-Custom-Header": "custom-value",
+        },
+      },
+    };
+    await scrapeTool.execute(options);
+    expect(mockManagerInstance.enqueueJob).toHaveBeenCalledWith(
+      "test-lib",
+      "2.0.0",
+      expect.objectContaining({
+        headers: {
+          Authorization: "Bearer test-token",
+          "X-Custom-Header": "custom-value",
+        },
+      }),
+    );
+  });
 });

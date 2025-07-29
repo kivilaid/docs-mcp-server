@@ -27,7 +27,7 @@ export const logger = {
    * @param message - The message to log.
    */
   debug: (message: string) => {
-    if (currentLogLevel >= LogLevel.DEBUG) {
+    if (currentLogLevel >= LogLevel.DEBUG && !process.env.VITEST_WORKER_ID) {
       console.debug(message);
     }
   },
@@ -36,7 +36,7 @@ export const logger = {
    * @param message - The message to log.
    */
   info: (message: string) => {
-    if (currentLogLevel >= LogLevel.INFO) {
+    if (currentLogLevel >= LogLevel.INFO && !process.env.VITEST_WORKER_ID) {
       console.log(message); // Using console.log for INFO
     }
   },
@@ -45,7 +45,7 @@ export const logger = {
    * @param message - The message to log.
    */
   warn: (message: string) => {
-    if (currentLogLevel >= LogLevel.WARN) {
+    if (currentLogLevel >= LogLevel.WARN && !process.env.VITEST_WORKER_ID) {
       console.warn(message);
     }
   },
@@ -54,7 +54,7 @@ export const logger = {
    * @param message - The message to log.
    */
   error: (message: string) => {
-    if (currentLogLevel >= LogLevel.ERROR) {
+    if (currentLogLevel >= LogLevel.ERROR && !process.env.VITEST_WORKER_ID) {
       console.error(message);
     }
   },

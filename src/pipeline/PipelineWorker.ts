@@ -77,14 +77,14 @@ export class PipelineWorker {
 
       // Check signal one last time after scrape finishes
       if (signal.aborted) {
-        throw new CancellationError("Job cancelled shortly after scraping finished");
+        throw new CancellationError("Job cancelled");
       }
 
       // If successful and not cancelled, the manager will handle status update
       logger.debug(`[${jobId}] Worker finished job successfully.`);
     } catch (error) {
       // Re-throw error to be caught by the manager in _runJob
-      logger.warn(`⚠️ [${jobId}] Worker encountered error: ${error}`);
+      logger.warn(`⚠️  [${jobId}] Worker encountered error: ${error}`);
       throw error;
     }
     // Note: The manager (_runJob) is responsible for updating final job status (COMPLETED/FAILED/CANCELLED)

@@ -123,21 +123,32 @@ export function createEmbeddingModel(providerAndModel: string): Embeddings {
           "BEDROCK_AWS_REGION or AWS_REGION environment variable is required for AWS Bedrock",
         );
       }
-      if (!process.env.AWS_ACCESS_KEY_ID || !process.env.AWS_SECRET_ACCESS_KEY) {
+      // Allow using AWS_PROFILE for credentials if set
+      if (
+        !process.env.AWS_PROFILE &&
+        !process.env.AWS_ACCESS_KEY_ID &&
+        !process.env.AWS_SECRET_ACCESS_KEY
+      ) {
         throw new ModelConfigurationError(
-          "AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY environment variables are required for AWS Bedrock",
+          "Either AWS_PROFILE or both AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY environment variables are required for AWS Bedrock",
         );
       }
+
+      // Only pass explicit credentials if present, otherwise let SDK resolve via profile/other means
+      const credentials =
+        process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY
+          ? {
+              accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+              secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+              sessionToken: process.env.AWS_SESSION_TOKEN,
+            }
+          : undefined;
 
       return new BedrockEmbeddings({
         ...baseConfig,
         model: model, // e.g., "amazon.titan-embed-text-v1"
         region,
-        credentials: {
-          accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-          secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-          sessionToken: process.env.AWS_SESSION_TOKEN,
-        },
+        ...(credentials ? { credentials } : {}),
       });
     }
 

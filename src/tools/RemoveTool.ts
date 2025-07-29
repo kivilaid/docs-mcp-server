@@ -1,3 +1,5 @@
+import type { PipelineManager } from "../pipeline/PipelineManager";
+import { PipelineJobStatus } from "../pipeline/types";
 import type { DocumentManagementService } from "../store";
 import { logger } from "../utils/logger";
 import { ToolError } from "./errors";
@@ -16,12 +18,14 @@ export interface RemoveToolArgs {
  * This class provides the core logic, intended to be called by the McpServer.
  */
 export class RemoveTool {
-  constructor(private readonly documentManagementService: DocumentManagementService) {}
+  constructor(
+    private readonly documentManagementService: DocumentManagementService,
+    private readonly pipelineManager?: PipelineManager, // Optional for backward compatibility
+  ) {}
 
   /**
    * Executes the tool to remove the specified library version documents.
-   * Assumes args have been validated by the caller (McpServer) against inputSchema.
-   * Returns a simple success message or throws an error.
+   * Aborts any QUEUED/RUNNING job for the same library+version before deleting.
    */
   async execute(args: RemoveToolArgs): Promise<{ message: string }> {
     const { library, version } = args;
@@ -31,6 +35,22 @@ export class RemoveTool {
     );
 
     try {
+      // Abort any QUEUED or RUNNING job for this library+version
+      if (this.pipelineManager) {
+        const jobs = this.pipelineManager.findJobsByLibraryVersion(
+          library,
+          (version ?? "").toLowerCase(),
+          [PipelineJobStatus.QUEUED, PipelineJobStatus.RUNNING],
+        );
+        for (const job of jobs) {
+          logger.info(
+            `🚫 Aborting job for ${library}@${version ?? ""} before deletion: ${job.id}`,
+          );
+          await this.pipelineManager.cancelJob(job.id);
+          // Wait for job to finish cancelling if running
+          await this.pipelineManager.waitForJobCompletion(job.id);
+        }
+      }
       // Core logic: Call the document management service
       await this.documentManagementService.removeAllDocuments(library, version);
 

@@ -5,9 +5,6 @@ import packageJson from "./package.json";
 export default defineConfig({
   plugins: [
   ],
-  define: {
-    __APP_VERSION__: JSON.stringify(packageJson.version),
-  },
   resolve: {
     // Keep existing resolve extensions
     extensions: [".ts", ".tsx", ".js", ".jsx", ".json"],

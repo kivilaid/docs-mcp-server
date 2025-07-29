@@ -1,3 +1,65 @@
+# [1.17.0](https://github.com/arabold/docs-mcp-server/compare/v1.16.1...v1.17.0) (2025-05-26)
+
+
+### Bug Fixes
+
+* **cli:** display help when an invalid command is passed ([3a5d879](https://github.com/arabold/docs-mcp-server/commit/3a5d8799f7895c6865ef1babb4645275748f3fcc))
+* **pipeline:** ensure waitForJobCompletion resolves for cancelled jobs ([a39bb2b](https://github.com/arabold/docs-mcp-server/commit/a39bb2bdb6d94f722e73646734014144d192e851)), closes [#137](https://github.com/arabold/docs-mcp-server/issues/137)
+
+
+### Features
+
+* **cli:** support custom HTTP headers for fetch-url command ([1000630](https://github.com/arabold/docs-mcp-server/commit/1000630e517233b3b93884d14ad8c7bb9d675b65))
+* forward custom HTTP headers to Playwright in HtmlPlaywrightMiddleware ([3d956c2](https://github.com/arabold/docs-mcp-server/commit/3d956c28aa6ac60527f1b7b28395848a7d42654e))
+* implement immediate UI feedback for version deletion and job cancellation ([0fe63a6](https://github.com/arabold/docs-mcp-server/commit/0fe63a6f2b1fa78d7fd9f097b5edb14fd27213fe))
+* **scraper:** add support for custom HTTP headers via CLI and propagate to fetcher ([a0778aa](https://github.com/arabold/docs-mcp-server/commit/a0778aa6efb1b3163223644dabd742207df7093a)), closes [#139](https://github.com/arabold/docs-mcp-server/issues/139)
+* **ui, jobs:** robust HTMX/Alpine job queue actions, fix global htmx, and add clear-completed API ([8c8c094](https://github.com/arabold/docs-mcp-server/commit/8c8c094fa84073e8b7aacc494729848424b41e98))
+* **web:** support custom HTTP headers in scrape job form ([48a832a](https://github.com/arabold/docs-mcp-server/commit/48a832a4ba2abf393f2b3558aaf160fba48bff50))
+
+## [1.16.1](https://github.com/arabold/docs-mcp-server/compare/v1.16.0...v1.16.1) (2025-05-25)
+
+
+### Bug Fixes
+
+* **playwright:** disable output when installing Chromium browser ([9fb5540](https://github.com/arabold/docs-mcp-server/commit/9fb5540931d502ff8e2a07033e14350b5c5f3b5b))
+
+# [1.16.0](https://github.com/arabold/docs-mcp-server/compare/v1.15.1...v1.16.0) (2025-05-24)
+
+
+### Features
+
+* **aws:** support AWS_PROFILE for credentials fallback (task 125) and add test coverage ([96194f5](https://github.com/arabold/docs-mcp-server/commit/96194f56839ab678cafa44f6d581acdc6c553290))
+* **ci:** publish multi-arch Docker images (x86_64/amd64 and arm64) for Mac Silicon support ([a282c7f](https://github.com/arabold/docs-mcp-server/commit/a282c7f4c9cc7c0e88e31327f8bcd37bd75ba588)), closes [#127](https://github.com/arabold/docs-mcp-server/issues/127)
+* **docker:** use system Chromium instead of Playwright's bundled browser ([5be058b](https://github.com/arabold/docs-mcp-server/commit/5be058b545afed0d2a79a4a91ccdef7759d716c3)), closes [#124](https://github.com/arabold/docs-mcp-server/issues/124)
+* **local-file-support:** improve local file support in server and web interface ([50074f5](https://github.com/arabold/docs-mcp-server/commit/50074f54290178b2c2795edf46b6fbb2de570940)), closes [#128](https://github.com/arabold/docs-mcp-server/issues/128)
+* **scraper:** robust encoding, BOM, and binary/text detection ([45b3f94](https://github.com/arabold/docs-mcp-server/commit/45b3f9490359239cfb5e2d31573591cd76d08f2a)), closes [#129](https://github.com/arabold/docs-mcp-server/issues/129)
+
+## [1.15.1](https://github.com/arabold/docs-mcp-server/compare/v1.15.0...v1.15.1) (2025-05-18)
+
+
+### Bug Fixes
+
+* **playwright:** ensure Playwright is installed from the correct project path ([f45f530](https://github.com/arabold/docs-mcp-server/commit/f45f5300e30a36e59e2f9c0423fbf0e7eee88c76))
+
+# [1.15.0](https://github.com/arabold/docs-mcp-server/compare/v1.14.0...v1.15.0) (2025-05-18)
+
+
+### Bug Fixes
+
+* **playwright:** auto-install Playwright browsers at startup if missing ([090f5e1](https://github.com/arabold/docs-mcp-server/commit/090f5e19953a59653e35e1bc90d3625589455cf0))
+* **smithery:** removed smithery config file ([0c4c30c](https://github.com/arabold/docs-mcp-server/commit/0c4c30c080c6a5f69a15e03bad7b6089b33ef781))
+* **store:** wrap migrations in immediate transaction with retries ([63f7485](https://github.com/arabold/docs-mcp-server/commit/63f7485e0b9dffc40476eaa432daeafce8907625)), closes [#108](https://github.com/arabold/docs-mcp-server/issues/108)
+* **web:** sanitize and encode library/version for delete (fixes [#100](https://github.com/arabold/docs-mcp-server/issues/100)) ([3182733](https://github.com/arabold/docs-mcp-server/commit/318273384ad54df888ee06a9025da9b9116fe5f7))
+
+
+### Features
+
+* **queue:** improve job deduplication, safe deletion, and test coverage ([ff529cc](https://github.com/arabold/docs-mcp-server/commit/ff529cc161cfa0b2fc5a1d3960932470723482a3)), closes [#111](https://github.com/arabold/docs-mcp-server/issues/111)
+* **scraper/playwright:** improve page loading reliability by waiting for body element ([46f106c](https://github.com/arabold/docs-mcp-server/commit/46f106c0c8313c310b45eee49fcc1a8dff29e787)), closes [#116](https://github.com/arabold/docs-mcp-server/issues/116)
+* **scraper:** add robust URL filtering with glob/regex patterns ([d81aaf1](https://github.com/arabold/docs-mcp-server/commit/d81aaf11c166b19d01ffe8951127647132b19e38)), closes [#97](https://github.com/arabold/docs-mcp-server/issues/97)
+* simplify npx setup by merging binaries ([f4ce7a4](https://github.com/arabold/docs-mcp-server/commit/f4ce7a4468bba2788072d090131d363654ee794d)), closes [#105](https://github.com/arabold/docs-mcp-server/issues/105)
+* **web:** improve scrape form user experience with tooltips, animated alerts, and better spacing ([edcc7e2](https://github.com/arabold/docs-mcp-server/commit/edcc7e2a755fd93c1917cac4b605dda176cf15aa))
+
 # [1.14.0](https://github.com/arabold/docs-mcp-server/compare/v1.13.0...v1.14.0) (2025-05-10)
 
 

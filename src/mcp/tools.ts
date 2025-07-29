@@ -39,9 +39,6 @@ export async function initializeTools(
   docService: DocumentManagementService,
   pipelineManager: PipelineManager,
 ): Promise<McpServerTools> {
-  // const docService = getDocService(); // REMOVED
-  // const pipelineManager = getPipelineManager(); // REMOVED
-
   const tools: McpServerTools = {
     listLibraries: new ListLibrariesTool(docService),
     findVersion: new FindVersionTool(docService),
@@ -50,8 +47,8 @@ export async function initializeTools(
     listJobs: new ListJobsTool(pipelineManager),
     getJobInfo: new GetJobInfoTool(pipelineManager),
     cancelJob: new CancelJobTool(pipelineManager),
-    remove: new RemoveTool(docService),
-    // FetchUrlTool now uses middleware pipeline internally
+    // clearCompletedJobs: new ClearCompletedJobsTool(pipelineManager),
+    remove: new RemoveTool(docService, pipelineManager),
     fetchUrl: new FetchUrlTool(new HttpFetcher(), new FileFetcher()),
   };
 

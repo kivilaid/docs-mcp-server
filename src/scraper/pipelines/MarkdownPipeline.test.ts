@@ -154,6 +154,68 @@ This is a paragraph with a [link](https://test.example.com).
     expect(result.errors.some((e) => e.message === "fail")).toBe(true);
   });
 
+  it("process decodes Buffer content with UTF-16LE BOM", async () => {
+    const pipeline = new MarkdownPipeline();
+    // UTF-16LE BOM: 0xFF 0xFE, then '# Café' as UTF-16LE
+    const str = "# Café";
+    const buf = Buffer.alloc(2 + str.length * 2);
+    buf[0] = 0xff;
+    buf[1] = 0xfe;
+    for (let i = 0; i < str.length; i++) {
+      buf[2 + i * 2] = str.charCodeAt(i);
+      buf[2 + i * 2 + 1] = 0;
+    }
+    const raw: RawContent = {
+      content: buf,
+      mimeType: "text/markdown",
+      charset: "utf-16le",
+      source: "http://test",
+    };
+    const result = await pipeline.process(raw, {} as ScraperOptions);
+    expect(result.textContent).toContain("# Café");
+  });
+
+  it("process decodes Buffer content with UTF-8 BOM", async () => {
+    const pipeline = new MarkdownPipeline();
+    // UTF-8 BOM: 0xEF 0xBB 0xBF, then '# Café'
+    const utf8 = Buffer.from("# Café", "utf-8");
+    const buf = Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), utf8]);
+    const raw: RawContent = {
+      content: buf,
+      mimeType: "text/markdown",
+      charset: "utf-8",
+      source: "http://test",
+    };
+    const result = await pipeline.process(raw, {} as ScraperOptions);
+    expect(result.textContent).toContain("# Café");
+  });
+
+  it("process decodes Buffer content with Japanese UTF-8 text", async () => {
+    const pipeline = new MarkdownPipeline();
+    const japanese = "# こんにちは世界"; // "Hello, world" in Japanese
+    const raw: RawContent = {
+      content: Buffer.from(japanese, "utf-8"),
+      mimeType: "text/markdown",
+      charset: "utf-8",
+      source: "http://test",
+    };
+    const result = await pipeline.process(raw, {} as ScraperOptions);
+    expect(result.textContent).toContain("こんにちは世界");
+  });
+
+  it("process decodes Buffer content with Russian UTF-8 text", async () => {
+    const pipeline = new MarkdownPipeline();
+    const russian = "# Привет, мир"; // "Hello, world" in Russian
+    const raw: RawContent = {
+      content: Buffer.from(russian, "utf-8"),
+      mimeType: "text/markdown",
+      charset: "utf-8",
+      source: "http://test",
+    };
+    const result = await pipeline.process(raw, {} as ScraperOptions);
+    expect(result.textContent).toContain("Привет, мир");
+  });
+
   it("should correctly process markdown through the full middleware stack (E2E with spies)", async () => {
     // Reset call counts for all spies
     vi.clearAllMocks();

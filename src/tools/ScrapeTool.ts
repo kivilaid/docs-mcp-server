@@ -50,6 +50,11 @@ export interface ScrapeToolOptions {
      * Regex patterns must be wrapped in slashes, e.g. /pattern/.
      */
     excludePatterns?: string[];
+    /**
+     * Custom HTTP headers to send with each request (e.g., for authentication).
+     * Keys are header names, values are header values.
+     */
+    headers?: Record<string, string>;
   };
   /** If false, returns jobId immediately without waiting. Defaults to true. */
   waitForCompletion?: boolean;
@@ -143,6 +148,7 @@ export class ScrapeTool {
       scrapeMode: scraperOptions?.scrapeMode ?? ScrapeMode.Auto, // Pass scrapeMode enum
       includePatterns: scraperOptions?.includePatterns,
       excludePatterns: scraperOptions?.excludePatterns,
+      headers: scraperOptions?.headers, // <-- propagate headers
     });
 
     // Conditionally wait for completion

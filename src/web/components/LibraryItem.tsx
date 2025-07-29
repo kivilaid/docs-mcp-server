@@ -1,4 +1,3 @@
-import semver from "semver";
 import type { LibraryInfo } from "../../tools/ListLibrariesTool";
 import VersionDetailsRow from "./VersionDetailsRow"; // Adjusted import path
 
@@ -28,21 +27,9 @@ const LibraryItem = ({ library }: LibraryItemProps) => (
     {/* Container for version rows */}
     <div class="mt-1">
       {library.versions.length > 0 ? (
-        library.versions
-          // Sort versions: unversioned first, then newest semver first.
-          .sort((a, b) => {
-            // Explicitly place unversioned first
-            if (!a.version) return -1;
-            if (!b.version) return 1;
-            // Then sort by semver, newest first
-            return semver.compare(
-              semver.coerce(b.version)?.version ?? "0.0.0",
-              semver.coerce(a.version)?.version ?? "0.0.0"
-            );
-          })
-          .map((version) => (
-            <VersionDetailsRow libraryName={library.name} version={version} />
-          )) // Pass libraryName, showDelete defaults to true
+        library.versions.map((version) => (
+          <VersionDetailsRow libraryName={library.name} version={version} />
+        ))
       ) : (
         // Display message if no versions are indexed
         <p class="text-sm text-gray-500 dark:text-gray-400 italic">

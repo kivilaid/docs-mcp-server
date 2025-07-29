@@ -32,6 +32,12 @@ export interface FetchUrlToolOptions {
    * @default ScrapeMode.Auto
    */
   scrapeMode?: ScrapeMode;
+
+  /**
+   * Custom HTTP headers to send with the request (e.g., for authentication).
+   * Keys are header names, values are header values.
+   */
+  headers?: Record<string, string>;
 }
 
 /**
@@ -58,7 +64,7 @@ export class FetchUrlTool {
    * @throws {ToolError} If fetching or processing fails
    */
   async execute(options: FetchUrlToolOptions): Promise<string> {
-    const { url, scrapeMode = ScrapeMode.Auto } = options;
+    const { url, scrapeMode = ScrapeMode.Auto, headers } = options;
 
     const canFetchResults = this.fetchers.map((f) => f.canFetch(url));
     const fetcherIndex = canFetchResults.findIndex((result) => result === true);
@@ -79,6 +85,7 @@ export class FetchUrlTool {
       const rawContent: RawContent = await fetcher.fetch(url, {
         followRedirects: options.followRedirects ?? true,
         maxRetries: 3,
+        headers, // propagate custom headers
       });
 
       logger.info("🔄 Processing content...");
@@ -100,6 +107,7 @@ export class FetchUrlTool {
               excludeSelectors: undefined,
               ignoreErrors: false,
               scrapeMode,
+              headers, // propagate custom headers
             },
             fetcher,
           );
@@ -109,7 +117,7 @@ export class FetchUrlTool {
 
       if (!processed) {
         logger.warn(
-          `⚠️ Unsupported content type "${rawContent.mimeType}" for ${url}. Returning raw content.`,
+          `⚠️  Unsupported content type "${rawContent.mimeType}" for ${url}. Returning raw content.`,
         );
         const contentString =
           typeof rawContent.content === "string"
@@ -119,7 +127,7 @@ export class FetchUrlTool {
       }
 
       for (const err of processed.errors) {
-        logger.warn(`⚠️ Processing error for ${url}: ${err.message}`);
+        logger.warn(`⚠️  Processing error for ${url}: ${err.message}`);
       }
 
       if (typeof processed.textContent !== "string" || !processed.textContent.trim()) {

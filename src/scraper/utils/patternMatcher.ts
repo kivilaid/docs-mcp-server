@@ -73,7 +73,26 @@ export function shouldIncludeUrl(
   // Always match from a leading slash for path-based globs
   const path = extractPathAndQuery(url);
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
-  if (matchesAnyPattern(normalizedPath, excludePatterns)) return false;
+  // For file:// URLs, also match against the basename (strip leading slash from pattern for basename matching)
+  let basename: string | undefined;
+  if (url.startsWith("file://")) {
+    try {
+      const u = new URL(url);
+      basename = u.pathname ? u.pathname.split("/").pop() : undefined;
+    } catch {}
+  }
+  // Helper to strip leading slash from patterns for basename matching
+  const stripSlash = (patterns?: string[]) =>
+    patterns?.map((p) => (p.startsWith("/") ? p.slice(1) : p));
+  // Exclude patterns take precedence
+  if (
+    matchesAnyPattern(normalizedPath, excludePatterns) ||
+    (basename && matchesAnyPattern(basename, stripSlash(excludePatterns)))
+  )
+    return false;
   if (!includePatterns || includePatterns.length === 0) return true;
-  return matchesAnyPattern(normalizedPath, includePatterns);
+  return (
+    matchesAnyPattern(normalizedPath, includePatterns) ||
+    (basename ? matchesAnyPattern(basename, stripSlash(includePatterns)) : false)
+  );
 }

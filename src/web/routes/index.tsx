@@ -15,11 +15,24 @@ export function registerIndexRoute(server: FastifyInstance) {
         <Layout title="MCP Docs">
           {/* Job Queue Section */}
           <section class="mb-4 p-4 bg-white rounded-lg shadow dark:bg-gray-800 border border-gray-300 dark:border-gray-600">
-            <h2 class="text-xl font-semibold mb-2 text-gray-900 dark:text-white">
-              Job Queue
-            </h2>
+            <div class="flex items-center justify-between mb-2">
+              <h2 class="text-xl font-semibold text-gray-900 dark:text-white">
+                Job Queue
+              </h2>
+              <button
+                type="button"
+                class="text-xs px-3 py-1.5 text-gray-700 bg-gray-100 border border-gray-300 rounded-lg hover:bg-gray-200 focus:ring-4 focus:outline-none focus:ring-gray-100 dark:bg-gray-600 dark:text-gray-300 dark:border-gray-500 dark:hover:bg-gray-700 dark:focus:ring-gray-700 transition-colors duration-150"
+                title="Clear all completed, cancelled, and failed jobs"
+                hx-post="/api/jobs/clear-completed"
+                hx-trigger="click"
+                hx-on="htmx:afterRequest: document.dispatchEvent(new Event('job-list-refresh'))"
+                hx-swap="none"
+              >
+                Clear Completed Jobs
+              </button>
+            </div>
             {/* Container for the job list, loaded via HTMX */}
-            <div id="jobQueue" hx-get="/api/jobs" hx-trigger="load, every 1s">
+            <div id="job-queue" hx-get="/api/jobs" hx-trigger="load, every 1s">
               {/* Initial loading state */}
               <div class="animate-pulse">
                 <div class="h-[0.8em] bg-gray-200 rounded-full dark:bg-gray-700 w-48 mb-4" />
@@ -46,7 +59,7 @@ export function registerIndexRoute(server: FastifyInstance) {
               Indexed Documentation
             </h2>
             <div
-              id="indexedDocs"
+              id="indexed-docs"
               hx-get="/api/libraries"
               hx-trigger="load, every 10s"
             >
