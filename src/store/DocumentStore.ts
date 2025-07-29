@@ -121,8 +121,8 @@ export class DocumentStore {
       insertDocument: this.db.prepare(
         "INSERT INTO documents (library_id, version, url, content, metadata, sort_order, indexed_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
       ),
-      insertEmbedding: this.db.prepare<[number, string]>(
-        "INSERT INTO documents_vec (rowid, library, version, embedding) VALUES (?, ?, ?, ?)",
+      insertEmbedding: this.db.prepare<[bigint, number, string, string]>(
+        "INSERT INTO documents_vec (rowid, library_id, version, embedding) VALUES (?, ?, ?, ?)",
       ),
       insertLibrary: this.db.prepare(
         "INSERT INTO libraries (name) VALUES (?) ON CONFLICT(name) DO NOTHING",
@@ -437,10 +437,10 @@ export class DocumentStore {
           );
           const rowId = result.lastInsertRowid;
 
-          // Insert into vector table (still uses library/version for now)
+          // Insert into vector table using library_id
           this.statements.insertEmbedding.run(
             BigInt(rowId),
-            library.toLowerCase(),
+            libraryId,
             version.toLowerCase(),
             JSON.stringify(paddedEmbeddings[i]),
           );
@@ -508,10 +508,9 @@ export class DocumentStore {
             dv.rowid as id,
             dv.distance as vec_score
           FROM documents_vec dv
-          JOIN documents d ON dv.rowid = d.id
-          JOIN libraries l ON d.library_id = l.id
+          JOIN libraries l ON dv.library_id = l.id
           WHERE l.name = ?
-            AND d.version = ?
+            AND dv.version = ?
             AND dv.embedding MATCH ?
             AND dv.k = ?
           ORDER BY dv.distance
