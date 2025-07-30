@@ -186,9 +186,8 @@ export class DocumentManagementService {
     library: string,
     targetVersion?: string,
   ): Promise<FindVersionResult> {
-    logger.info(
-      `🔍 Finding best version for ${library}${targetVersion ? `@${targetVersion}` : ""}`,
-    );
+    const libraryAndVersion = `${library}${targetVersion ? `@${targetVersion}` : ""}`;
+    logger.info(`🔍 Finding best version for ${libraryAndVersion}`);
 
     // Check if unversioned documents exist *before* filtering for valid semver
     const hasUnversioned = await this.store.checkDocumentExists(library, "");
@@ -233,11 +232,9 @@ export class DocumentManagementService {
     }
 
     if (bestMatch) {
-      logger.info(
-        `✅ Found best match version ${bestMatch} for ${library}@${targetVersion}`,
-      );
+      logger.info(`✅ Found best match version ${bestMatch} for ${libraryAndVersion}`);
     } else {
-      logger.warn(`⚠️  No matching semver version found for ${library}@${targetVersion}`);
+      logger.warn(`⚠️  No matching semver version found for ${libraryAndVersion}`);
     }
 
     // If no semver match found, but unversioned exists, return that info.

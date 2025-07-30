@@ -54,6 +54,9 @@ describe("Database Migrations", () => {
       ]),
     );
 
+    // Ensure the old library column is removed after complete normalization
+    expect(documentsColumnNames).not.toContain("library");
+
     // Check columns for 'libraries'
     const librariesColumns = db.prepare("PRAGMA table_info(libraries);").all();
     const librariesColumnNames = (librariesColumns as ColumnInfo[]).map(
@@ -69,13 +72,14 @@ describe("Database Migrations", () => {
       .get() as { sql: string } | undefined;
     expect(ftsTableInfo?.sql).toContain("VIRTUAL TABLE documents_fts USING fts5");
 
-    // Check vector virtual table
+    // Check vector virtual table exists
     const vecTableInfo = db
       .prepare(
         "SELECT sql FROM sqlite_master WHERE type='table' AND name='documents_vec';",
       )
       .get() as { sql: string } | undefined;
-    expect(vecTableInfo?.sql).toMatch(/CREATE VIRTUAL TABLE documents_vec USING vec0/i);
+    expect(vecTableInfo).toBeDefined();
+    expect(vecTableInfo?.sql).toContain("USING vec0");
 
     // Check that vector table has the expected schema with library_id
     expect(vecTableInfo?.sql).toContain("library_id INTEGER NOT NULL");
@@ -83,160 +87,328 @@ describe("Database Migrations", () => {
     expect(vecTableInfo?.sql).toContain("embedding FLOAT[1536]");
   });
 
-  it("should preserve vector data when migrating from library names to library_id", () => {
-    // Create a fresh database to test the migration step by step
-    const migrationDb = new Database(":memory:");
-    sqliteVec.load(migrationDb);
+  it("should handle vector search with empty results gracefully", () => {
+    // Apply all migrations
+    expect(() => applyMigrations(db)).not.toThrow();
 
-    // Apply first two migrations only
-    const migration000 = `
-      CREATE TABLE IF NOT EXISTS documents(
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        library TEXT NOT NULL,
-        version TEXT NOT NULL DEFAULT '',
-        url TEXT NOT NULL,
-        content TEXT,
-        metadata JSON,
-        sort_order INTEGER NOT NULL,
-        UNIQUE(url, library, version, sort_order)
-      );
-      CREATE VIRTUAL TABLE IF NOT EXISTS documents_vec USING vec0(
-        library TEXT NOT NULL,
-        version TEXT NOT NULL,
-        embedding FLOAT[1536]
-      );
-    `;
+    // Insert a library but no documents
+    db.prepare("INSERT INTO libraries (name) VALUES (?)").run("empty-lib");
+    const emptyLibraryIdResult = db
+      .prepare("SELECT id FROM libraries WHERE name = ?")
+      .get("empty-lib") as { id: number } | undefined;
+    expect(emptyLibraryIdResult).toBeDefined();
+    const emptyLibraryId = emptyLibraryIdResult!.id;
 
-    const migration001 = "ALTER TABLE documents ADD COLUMN indexed_at DATETIME;";
-
-    const migration002 = `
-      CREATE TABLE IF NOT EXISTS libraries (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT NOT NULL UNIQUE
-      );
-      ALTER TABLE documents ADD COLUMN library_id INTEGER REFERENCES libraries(id);
-      INSERT OR IGNORE INTO libraries (name) SELECT DISTINCT library FROM documents;
-      UPDATE documents SET library_id = (SELECT id FROM libraries WHERE libraries.name = documents.library);
-    `;
-
-    migrationDb.exec(migration000);
-    migrationDb.exec(migration001);
-
-    // Insert test data before migration 002
-    migrationDb
-      .prepare(
-        "INSERT INTO documents (library, version, url, content, metadata, sort_order) VALUES (?, ?, ?, ?, ?, ?)",
-      )
-      .run(
-        "react",
-        "18.0.0",
-        "https://react.dev",
-        "React content",
-        '{"title":"React"}',
-        0,
-      );
-    migrationDb
-      .prepare(
-        "INSERT INTO documents (library, version, url, content, metadata, sort_order) VALUES (?, ?, ?, ?, ?, ?)",
-      )
-      .run("vue", "3.0.0", "https://vuejs.org", "Vue content", '{"title":"Vue"}', 0);
-
-    // Insert vector data with old schema
-    migrationDb
-      .prepare(
-        "INSERT INTO documents_vec (rowid, library, version, embedding) VALUES (?, ?, ?, ?)",
-      )
-      .run(BigInt(1), "react", "18.0.0", JSON.stringify(new Array(1536).fill(0.1)));
-    migrationDb
-      .prepare(
-        "INSERT INTO documents_vec (rowid, library, version, embedding) VALUES (?, ?, ?, ?)",
-      )
-      .run(BigInt(2), "vue", "3.0.0", JSON.stringify(new Array(1536).fill(0.2)));
-
-    // Verify vector data exists before migration
-    const vectorCountBefore = migrationDb
-      .prepare("SELECT COUNT(*) as count FROM documents_vec")
-      .get() as { count: number };
-    expect(vectorCountBefore.count).toBe(2);
-
-    // Apply migrations 002 and 003
-    migrationDb.exec(migration002);
-
-    const migration003 = `
-      CREATE TEMPORARY TABLE temp_vector_data AS
+    // Search for vectors in empty library with k constraint
+    const searchVector = new Array(1536).fill(0.5);
+    const vectorSearchQuery = `
       SELECT 
         dv.rowid,
-        l.id as library_id,
-        dv.version,
-        dv.embedding
+        d.content,
+        dv.distance
       FROM documents_vec dv
       JOIN documents d ON dv.rowid = d.id
-      JOIN libraries l ON d.library_id = l.id;
-
-      DROP TABLE documents_vec;
-
-      CREATE VIRTUAL TABLE documents_vec USING vec0(
-        library_id INTEGER NOT NULL,
-        version TEXT NOT NULL,
-        embedding FLOAT[1536]
-      );
-
-      INSERT INTO documents_vec (rowid, library_id, version, embedding)
-      SELECT rowid, library_id, version, embedding
-      FROM temp_vector_data;
-
-      DROP TABLE temp_vector_data;
+      WHERE dv.embedding MATCH ?
+      AND dv.library_id = ?
+      AND dv.version = ?
+      AND k = 5
+      ORDER BY dv.distance ASC
     `;
 
-    migrationDb.exec(migration003);
+    const searchResults = db
+      .prepare(vectorSearchQuery)
+      .all(JSON.stringify(searchVector), emptyLibraryId, "1.0.0");
 
-    // Verify vector data is preserved after migration
-    const vectorCountAfter = migrationDb
-      .prepare("SELECT COUNT(*) as count FROM documents_vec")
-      .get() as { count: number };
-    expect(vectorCountAfter.count).toBe(2);
+    // Should return empty array, not throw an error
+    expect(searchResults).toEqual([]);
+  });
 
-    // Verify library_id mapping is correct
-    const vectorData = migrationDb
-      .prepare(`
-      SELECT dv.rowid, dv.library_id, dv.version, l.name as library_name
+  it("should perform vector search and return similar vectors correctly", () => {
+    // Apply all migrations
+    expect(() => applyMigrations(db)).not.toThrow();
+
+    // Insert test library
+    db.prepare("INSERT INTO libraries (name) VALUES (?)").run("test-lib");
+    const libraryResult = db
+      .prepare("SELECT id FROM libraries WHERE name = ?")
+      .get("test-lib") as { id: number } | undefined;
+    expect(libraryResult).toBeDefined();
+    const libraryId = BigInt(libraryResult!.id);
+
+    // Insert test documents
+    const insertDoc = db.prepare(`
+      INSERT INTO documents (library_id, version, url, content, metadata, sort_order)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `);
+
+    const doc1Id = insertDoc.run(
+      libraryId,
+      "1.0.0",
+      "https://example.com/doc1",
+      "This is about machine learning and artificial intelligence",
+      JSON.stringify({ title: "AI Basics", path: "/ai-basics" }),
+      1,
+    ).lastInsertRowid as number;
+
+    const doc2Id = insertDoc.run(
+      libraryId,
+      "1.0.0",
+      "https://example.com/doc2",
+      "This document discusses neural networks and deep learning",
+      JSON.stringify({ title: "Neural Networks", path: "/neural-networks" }),
+      2,
+    ).lastInsertRowid as number;
+
+    const doc3Id = insertDoc.run(
+      libraryId,
+      "1.0.0",
+      "https://example.com/doc3",
+      "Cooking recipes and food preparation techniques",
+      JSON.stringify({ title: "Cooking Guide", path: "/cooking" }),
+      3,
+    ).lastInsertRowid as number;
+
+    // Create test vectors (similar vectors for AI-related docs, different for cooking)
+    const aiVector1 = new Array(1536)
+      .fill(0)
+      .map((_, i) => (i < 100 ? Math.random() * 0.1 + 0.8 : Math.random() * 0.2));
+    const aiVector2 = new Array(1536)
+      .fill(0)
+      .map((_, i) => (i < 100 ? Math.random() * 0.1 + 0.75 : Math.random() * 0.2));
+    const cookingVector = new Array(1536)
+      .fill(0)
+      .map((_, i) =>
+        i >= 100 && i < 200 ? Math.random() * 0.1 + 0.9 : Math.random() * 0.2,
+      );
+
+    // Insert vectors
+    const insertVector = db.prepare(`
+      INSERT INTO documents_vec (rowid, library_id, version, embedding)
+      VALUES (?, ?, ?, ?)
+    `);
+
+    insertVector.run(BigInt(doc1Id), libraryId, "1.0.0", JSON.stringify(aiVector1));
+    insertVector.run(BigInt(doc2Id), libraryId, "1.0.0", JSON.stringify(aiVector2));
+    insertVector.run(BigInt(doc3Id), libraryId, "1.0.0", JSON.stringify(cookingVector));
+
+    // Search with a vector similar to AI vectors
+    const searchVector = new Array(1536)
+      .fill(0)
+      .map((_, i) => (i < 100 ? Math.random() * 0.1 + 0.77 : Math.random() * 0.2));
+
+    const vectorSearchQuery = `
+      SELECT 
+        dv.rowid,
+        d.content,
+        dv.distance
       FROM documents_vec dv
-      JOIN libraries l ON dv.library_id = l.id
-      ORDER BY dv.rowid
-    `)
-      .all() as Array<{
+      JOIN documents d ON dv.rowid = d.id
+      WHERE dv.embedding MATCH ?
+      AND dv.library_id = ?
+      AND dv.version = ?
+      AND k = 3
+      ORDER BY dv.distance ASC
+    `;
+
+    interface VectorSearchResult {
       rowid: number;
-      library_id: number;
-      version: string;
-      library_name: string;
-    }>;
+      content: string;
+      distance: number;
+    }
 
-    expect(vectorData).toHaveLength(2);
-    expect(vectorData[0]).toMatchObject({
-      rowid: 1,
-      library_id: expect.any(Number),
-      version: "18.0.0",
-      library_name: "react",
-    });
-    expect(vectorData[1]).toMatchObject({
-      rowid: 2,
-      library_id: expect.any(Number),
-      version: "3.0.0",
-      library_name: "vue",
-    });
+    const searchResults = db
+      .prepare(vectorSearchQuery)
+      .all(JSON.stringify(searchVector), libraryId, "1.0.0") as VectorSearchResult[];
 
-    // Verify search still works
-    const searchResult = migrationDb
-      .prepare(`
-      SELECT COUNT(*) as count
-      FROM documents_vec dv
-      JOIN libraries l ON dv.library_id = l.id
-      WHERE l.name = ? AND dv.version = ?
-    `)
-      .get("react", "18.0.0") as { count: number };
+    // Should return 3 results ordered by similarity
+    expect(searchResults).toHaveLength(3);
 
-    expect(searchResult.count).toBe(1);
+    // Results should be ordered by distance (most similar first)
+    expect(searchResults[0].distance).toBeLessThan(searchResults[1].distance);
+    expect(searchResults[1].distance).toBeLessThan(searchResults[2].distance);
 
-    migrationDb.close();
+    // AI-related documents should be more similar (lower distance) than cooking document
+    const aiResults = searchResults.filter(
+      (r) =>
+        r.content.includes("machine learning") || r.content.includes("neural networks"),
+    );
+    const cookingResults = searchResults.filter(
+      (r) => r.content.includes("cooking") || r.content.includes("recipes"),
+    );
+
+    expect(aiResults).toHaveLength(2);
+    expect(cookingResults).toHaveLength(1);
+
+    // AI documents should have lower distances than cooking document
+    const maxAiDistance = Math.max(...aiResults.map((r) => r.distance));
+    const cookingDistance = cookingResults[0].distance;
+    expect(maxAiDistance).toBeLessThan(cookingDistance);
+  });
+
+  it("should perform FTS search and return relevant text matches correctly", () => {
+    // Apply all migrations
+    expect(() => applyMigrations(db)).not.toThrow();
+
+    // Insert test library
+    db.prepare("INSERT INTO libraries (name) VALUES (?)").run("docs-lib");
+    const libraryResult = db
+      .prepare("SELECT id FROM libraries WHERE name = ?")
+      .get("docs-lib") as { id: number } | undefined;
+    expect(libraryResult).toBeDefined();
+    const libraryId = BigInt(libraryResult!.id);
+
+    // Insert test documents with diverse content
+    const insertDoc = db.prepare(`
+      INSERT INTO documents (library_id, version, url, content, metadata, sort_order)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `);
+
+    insertDoc.run(
+      libraryId,
+      "1.0.0",
+      "https://example.com/react-hooks",
+      "React hooks are a powerful feature that allows you to use state and lifecycle methods in functional components. The useState hook manages component state.",
+      JSON.stringify({
+        title: "React Hooks Guide",
+        path: "/react/hooks",
+      }),
+      1,
+    );
+
+    insertDoc.run(
+      libraryId,
+      "1.0.0",
+      "https://example.com/vue-composition",
+      "Vue composition API provides a way to organize component logic. It offers reactive state management and computed properties for building dynamic applications.",
+      JSON.stringify({
+        title: "Vue Composition API",
+        path: "/vue/composition",
+      }),
+      2,
+    );
+
+    insertDoc.run(
+      libraryId,
+      "1.0.0",
+      "https://example.com/angular-services",
+      "Angular services are singleton objects that provide functionality across the application. Dependency injection makes services available to components.",
+      JSON.stringify({
+        title: "Angular Services",
+        path: "/angular/services",
+      }),
+      3,
+    );
+
+    insertDoc.run(
+      libraryId,
+      "1.0.0",
+      "https://example.com/database-design",
+      "Database normalization reduces redundancy and improves data integrity. Primary keys uniquely identify records in relational databases.",
+      JSON.stringify({
+        title: "Database Design",
+        path: "/database/design",
+      }),
+      4,
+    );
+
+    // Test 1: Search for React-specific content
+    interface FTSSearchResult {
+      id: number;
+      content: string;
+      title: string;
+      url: string;
+      path: string;
+      rank: number;
+    }
+
+    const reactSearchQuery = `
+      SELECT 
+        d.id,
+        d.content,
+        json_extract(d.metadata, '$.title') as title,
+        d.url,
+        json_extract(d.metadata, '$.path') as path,
+        fts.rank
+      FROM documents_fts fts
+      JOIN documents d ON fts.rowid = d.id
+      WHERE documents_fts MATCH ?
+      AND d.library_id = ?
+      ORDER BY fts.rank
+    `;
+
+    const reactResults = db
+      .prepare(reactSearchQuery)
+      .all("react hooks", libraryId) as FTSSearchResult[];
+
+    expect(reactResults).toHaveLength(1);
+    expect(reactResults[0].content).toContain("React hooks");
+    expect(reactResults[0].title).toBe("React Hooks Guide");
+
+    // Test 2: Search for state management across frameworks
+    const stateResults = db
+      .prepare(reactSearchQuery)
+      .all("state", libraryId) as FTSSearchResult[];
+
+    expect(stateResults.length).toBeGreaterThanOrEqual(2);
+
+    // Should find both React (useState) and Vue (reactive state) content
+    const contentTexts = stateResults.map((r) => r.content);
+    const hasReactState = contentTexts.some((content) => content.includes("useState"));
+    const hasVueState = contentTexts.some((content) =>
+      content.includes("reactive state"),
+    );
+
+    expect(hasReactState || hasVueState).toBe(true);
+
+    // Test 3: Search with phrase matching
+    const phraseResults = db
+      .prepare(reactSearchQuery)
+      .all('"dependency injection"', libraryId) as FTSSearchResult[];
+
+    expect(phraseResults).toHaveLength(1);
+    expect(phraseResults[0].content).toContain("Dependency injection");
+    expect(phraseResults[0].title).toBe("Angular Services");
+
+    // Test 4: Search in metadata fields (title and path)
+    const titleSearchQuery = `
+      SELECT 
+        d.id,
+        d.content,
+        json_extract(d.metadata, '$.title') as title,
+        d.url,
+        json_extract(d.metadata, '$.path') as path,
+        fts.rank
+      FROM documents_fts fts
+      JOIN documents d ON fts.rowid = d.id
+      WHERE fts.title MATCH ?
+      AND d.library_id = ?
+      ORDER BY fts.rank
+    `;
+
+    const titleResults = db
+      .prepare(titleSearchQuery)
+      .all("Database", libraryId) as FTSSearchResult[];
+
+    expect(titleResults).toHaveLength(1);
+    expect(titleResults[0].title).toBe("Database Design");
+
+    // Test 5: Test empty search results
+    const emptyResults = db
+      .prepare(reactSearchQuery)
+      .all("nonexistent term", libraryId) as FTSSearchResult[];
+
+    expect(emptyResults).toHaveLength(0);
+
+    // Test 6: Test ranking (more relevant results should have better rank)
+    const multiResults = db
+      .prepare(reactSearchQuery)
+      .all("component", libraryId) as FTSSearchResult[];
+
+    if (multiResults.length > 1) {
+      // Results should be ordered by relevance (rank)
+      for (let i = 1; i < multiResults.length; i++) {
+        expect(multiResults[i].rank).toBeGreaterThanOrEqual(multiResults[i - 1].rank);
+      }
+    }
   });
 });

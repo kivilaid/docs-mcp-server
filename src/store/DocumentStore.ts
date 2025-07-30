@@ -38,19 +38,27 @@ export class DocumentStore {
   private readonly dbDimension: number = VECTOR_DIMENSION;
   private modelDimension!: number;
   private statements!: {
-    getById: Database.Statement;
-    insertDocument: Database.Statement;
-    insertEmbedding: Database.Statement;
-    deleteDocuments: Database.Statement;
-    queryVersions: Database.Statement;
-    checkExists: Database.Statement;
-    queryLibraryVersions: Database.Statement<[]>; // Updated type
-    getChildChunks: Database.Statement;
-    getPrecedingSiblings: Database.Statement;
-    getSubsequentSiblings: Database.Statement;
-    getParentChunk: Database.Statement;
-    insertLibrary: Database.Statement;
-    getLibraryIdByName: Database.Statement;
+    getById: Database.Statement<[bigint]>;
+    insertDocument: Database.Statement<
+      [bigint, string, string, string, string, number, string]
+    >;
+    insertEmbedding: Database.Statement<[bigint, bigint, string, string]>;
+    deleteDocuments: Database.Statement<[string, string]>;
+    queryVersions: Database.Statement<[string]>;
+    checkExists: Database.Statement<[string, string]>;
+    queryLibraryVersions: Database.Statement<[]>;
+    getChildChunks: Database.Statement<
+      [string, string, string, number, string, bigint, number]
+    >;
+    getPrecedingSiblings: Database.Statement<
+      [string, string, string, bigint, string, number]
+    >;
+    getSubsequentSiblings: Database.Statement<
+      [string, string, string, bigint, string, number]
+    >;
+    getParentChunk: Database.Statement<[string, string, string, string, bigint]>;
+    insertLibrary: Database.Statement<[string]>;
+    getLibraryIdByName: Database.Statement<[string]>;
   };
 
   /**
@@ -117,47 +125,54 @@ export class DocumentStore {
    */
   private prepareStatements(): void {
     const statements = {
-      getById: this.db.prepare("SELECT * FROM documents WHERE id = ?"),
-      insertDocument: this.db.prepare(
+      getById: this.db.prepare<[bigint]>("SELECT * FROM documents WHERE id = ?"),
+      insertDocument: this.db.prepare<
+        [bigint, string, string, string, string, number, string]
+      >(
         "INSERT INTO documents (library_id, version, url, content, metadata, sort_order, indexed_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
       ),
-      insertEmbedding: this.db.prepare<[bigint, number, string, string]>(
+      insertEmbedding: this.db.prepare<[bigint, bigint, string, string]>(
         "INSERT INTO documents_vec (rowid, library_id, version, embedding) VALUES (?, ?, ?, ?)",
       ),
-      insertLibrary: this.db.prepare(
+      insertLibrary: this.db.prepare<[string]>(
         "INSERT INTO libraries (name) VALUES (?) ON CONFLICT(name) DO NOTHING",
       ),
-      getLibraryIdByName: this.db.prepare("SELECT id FROM libraries WHERE name = ?"),
-      deleteDocuments: this.db.prepare(
+      getLibraryIdByName: this.db.prepare<[string]>(
+        "SELECT id FROM libraries WHERE name = ?",
+      ),
+      deleteDocuments: this.db.prepare<[string, string]>(
         `DELETE FROM documents
          WHERE library_id = (SELECT id FROM libraries WHERE name = ?)
          AND version = ?`,
       ),
-      queryVersions: this.db.prepare(
+      queryVersions: this.db.prepare<[string]>(
         `SELECT DISTINCT d.version
          FROM documents d
          JOIN libraries l ON d.library_id = l.id
          WHERE l.name = ?
          ORDER BY d.version`,
       ),
-      checkExists: this.db.prepare(
+      checkExists: this.db.prepare<[string, string]>(
         `SELECT id FROM documents
          WHERE library_id = (SELECT id FROM libraries WHERE name = ?)
          AND version = ?
          LIMIT 1`,
       ),
-      queryLibraryVersions: this.db.prepare(
+      queryLibraryVersions: this.db.prepare<[]>(
         `SELECT
-          library,
-          version,
+          l.name as library,
+          d.version,
           COUNT(*) as documentCount,
-          COUNT(DISTINCT url) as uniqueUrlCount,
-          MIN(indexed_at) as indexedAt
-        FROM documents
-        GROUP BY library, version
-        ORDER BY library, version`,
+          COUNT(DISTINCT d.url) as uniqueUrlCount,
+          MIN(d.indexed_at) as indexedAt
+        FROM documents d
+        JOIN libraries l ON d.library_id = l.id
+        GROUP BY l.name, d.version
+        ORDER BY l.name, d.version`,
       ),
-      getChildChunks: this.db.prepare(`
+      getChildChunks: this.db.prepare<
+        [string, string, string, number, string, bigint, number]
+      >(`
         SELECT d.* FROM documents d
         JOIN libraries l ON d.library_id = l.id
         WHERE l.name = ?
@@ -169,7 +184,9 @@ export class DocumentStore {
         ORDER BY d.sort_order
         LIMIT ?
       `),
-      getPrecedingSiblings: this.db.prepare(`
+      getPrecedingSiblings: this.db.prepare<
+        [string, string, string, bigint, string, number]
+      >(`
         SELECT d.* FROM documents d
         JOIN libraries l ON d.library_id = l.id
         WHERE l.name = ?
@@ -180,7 +197,9 @@ export class DocumentStore {
         ORDER BY d.sort_order DESC
         LIMIT ?
       `),
-      getSubsequentSiblings: this.db.prepare(`
+      getSubsequentSiblings: this.db.prepare<
+        [string, string, string, bigint, string, number]
+      >(`
         SELECT d.* FROM documents d
         JOIN libraries l ON d.library_id = l.id
         WHERE l.name = ?
@@ -191,7 +210,7 @@ export class DocumentStore {
         ORDER BY d.sort_order
         LIMIT ?
       `),
-      getParentChunk: this.db.prepare(`
+      getParentChunk: this.db.prepare<[string, string, string, string, bigint]>(`
         SELECT d.* FROM documents d
         JOIN libraries l ON d.library_id = l.id
         WHERE l.name = ?
@@ -414,7 +433,7 @@ export class DocumentStore {
       if (!libraryIdRow || typeof libraryIdRow.id !== "number") {
         throw new StoreError(`Failed to resolve library_id for library: ${library}`);
       }
-      const libraryId = libraryIdRow.id;
+      const libraryId = BigInt(libraryIdRow.id);
 
       // Insert documents in a transaction
       const transaction = this.db.transaction((docs: typeof documents) => {
@@ -476,7 +495,7 @@ export class DocumentStore {
    */
   async getById(id: string): Promise<Document | null> {
     try {
-      const row = this.statements.getById.get(id) as DbQueryResult<DbDocument>;
+      const row = this.statements.getById.get(BigInt(id)) as DbQueryResult<DbDocument>;
       if (!row) {
         return null;
       }
@@ -600,7 +619,7 @@ export class DocumentStore {
         parentUrl,
         parentPath.length + 1,
         JSON.stringify(parentPath),
-        id,
+        BigInt(id),
         limit,
       ) as Array<DbDocument>;
 
@@ -631,7 +650,7 @@ export class DocumentStore {
         library.toLowerCase(),
         version.toLowerCase(),
         refMetadata.url,
-        id,
+        BigInt(id),
         JSON.stringify(refMetadata.path),
         limit,
       ) as Array<DbDocument>;
@@ -666,7 +685,7 @@ export class DocumentStore {
         library.toLowerCase(),
         version.toLowerCase(),
         refMetadata.url,
-        id,
+        BigInt(id),
         JSON.stringify(refMetadata.path),
         limit,
       ) as Array<DbDocument>;
@@ -707,7 +726,7 @@ export class DocumentStore {
         version.toLowerCase(),
         childMetadata.url,
         JSON.stringify(parentPath),
-        id,
+        BigInt(id),
       ) as DbQueryResult<DbDocument>;
 
       if (!result) {

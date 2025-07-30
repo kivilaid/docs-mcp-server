@@ -449,6 +449,108 @@ describe("DocumentStore", () => {
     });
   });
 
+  describe("Vector Similarity Scoring", () => {
+    it("should order documents by vector similarity distance (vector-only search)", async () => {
+      // Mock library lookup for test
+      const getLibraryIdMock = vi.fn().mockReturnValue({ id: 1 });
+      mockPrepare.mockImplementation((sql: string) => {
+        if (sql.includes("SELECT id FROM libraries WHERE name = ?")) {
+          return { get: getLibraryIdMock, run: vi.fn(), all: mockStatementAll };
+        }
+        if (sql.includes("INSERT INTO libraries")) {
+          return { run: vi.fn(), get: vi.fn(), all: mockStatementAll };
+        }
+        // Match the actual hybrid search query pattern
+        if (sql.includes("WITH vec_scores AS") && sql.includes("dv.embedding MATCH ?")) {
+          return { get: vi.fn(), run: vi.fn(), all: mockStatementAll };
+        }
+        return {
+          get: vi.fn(),
+          run: vi.fn().mockReturnValue({ changes: 1, lastInsertRowid: 1 }),
+          all: mockStatementAll,
+        };
+      });
+
+      // Mock vector search results - ordered by distance (closer = smaller distance)
+      const mockVectorResults = [
+        {
+          id: "doc1",
+          content: "very similar content",
+          metadata: JSON.stringify({
+            title: "Similar Doc",
+            url: "url1",
+            path: ["path1"],
+          }),
+          vec_score: 0.1, // Very close to search vector
+          fts_score: 1, // Include FTS score for hybrid query compatibility
+        },
+        {
+          id: "doc2",
+          content: "somewhat similar content",
+          metadata: JSON.stringify({
+            title: "Somewhat Doc",
+            url: "url2",
+            path: ["path2"],
+          }),
+          vec_score: 0.5, // Moderately close
+          fts_score: 1,
+        },
+        {
+          id: "doc3",
+          content: "different content",
+          metadata: JSON.stringify({
+            title: "Different Doc",
+            url: "url3",
+            path: ["path3"],
+          }),
+          vec_score: 0.9, // Far from search vector
+          fts_score: 1,
+        },
+      ];
+
+      mockStatementAll.mockReturnValueOnce(mockVectorResults);
+
+      // Mock the embedQuery to return a search vector
+      const searchVector = new Array(VECTOR_DIMENSION).fill(0.1);
+      mockEmbedQuery.mockResolvedValueOnce(searchVector);
+
+      // Create a new store instance for this test
+      documentStore = new DocumentStore(":memory:");
+      await documentStore.initialize();
+
+      // Perform search which will use the hybrid query
+      const result = await documentStore.findByContent(
+        "test-lib",
+        "1.0.0",
+        "test query",
+        10,
+      );
+
+      // Verify embedQuery was called for the search vector
+      expect(mockEmbedQuery).toHaveBeenCalledWith("test query");
+
+      // Verify the vector search SQL query was executed
+      expect(mockStatementAll).toHaveBeenCalled();
+      const sqlCall = mockPrepare.mock.calls.find(
+        (call) =>
+          call[0].includes("WITH vec_scores AS") &&
+          call[0].includes("dv.embedding MATCH ?"),
+      );
+      expect(sqlCall).toBeDefined();
+
+      // Verify results are ordered by vector similarity (closest first)
+      // The hybrid query combines scores, but vector similarity should dominate ordering
+      expect(result).toHaveLength(3);
+      expect(result[0].metadata.title).toBe("Similar Doc"); // vec_score: 0.1
+      expect(result[1].metadata.title).toBe("Somewhat Doc"); // vec_score: 0.5
+      expect(result[2].metadata.title).toBe("Different Doc"); // vec_score: 0.9
+
+      // Verify the search vector was passed to the query
+      const lastCall = mockStatementAll.mock.lastCall;
+      expect(lastCall).toContain(JSON.stringify(searchVector));
+    });
+  });
+
   describe("queryLibraryVersions", () => {
     it("should return a map of libraries to their detailed versions", async () => {
       const mockData = [
@@ -515,7 +617,7 @@ describe("DocumentStore", () => {
 
       // Check the prepared statement was called
       expect(mockPrepare).toHaveBeenCalledWith(
-        expect.stringContaining("GROUP BY library, version"),
+        expect.stringContaining("GROUP BY l.name, d.version"),
       );
       expect(mockStatementAll).toHaveBeenCalledTimes(1);
 

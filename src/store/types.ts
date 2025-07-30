@@ -8,7 +8,7 @@ export const VECTOR_DIMENSION = 1536;
  */
 export interface DbDocument {
   id: string;
-  library: string;
+  library_id: number;
   version: string;
   url: string;
   content: string;
