@@ -582,6 +582,7 @@ export class DocumentStore {
         ...mapDbDocumentToDocument(row),
         metadata: {
           ...JSON.parse(row.metadata),
+          id: row.id,
           score: row.rrf_score,
           vec_rank: row.vec_rank,
           fts_rank: row.fts_rank,
