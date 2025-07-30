@@ -198,7 +198,7 @@ describe("DocumentStore", () => {
       // 2. Check if db.prepare was called correctly during findByContent
       // It's called multiple times during initialize, so check the specific call
       const prepareCall = mockPrepare.mock.calls.find((call) =>
-        call[0].includes("WITH vec_scores AS"),
+        call[0].includes("WITH vec_distances AS"),
       );
       expect(prepareCall).toBeDefined();
 
@@ -461,7 +461,10 @@ describe("DocumentStore", () => {
           return { run: vi.fn(), get: vi.fn(), all: mockStatementAll };
         }
         // Match the actual hybrid search query pattern
-        if (sql.includes("WITH vec_scores AS") && sql.includes("dv.embedding MATCH ?")) {
+        if (
+          sql.includes("WITH vec_distances AS") &&
+          sql.includes("dv.embedding MATCH ?")
+        ) {
           return { get: vi.fn(), run: vi.fn(), all: mockStatementAll };
         }
         return {
@@ -533,21 +536,106 @@ describe("DocumentStore", () => {
       expect(mockStatementAll).toHaveBeenCalled();
       const sqlCall = mockPrepare.mock.calls.find(
         (call) =>
-          call[0].includes("WITH vec_scores AS") &&
+          call[0].includes("WITH vec_distances AS") &&
           call[0].includes("dv.embedding MATCH ?"),
       );
       expect(sqlCall).toBeDefined();
 
-      // Verify results are ordered by vector similarity (closest first)
-      // The hybrid query combines scores, but vector similarity should dominate ordering
+      // Verify results are ordered by RRF score (highest first)
+      // Note: The actual ordering depends on RRF calculation from combined ranks
       expect(result).toHaveLength(3);
-      expect(result[0].metadata.title).toBe("Similar Doc"); // vec_score: 0.1
-      expect(result[1].metadata.title).toBe("Somewhat Doc"); // vec_score: 0.5
-      expect(result[2].metadata.title).toBe("Different Doc"); // vec_score: 0.9
+
+      // Verify that results have score metadata attached
+      expect(result[0].metadata.score).toBeDefined();
+      expect(result[0].metadata.vec_rank).toBeDefined();
+      expect(result[0].metadata.fts_rank).toBeDefined();
+
+      // Verify scores are in descending order (highest first)
+      expect(result[0].metadata.score).toBeGreaterThanOrEqual(result[1].metadata.score);
+      expect(result[1].metadata.score).toBeGreaterThanOrEqual(result[2].metadata.score);
 
       // Verify the search vector was passed to the query
       const lastCall = mockStatementAll.mock.lastCall;
       expect(lastCall).toContain(JSON.stringify(searchVector));
+    });
+  });
+
+  describe("End-to-End Result Ordering", () => {
+    it("should return final results ordered by RRF score (highest first)", async () => {
+      // Mock library lookup for test
+      const getLibraryIdMock = vi.fn().mockReturnValue({ id: 1 });
+      mockPrepare.mockImplementation((sql: string) => {
+        if (sql.includes("SELECT id FROM libraries WHERE name = ?")) {
+          return { get: getLibraryIdMock, run: vi.fn(), all: mockStatementAll };
+        }
+        if (sql.includes("INSERT INTO libraries")) {
+          return { run: vi.fn(), get: vi.fn(), all: mockStatementAll };
+        }
+        if (
+          sql.includes("WITH vec_distances AS") &&
+          sql.includes("dv.embedding MATCH ?")
+        ) {
+          return { get: vi.fn(), run: vi.fn(), all: mockStatementAll };
+        }
+        return {
+          get: vi.fn(),
+          run: vi.fn().mockReturnValue({ changes: 1, lastInsertRowid: 1 }),
+          all: mockStatementAll,
+        };
+      });
+
+      // Mock search results with clear RRF score differences
+      const mockSearchResults = [
+        {
+          id: "3",
+          content: "worst match",
+          metadata: JSON.stringify({ title: "Worst Doc", url: "url3", path: ["path3"] }),
+          vec_score: 0.2, // Poor vector score
+          fts_score: 0.2, // Poor FTS score -> both get rank 3 -> RRF = 2*(1/63) ≈ 0.032
+        },
+        {
+          id: "1",
+          content: "best match",
+          metadata: JSON.stringify({ title: "Best Doc", url: "url1", path: ["path1"] }),
+          vec_score: 0.9, // Excellent vector score
+          fts_score: 0.9, // Excellent FTS score -> both get rank 1 -> RRF = 2*(1/61) ≈ 0.033
+        },
+        {
+          id: "2",
+          content: "medium match",
+          metadata: JSON.stringify({ title: "Medium Doc", url: "url2", path: ["path2"] }),
+          vec_score: 0.6, // Medium vector score
+          fts_score: 0.6, // Medium FTS score -> both get rank 2 -> RRF = 2*(1/62) ≈ 0.032
+        },
+      ];
+
+      mockStatementAll.mockReturnValueOnce(mockSearchResults);
+      mockEmbedQuery.mockResolvedValueOnce(new Array(VECTOR_DIMENSION).fill(0.1));
+
+      documentStore = new DocumentStore(":memory:");
+      await documentStore.initialize();
+
+      const result = await documentStore.findByContent(
+        "test-lib",
+        "1.0.0",
+        "test query",
+        10,
+      );
+
+      // Verify results are ordered correctly: Best, Medium, Worst
+      expect(result).toHaveLength(3);
+      expect(result[0].metadata.title).toBe("Best Doc"); // Highest RRF score
+      expect(result[1].metadata.title).toBe("Medium Doc"); // Medium RRF score
+      expect(result[2].metadata.title).toBe("Worst Doc"); // Lowest RRF score
+
+      // Verify RRF scores are in descending order
+      expect(result[0].metadata.score).toBeGreaterThan(result[1].metadata.score);
+      expect(result[1].metadata.score).toBeGreaterThan(result[2].metadata.score);
+
+      // Verify score values are reasonable (around 0.03)
+      expect(result[0].metadata.score).toBeCloseTo(0.033, 2);
+      expect(result[1].metadata.score).toBeCloseTo(0.032, 2);
+      expect(result[2].metadata.score).toBeCloseTo(0.032, 2);
     });
   });
 

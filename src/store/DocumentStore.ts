@@ -522,10 +522,10 @@ export class DocumentStore {
       const ftsQuery = this.escapeFtsQuery(query); // Escape the query for FTS
 
       const stmt = this.db.prepare(`
-        WITH vec_scores AS (
+        WITH vec_distances AS (
           SELECT
             dv.rowid as id,
-            dv.distance as vec_score
+            dv.distance as vec_distance
           FROM documents_vec dv
           JOIN libraries l ON dv.library_id = l.id
           WHERE l.name = ?
@@ -551,10 +551,10 @@ export class DocumentStore {
           d.id,
           d.content,
           d.metadata,
-          COALESCE(1 / (1 + v.vec_score), 0) as vec_score,
-          COALESCE(1 / (1 + f.fts_score), 0) as fts_score
+          COALESCE(1 / (1 + v.vec_distance), 0) as vec_score,
+          COALESCE(-MIN(f.fts_score, 0), 0) as fts_score
         FROM documents d
-        LEFT JOIN vec_scores v ON d.id = v.id
+        LEFT JOIN vec_distances v ON d.id = v.id
         LEFT JOIN fts_scores f ON d.id = f.id
         WHERE v.id IS NOT NULL OR f.id IS NOT NULL
       `);

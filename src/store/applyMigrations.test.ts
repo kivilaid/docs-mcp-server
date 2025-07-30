@@ -243,6 +243,35 @@ describe("Database Migrations", () => {
     const maxAiDistance = Math.max(...aiResults.map((r) => r.distance));
     const cookingDistance = cookingResults[0].distance;
     expect(maxAiDistance).toBeLessThan(cookingDistance);
+
+    // Validate actual distance behavior: sqlite-vec uses Euclidean distance (L2 norm)
+    // - Distance 0 = identical vectors (closest match)
+    // - Higher distances = less similar vectors (farther match)
+    // - No upper bound (unlike cosine similarity which ranges 0-1)
+    // NOTE: This is OPPOSITE to cosine similarity where 1=closest, 0=farthest
+    for (const result of searchResults) {
+      expect(result.distance).toBeGreaterThanOrEqual(0); // Distances are non-negative
+      expect(result.distance).toBeLessThan(50); // Should be reasonable for our test vectors (relaxed bound)
+    }
+
+    // Test identical vector search should return distance ≈ 0
+    const identicalSearchResults = db
+      .prepare(vectorSearchQuery)
+      .all(JSON.stringify(aiVector1), libraryId, "1.0.0") as VectorSearchResult[];
+
+    expect(identicalSearchResults).toHaveLength(3);
+
+    // Find the result that matches our exact vector (should be doc1)
+    const exactMatch = identicalSearchResults.find((r) =>
+      r.content.includes("machine learning"),
+    );
+    expect(exactMatch).toBeDefined();
+    expect(exactMatch!.distance).toBeCloseTo(0, 6); // Very close to 0 for identical vectors
+
+    // Demonstrate distance semantics: lower distance = higher similarity
+    const allDistances = searchResults.map((r) => r.distance).sort((a, b) => a - b);
+    expect(allDistances[0]).toBeLessThan(allDistances[1]); // Best match has lowest distance
+    expect(allDistances[1]).toBeLessThan(allDistances[2]); // Worst match has highest distance
   });
 
   it("should perform FTS search and return relevant text matches correctly", () => {
@@ -409,6 +438,61 @@ describe("Database Migrations", () => {
       for (let i = 1; i < multiResults.length; i++) {
         expect(multiResults[i].rank).toBeGreaterThanOrEqual(multiResults[i - 1].rank);
       }
+    }
+
+    // Test 7: Validate FTS scoring behavior - BM25 rank semantics
+    // Get BM25 scores using the same query pattern as DocumentStore
+    const bm25SearchQuery = `
+      SELECT 
+        d.id,
+        d.content,
+        json_extract(d.metadata, '$.title') as title,
+        bm25(documents_fts, 10.0, 1.0, 5.0, 1.0) as bm25_score
+      FROM documents_fts fts
+      JOIN documents d ON fts.rowid = d.id
+      WHERE documents_fts MATCH ?
+      AND d.library_id = ?
+      ORDER BY bm25_score ASC
+    `;
+
+    const bm25Results = db.prepare(bm25SearchQuery).all("state", libraryId) as Array<{
+      id: number;
+      content: string;
+      title: string;
+      bm25_score: number;
+    }>;
+
+    expect(bm25Results.length).toBeGreaterThanOrEqual(2);
+
+    // Validate BM25 score behavior: lower scores = better matches (more relevant)
+    // This is OPPOSITE to similarity scores where higher = better
+    // NOTE: BM25 scores is internally multiplied by -1 to ensure good matches rank higher in default sorting
+    for (const result of bm25Results) {
+      expect(result.bm25_score).toBeGreaterThan(-100); // BM25 can be negative but should be reasonable
+      expect(result.bm25_score).toBeLessThan(100); // Should be reasonable for our test content
+    }
+
+    // Results should be ordered by BM25 score (best matches first)
+    for (let i = 1; i < bm25Results.length; i++) {
+      expect(bm25Results[i].bm25_score).toBeGreaterThanOrEqual(
+        bm25Results[i - 1].bm25_score,
+      );
+    }
+
+    // Test exact phrase match vs partial match scoring
+    const exactPhraseResults = db
+      .prepare(bm25SearchQuery)
+      .all('"component state"', libraryId) as Array<{ id: number; bm25_score: number }>;
+
+    const partialMatchResults = db
+      .prepare(bm25SearchQuery)
+      .all("component", libraryId) as Array<{ id: number; bm25_score: number }>;
+
+    if (exactPhraseResults.length > 0 && partialMatchResults.length > 0) {
+      // Exact phrase matches should have better (lower) BM25 scores than partial matches
+      const bestExactScore = Math.min(...exactPhraseResults.map((r) => r.bm25_score));
+      const bestPartialScore = Math.min(...partialMatchResults.map((r) => r.bm25_score));
+      expect(bestExactScore).toBeLessThanOrEqual(bestPartialScore);
     }
   });
 });
