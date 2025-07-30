@@ -482,7 +482,7 @@ describe("DocumentStore", () => {
             path: ["path1"],
           }),
           vec_score: 0.1, // Very close to search vector
-          fts_score: 1, // Include FTS score for hybrid query compatibility
+          fts_score: 0.9, // Also good FTS score
         },
         {
           id: "doc2",
@@ -493,7 +493,7 @@ describe("DocumentStore", () => {
             path: ["path2"],
           }),
           vec_score: 0.5, // Moderately close
-          fts_score: 1,
+          fts_score: 0.5, // Medium FTS score
         },
         {
           id: "doc3",
@@ -504,7 +504,7 @@ describe("DocumentStore", () => {
             path: ["path3"],
           }),
           vec_score: 0.9, // Far from search vector
-          fts_score: 1,
+          fts_score: 0.1, // Poor FTS score
         },
       ];
 
@@ -708,6 +708,258 @@ describe("DocumentStore", () => {
       const result = await documentStore.queryLibraryVersions();
       expect(result).toBeInstanceOf(Map);
       expect(result.size).toBe(0);
+    });
+  });
+
+  describe("RRF Ranking Algorithm", () => {
+    // Access private methods for testing
+    const getPrivateMethod = (obj: any, methodName: string) => obj[methodName].bind(obj);
+
+    it("should calculate correct RRF scores for vector-only results", async () => {
+      const calculateRRF = getPrivateMethod(documentStore, "calculateRRF");
+
+      // Test vector-only results with different ranks
+      expect(calculateRRF(1, undefined)).toBeCloseTo(1 / (60 + 1)); // ~0.0164
+      expect(calculateRRF(2, undefined)).toBeCloseTo(1 / (60 + 2)); // ~0.0161
+      expect(calculateRRF(3, undefined)).toBeCloseTo(1 / (60 + 3)); // ~0.0159
+
+      // Better vector rank should produce higher RRF score
+      expect(calculateRRF(1, undefined)).toBeGreaterThan(calculateRRF(2, undefined));
+      expect(calculateRRF(2, undefined)).toBeGreaterThan(calculateRRF(3, undefined));
+    });
+
+    it("should calculate correct RRF scores for FTS-only results", async () => {
+      const calculateRRF = getPrivateMethod(documentStore, "calculateRRF");
+
+      // Test FTS-only results with different ranks
+      expect(calculateRRF(undefined, 1)).toBeCloseTo(1 / (60 + 1)); // ~0.0164
+      expect(calculateRRF(undefined, 2)).toBeCloseTo(1 / (60 + 2)); // ~0.0161
+      expect(calculateRRF(undefined, 3)).toBeCloseTo(1 / (60 + 3)); // ~0.0159
+
+      // Better FTS rank should produce higher RRF score
+      expect(calculateRRF(undefined, 1)).toBeGreaterThan(calculateRRF(undefined, 2));
+      expect(calculateRRF(undefined, 2)).toBeGreaterThan(calculateRRF(undefined, 3));
+    });
+
+    it("should calculate correct RRF scores for hybrid results (both vector and FTS)", async () => {
+      const calculateRRF = getPrivateMethod(documentStore, "calculateRRF");
+
+      // Test hybrid results
+      const hybridScore = calculateRRF(1, 1); // Both rank 1
+      const vectorOnlyScore = calculateRRF(1, undefined); // Vector rank 1 only
+      const ftsOnlyScore = calculateRRF(undefined, 1); // FTS rank 1 only
+
+      // Hybrid should be sum of both components
+      expect(hybridScore).toBeCloseTo(1 / 61 + 1 / 61); // ~0.0328
+      expect(hybridScore).toBeCloseTo(vectorOnlyScore + ftsOnlyScore);
+
+      // Hybrid results should beat single-mode results
+      expect(hybridScore).toBeGreaterThan(vectorOnlyScore);
+      expect(hybridScore).toBeGreaterThan(ftsOnlyScore);
+    });
+  });
+
+  describe("Rank Assignment", () => {
+    const getPrivateMethod = (obj: any, methodName: string) => obj[methodName].bind(obj);
+
+    it("should assign ranks correctly based on normalized scores (higher score = better rank)", async () => {
+      const assignRanks = getPrivateMethod(documentStore, "assignRanks");
+
+      // Test data with known normalized scores (higher = better)
+      const mockResults = [
+        { id: 1, vec_score: 0.9, fts_score: 0.8 }, // Best scores
+        { id: 2, vec_score: 0.5, fts_score: 0.6 }, // Medium scores
+        { id: 3, vec_score: 0.1, fts_score: 0.2 }, // Worst scores
+      ];
+
+      const rankedResults = assignRanks(mockResults);
+
+      // Verify vector ranks (highest score gets rank 1)
+      const doc1 = rankedResults.find((r: any) => r.id === 1);
+      const doc2 = rankedResults.find((r: any) => r.id === 2);
+      const doc3 = rankedResults.find((r: any) => r.id === 3);
+
+      expect(doc1?.vec_rank).toBe(1); // 0.9 score -> rank 1
+      expect(doc2?.vec_rank).toBe(2); // 0.5 score -> rank 2
+      expect(doc3?.vec_rank).toBe(3); // 0.1 score -> rank 3
+
+      // Verify FTS ranks (highest score gets rank 1)
+      expect(doc1?.fts_rank).toBe(1); // 0.8 score -> rank 1
+      expect(doc2?.fts_rank).toBe(2); // 0.6 score -> rank 2
+      expect(doc3?.fts_rank).toBe(3); // 0.2 score -> rank 3
+
+      // Verify RRF scores are calculated and ordered correctly
+      expect(doc1?.rrf_score).toBeGreaterThan(doc2?.rrf_score!);
+      expect(doc2?.rrf_score).toBeGreaterThan(doc3?.rrf_score!);
+    });
+
+    it("should handle documents that appear in only one search type", async () => {
+      const assignRanks = getPrivateMethod(documentStore, "assignRanks");
+
+      // Test data with mixed presence in vector vs FTS
+      const mockResults = [
+        { id: 1, vec_score: 0.9, fts_score: undefined }, // Vector only
+        { id: 2, vec_score: undefined, fts_score: 0.8 }, // FTS only
+        { id: 3, vec_score: 0.5, fts_score: 0.6 }, // Both
+      ];
+
+      const rankedResults = assignRanks(mockResults);
+
+      const doc1 = rankedResults.find((r: any) => r.id === 1);
+      const doc2 = rankedResults.find((r: any) => r.id === 2);
+      const doc3 = rankedResults.find((r: any) => r.id === 3);
+
+      // Vector-only document should have vec_rank but no fts_rank
+      expect(doc1?.vec_rank).toBe(1); // Best vector score
+      expect(doc1?.fts_rank).toBeUndefined();
+
+      // FTS-only document should have fts_rank but no vec_rank
+      expect(doc2?.vec_rank).toBeUndefined();
+      expect(doc2?.fts_rank).toBe(1); // Best (only) FTS score
+
+      // Hybrid document should have both ranks
+      expect(doc3?.vec_rank).toBe(2); // Second best vector score
+      expect(doc3?.fts_rank).toBe(2); // Second best FTS score
+
+      // All should have valid RRF scores
+      expect(doc1?.rrf_score).toBeGreaterThan(0);
+      expect(doc2?.rrf_score).toBeGreaterThan(0);
+      expect(doc3?.rrf_score).toBeGreaterThan(0);
+    });
+  });
+
+  describe("Hybrid Search Integration", () => {
+    it("should prioritize documents that appear in both vector and FTS searches", async () => {
+      const getPrivateMethod = (obj: any, methodName: string) =>
+        obj[methodName].bind(obj);
+      const assignRanks = getPrivateMethod(documentStore, "assignRanks");
+
+      // Test scenario: one hybrid document vs two single-mode documents
+      const mockResults = [
+        { id: 1, vec_score: 0.7, fts_score: 0.7 }, // Appears in both, medium scores
+        { id: 2, vec_score: 0.9, fts_score: undefined }, // Best vector score, no FTS
+        { id: 3, vec_score: undefined, fts_score: 0.9 }, // Best FTS score, no vector
+      ];
+
+      const rankedResults = assignRanks(mockResults);
+
+      // Sort by RRF score like the real algorithm does
+      const sortedResults = rankedResults.sort(
+        (a: any, b: any) => b.rrf_score - a.rrf_score,
+      );
+
+      const hybrid = rankedResults.find((r: any) => r.id === 1);
+      const vectorOnly = rankedResults.find((r: any) => r.id === 2);
+      const ftsOnly = rankedResults.find((r: any) => r.id === 3);
+
+      // Hybrid document should have highest RRF score despite lower individual ranks
+      expect(hybrid?.rrf_score).toBeGreaterThan(vectorOnly?.rrf_score!);
+      expect(hybrid?.rrf_score).toBeGreaterThan(ftsOnly?.rrf_score!);
+
+      // Verify the hybrid document appears first in final ranking
+      expect(sortedResults[0].id).toBe(1);
+    });
+
+    it("should produce final ranking ordered by RRF score (highest first)", async () => {
+      const getPrivateMethod = (obj: any, methodName: string) =>
+        obj[methodName].bind(obj);
+      const assignRanks = getPrivateMethod(documentStore, "assignRanks");
+
+      const mockResults = [
+        { id: 1, vec_score: 0.1, fts_score: 0.1 },
+        { id: 2, vec_score: 0.9, fts_score: 0.9 },
+        { id: 3, vec_score: 0.5, fts_score: 0.5 },
+      ];
+
+      const rankedResults = assignRanks(mockResults);
+
+      const sortedResults = rankedResults.sort(
+        (a: any, b: any) => b.rrf_score - a.rrf_score,
+      );
+
+      // Should be ordered: best, medium, worst
+      expect(sortedResults[0].id).toBe(2);
+      expect(sortedResults[1].id).toBe(3);
+      expect(sortedResults[2].id).toBe(1);
+
+      // Verify RRF scores are in descending order
+      expect(sortedResults[0].rrf_score).toBeGreaterThan(sortedResults[1].rrf_score);
+      expect(sortedResults[1].rrf_score).toBeGreaterThan(sortedResults[2].rrf_score);
+    });
+
+    it("should handle mixed scenarios where some docs are vector-only, some FTS-only, some both", async () => {
+      const getPrivateMethod = (obj: any, methodName: string) =>
+        obj[methodName].bind(obj);
+      const assignRanks = getPrivateMethod(documentStore, "assignRanks");
+
+      const mockResults = [
+        { id: 1, vec_score: 0.9, fts_score: 0.9 }, // Best in both
+        { id: 2, vec_score: 0.8, fts_score: undefined }, // Good vector only
+        { id: 3, vec_score: undefined, fts_score: 0.8 }, // Good FTS only
+        { id: 4, vec_score: 0.3, fts_score: 0.3 }, // Poor in both
+      ];
+
+      const rankedResults = assignRanks(mockResults);
+      const sortedResults = rankedResults.sort(
+        (a: any, b: any) => b.rrf_score - a.rrf_score,
+      );
+
+      // Perfect hybrid should be first
+      expect(sortedResults[0].id).toBe(1);
+
+      // Poor hybrid should beat single-mode results despite lower scores
+      const poorHybrid = rankedResults.find((r: any) => r.id === 4);
+      const goodVector = rankedResults.find((r: any) => r.id === 2);
+      const goodFts = rankedResults.find((r: any) => r.id === 3);
+
+      // Poor hybrid (rank 2+2) should beat good single-mode (rank 1 only)
+      expect(poorHybrid?.rrf_score).toBeGreaterThan(goodVector?.rrf_score!);
+      expect(poorHybrid?.rrf_score).toBeGreaterThan(goodFts?.rrf_score!);
+    });
+  });
+
+  describe("RRF Edge Cases", () => {
+    const getPrivateMethod = (obj: any, methodName: string) => obj[methodName].bind(obj);
+
+    it("should handle empty results gracefully", async () => {
+      const assignRanks = getPrivateMethod(documentStore, "assignRanks");
+
+      const emptyResults = assignRanks([]);
+      expect(emptyResults).toEqual([]);
+    });
+
+    it("should handle identical scores (tie-breaking)", async () => {
+      const assignRanks = getPrivateMethod(documentStore, "assignRanks");
+
+      // Test documents with identical scores
+      const mockResults = [
+        { id: "1", vec_score: 0.5, fts_score: 0.5 },
+        { id: "2", vec_score: 0.5, fts_score: 0.5 },
+        { id: "3", vec_score: 0.5, fts_score: 0.5 },
+      ];
+
+      const rankedResults = assignRanks(mockResults);
+
+      // All should get different ranks (stable sort order)
+      const ranks = rankedResults.map((r: any) => r.vec_rank);
+      const uniqueRanks = new Set(ranks);
+      expect(uniqueRanks.size).toBe(3); // Should have ranks 1, 2, 3
+
+      // RRF scores should be different since ranks are different
+      const rrfScores = rankedResults.map((r: any) => r.rrf_score);
+
+      // Calculate expected RRF scores manually
+      const expectedRrf1 = 1 / 61 + 1 / 61; // rank 1,1 → ~0.0328
+      const expectedRrf2 = 1 / 62 + 1 / 62; // rank 2,2 → ~0.0323
+      const expectedRrf3 = 1 / 63 + 1 / 63; // rank 3,3 → ~0.0317
+
+      expect(rrfScores[0]).toBeCloseTo(expectedRrf1, 6);
+      expect(rrfScores[1]).toBeCloseTo(expectedRrf2, 6);
+      expect(rrfScores[2]).toBeCloseTo(expectedRrf3, 6);
+
+      // Verify they are in descending order
+      expect(rrfScores[0]).toBeGreaterThan(rrfScores[1]);
+      expect(rrfScores[1]).toBeGreaterThan(rrfScores[2]);
     });
   });
 });

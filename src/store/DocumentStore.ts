@@ -86,7 +86,7 @@ export class DocumentStore {
     // Sort by vector scores and assign ranks
     results
       .filter((r) => r.vec_score !== undefined)
-      .sort((a, b) => (a.vec_score ?? 0) - (b.vec_score ?? 0))
+      .sort((a, b) => (b.vec_score ?? 0) - (a.vec_score ?? 0))
       .forEach((result, index) => {
         vecRanks.set(Number(result.id), index + 1);
       });
@@ -94,7 +94,7 @@ export class DocumentStore {
     // Sort by BM25 scores and assign ranks
     results
       .filter((r) => r.fts_score !== undefined)
-      .sort((a, b) => (a.fts_score ?? 0) - (b.fts_score ?? 0))
+      .sort((a, b) => (b.fts_score ?? 0) - (a.fts_score ?? 0))
       .forEach((result, index) => {
         ftsRanks.set(Number(result.id), index + 1);
       });
