@@ -1,23 +1,23 @@
--- Migration: Complete normalization by removing obsolete library column
+-- Migration: Complete normalization by removing obsolete library and version columns
 -- This migration finalizes the schema normalization process
--- Note: Must recreate table because the library column is part of a UNIQUE constraint
+-- Note: Must recreate table because obsolete columns are part of UNIQUE constraint
 
--- 1. Create new documents table without the obsolete library column
+-- 1. Create new documents table with only foreign key references
 CREATE TABLE documents_new (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   library_id INTEGER NOT NULL REFERENCES libraries(id),
-  version TEXT NOT NULL DEFAULT '',
+  version_id INTEGER NOT NULL REFERENCES versions(id),
   url TEXT NOT NULL,
   content TEXT,
   metadata JSON,
   sort_order INTEGER NOT NULL,
   indexed_at DATETIME,
-  UNIQUE(url, library_id, version, sort_order)
+  UNIQUE(url, library_id, version_id, sort_order)
 );
 
--- 2. Copy data from old table (excluding the obsolete library column)
-INSERT INTO documents_new (id, library_id, version, url, content, metadata, sort_order, indexed_at)
-SELECT id, library_id, version, url, content, metadata, sort_order, indexed_at
+-- 2. Copy data from old table (excluding obsolete library and version columns)
+INSERT INTO documents_new (id, library_id, version_id, url, content, metadata, sort_order, indexed_at)
+SELECT id, library_id, version_id, url, content, metadata, sort_order, indexed_at
 FROM documents;
 
 -- 3. Drop the old documents table
@@ -28,7 +28,8 @@ ALTER TABLE documents_new RENAME TO documents;
 
 -- 5. Recreate indexes that were lost when dropping the table
 CREATE INDEX IF NOT EXISTS idx_documents_library_id ON documents(library_id);
-CREATE INDEX IF NOT EXISTS idx_documents_id_library_id ON documents(id, library_id);
+CREATE INDEX IF NOT EXISTS idx_documents_version_id ON documents(version_id);
+CREATE INDEX IF NOT EXISTS idx_documents_lib_ver_id ON documents(library_id, version_id);
 
 -- 6. Recreate FTS5 virtual table (gets dropped when main table is dropped)
 -- Using external content approach - FTS index is maintained entirely through triggers
@@ -41,6 +42,7 @@ CREATE VIRTUAL TABLE IF NOT EXISTS documents_fts USING fts5(
 );
 
 -- 7. Recreate FTS triggers to maintain the index
+-- Note: Triggers work directly with documents table, no JOIN needed for FTS content
 CREATE TRIGGER IF NOT EXISTS documents_fts_after_delete AFTER DELETE ON documents BEGIN
   INSERT INTO documents_fts(documents_fts, rowid, content, title, url, path)
   VALUES('delete', old.id, old.content, json_extract(old.metadata, '$.title'), old.url, json_extract(old.metadata, '$.path'));

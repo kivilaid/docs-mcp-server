@@ -45,7 +45,7 @@ describe("Database Migrations", () => {
       expect.arrayContaining([
         "id",
         "library_id",
-        "version",
+        "version_id",
         "url",
         "content",
         "metadata",
@@ -54,8 +54,9 @@ describe("Database Migrations", () => {
       ]),
     );
 
-    // Ensure the old library column is removed after complete normalization
+    // Ensure the old library and version columns are removed after complete normalization
     expect(documentsColumnNames).not.toContain("library");
+    expect(documentsColumnNames).not.toContain("version");
 
     // Check columns for 'libraries'
     const librariesColumns = db.prepare("PRAGMA table_info(libraries);").all();
@@ -63,6 +64,14 @@ describe("Database Migrations", () => {
       (col) => col.name,
     );
     expect(librariesColumnNames).toEqual(expect.arrayContaining(["id", "name"]));
+
+    // Check versions table exists and has correct schema
+    expect(tableNames).toContain("versions");
+    const versionsColumns = db.prepare("PRAGMA table_info(versions);").all();
+    const versionsColumnNames = (versionsColumns as ColumnInfo[]).map((col) => col.name);
+    expect(versionsColumnNames).toEqual(
+      expect.arrayContaining(["id", "library_id", "name", "created_at", "indexed_at"]),
+    );
 
     // Check FTS virtual table
     const ftsTableInfo = db
@@ -81,9 +90,9 @@ describe("Database Migrations", () => {
     expect(vecTableInfo).toBeDefined();
     expect(vecTableInfo?.sql).toContain("USING vec0");
 
-    // Check that vector table has the expected schema with library_id
+    // Check that vector table has the expected schema with foreign keys
     expect(vecTableInfo?.sql).toContain("library_id INTEGER NOT NULL");
-    expect(vecTableInfo?.sql).toContain("version TEXT NOT NULL");
+    expect(vecTableInfo?.sql).toContain("version_id INTEGER NOT NULL");
     expect(vecTableInfo?.sql).toContain("embedding FLOAT[1536]");
   });
 
@@ -91,13 +100,24 @@ describe("Database Migrations", () => {
     // Apply all migrations
     expect(() => applyMigrations(db)).not.toThrow();
 
-    // Insert a library but no documents
+    // Insert a library and version but no documents
     db.prepare("INSERT INTO libraries (name) VALUES (?)").run("empty-lib");
     const emptyLibraryIdResult = db
       .prepare("SELECT id FROM libraries WHERE name = ?")
       .get("empty-lib") as { id: number } | undefined;
     expect(emptyLibraryIdResult).toBeDefined();
     const emptyLibraryId = emptyLibraryIdResult!.id;
+
+    // Insert a version for this library
+    db.prepare("INSERT INTO versions (library_id, name) VALUES (?, ?)").run(
+      emptyLibraryId,
+      "1.0.0",
+    );
+    const versionResult = db
+      .prepare("SELECT id FROM versions WHERE library_id = ? AND name = ?")
+      .get(emptyLibraryId, "1.0.0") as { id: number } | undefined;
+    expect(versionResult).toBeDefined();
+    const versionId = versionResult!.id;
 
     // Search for vectors in empty library with k constraint
     const searchVector = new Array(1536).fill(0.5);
@@ -108,16 +128,18 @@ describe("Database Migrations", () => {
         dv.distance
       FROM documents_vec dv
       JOIN documents d ON dv.rowid = d.id
+      JOIN versions v ON dv.version_id = v.id
+      JOIN libraries l ON v.library_id = l.id
       WHERE dv.embedding MATCH ?
-      AND dv.library_id = ?
-      AND dv.version = ?
+      AND l.name = ?
+      AND v.name = ?
       AND k = 5
       ORDER BY dv.distance ASC
     `;
 
     const searchResults = db
       .prepare(vectorSearchQuery)
-      .all(JSON.stringify(searchVector), emptyLibraryId, "1.0.0");
+      .all(JSON.stringify(searchVector), "empty-lib", "1.0.0");
 
     // Should return empty array, not throw an error
     expect(searchResults).toEqual([]);
@@ -127,23 +149,33 @@ describe("Database Migrations", () => {
     // Apply all migrations
     expect(() => applyMigrations(db)).not.toThrow();
 
-    // Insert test library
+    // Insert test library and version
     db.prepare("INSERT INTO libraries (name) VALUES (?)").run("test-lib");
     const libraryResult = db
       .prepare("SELECT id FROM libraries WHERE name = ?")
       .get("test-lib") as { id: number } | undefined;
     expect(libraryResult).toBeDefined();
-    const libraryId = BigInt(libraryResult!.id);
+    const libraryId = libraryResult!.id;
+
+    db.prepare("INSERT INTO versions (library_id, name) VALUES (?, ?)").run(
+      libraryId,
+      "1.0.0",
+    );
+    const versionResult = db
+      .prepare("SELECT id FROM versions WHERE library_id = ? AND name = ?")
+      .get(libraryId, "1.0.0") as { id: number } | undefined;
+    expect(versionResult).toBeDefined();
+    const versionId = versionResult!.id;
 
     // Insert test documents
     const insertDoc = db.prepare(`
-      INSERT INTO documents (library_id, version, url, content, metadata, sort_order)
+      INSERT INTO documents (library_id, version_id, url, content, metadata, sort_order)
       VALUES (?, ?, ?, ?, ?, ?)
     `);
 
     const doc1Id = insertDoc.run(
       libraryId,
-      "1.0.0",
+      versionId,
       "https://example.com/doc1",
       "This is about machine learning and artificial intelligence",
       JSON.stringify({ title: "AI Basics", path: "/ai-basics" }),
@@ -152,7 +184,7 @@ describe("Database Migrations", () => {
 
     const doc2Id = insertDoc.run(
       libraryId,
-      "1.0.0",
+      versionId,
       "https://example.com/doc2",
       "This document discusses neural networks and deep learning",
       JSON.stringify({ title: "Neural Networks", path: "/neural-networks" }),
@@ -161,7 +193,7 @@ describe("Database Migrations", () => {
 
     const doc3Id = insertDoc.run(
       libraryId,
-      "1.0.0",
+      versionId,
       "https://example.com/doc3",
       "Cooking recipes and food preparation techniques",
       JSON.stringify({ title: "Cooking Guide", path: "/cooking" }),
@@ -183,13 +215,28 @@ describe("Database Migrations", () => {
 
     // Insert vectors
     const insertVector = db.prepare(`
-      INSERT INTO documents_vec (rowid, library_id, version, embedding)
+      INSERT INTO documents_vec (rowid, library_id, version_id, embedding)
       VALUES (?, ?, ?, ?)
     `);
 
-    insertVector.run(BigInt(doc1Id), libraryId, "1.0.0", JSON.stringify(aiVector1));
-    insertVector.run(BigInt(doc2Id), libraryId, "1.0.0", JSON.stringify(aiVector2));
-    insertVector.run(BigInt(doc3Id), libraryId, "1.0.0", JSON.stringify(cookingVector));
+    insertVector.run(
+      BigInt(doc1Id),
+      BigInt(libraryId),
+      BigInt(versionId),
+      JSON.stringify(aiVector1),
+    );
+    insertVector.run(
+      BigInt(doc2Id),
+      BigInt(libraryId),
+      BigInt(versionId),
+      JSON.stringify(aiVector2),
+    );
+    insertVector.run(
+      BigInt(doc3Id),
+      BigInt(libraryId),
+      BigInt(versionId),
+      JSON.stringify(cookingVector),
+    );
 
     // Search with a vector similar to AI vectors
     const searchVector = new Array(1536)
@@ -203,9 +250,11 @@ describe("Database Migrations", () => {
         dv.distance
       FROM documents_vec dv
       JOIN documents d ON dv.rowid = d.id
+      JOIN versions v ON dv.version_id = v.id
+      JOIN libraries l ON v.library_id = l.id
       WHERE dv.embedding MATCH ?
-      AND dv.library_id = ?
-      AND dv.version = ?
+      AND l.name = ?
+      AND v.name = ?
       AND k = 3
       ORDER BY dv.distance ASC
     `;
@@ -218,7 +267,7 @@ describe("Database Migrations", () => {
 
     const searchResults = db
       .prepare(vectorSearchQuery)
-      .all(JSON.stringify(searchVector), libraryId, "1.0.0") as VectorSearchResult[];
+      .all(JSON.stringify(searchVector), "test-lib", "1.0.0") as VectorSearchResult[];
 
     // Should return 3 results ordered by similarity
     expect(searchResults).toHaveLength(3);
@@ -257,7 +306,7 @@ describe("Database Migrations", () => {
     // Test identical vector search should return distance ≈ 0
     const identicalSearchResults = db
       .prepare(vectorSearchQuery)
-      .all(JSON.stringify(aiVector1), libraryId, "1.0.0") as VectorSearchResult[];
+      .all(JSON.stringify(aiVector1), "test-lib", "1.0.0") as VectorSearchResult[];
 
     expect(identicalSearchResults).toHaveLength(3);
 
@@ -278,23 +327,33 @@ describe("Database Migrations", () => {
     // Apply all migrations
     expect(() => applyMigrations(db)).not.toThrow();
 
-    // Insert test library
+    // Insert test library and version
     db.prepare("INSERT INTO libraries (name) VALUES (?)").run("docs-lib");
     const libraryResult = db
       .prepare("SELECT id FROM libraries WHERE name = ?")
       .get("docs-lib") as { id: number } | undefined;
     expect(libraryResult).toBeDefined();
-    const libraryId = BigInt(libraryResult!.id);
+    const libraryId = libraryResult!.id;
+
+    db.prepare("INSERT INTO versions (library_id, name) VALUES (?, ?)").run(
+      libraryId,
+      "1.0.0",
+    );
+    const versionResult = db
+      .prepare("SELECT id FROM versions WHERE library_id = ? AND name = ?")
+      .get(libraryId, "1.0.0") as { id: number } | undefined;
+    expect(versionResult).toBeDefined();
+    const versionId = versionResult!.id;
 
     // Insert test documents with diverse content
     const insertDoc = db.prepare(`
-      INSERT INTO documents (library_id, version, url, content, metadata, sort_order)
+      INSERT INTO documents (library_id, version_id, url, content, metadata, sort_order)
       VALUES (?, ?, ?, ?, ?, ?)
     `);
 
     insertDoc.run(
       libraryId,
-      "1.0.0",
+      versionId,
       "https://example.com/react-hooks",
       "React hooks are a powerful feature that allows you to use state and lifecycle methods in functional components. The useState hook manages component state.",
       JSON.stringify({
@@ -306,7 +365,7 @@ describe("Database Migrations", () => {
 
     insertDoc.run(
       libraryId,
-      "1.0.0",
+      versionId,
       "https://example.com/vue-composition",
       "Vue composition API provides a way to organize component logic. It offers reactive state management and computed properties for building dynamic applications.",
       JSON.stringify({
@@ -318,7 +377,7 @@ describe("Database Migrations", () => {
 
     insertDoc.run(
       libraryId,
-      "1.0.0",
+      versionId,
       "https://example.com/angular-services",
       "Angular services are singleton objects that provide functionality across the application. Dependency injection makes services available to components.",
       JSON.stringify({
@@ -330,7 +389,7 @@ describe("Database Migrations", () => {
 
     insertDoc.run(
       libraryId,
-      "1.0.0",
+      versionId,
       "https://example.com/database-design",
       "Database normalization reduces redundancy and improves data integrity. Primary keys uniquely identify records in relational databases.",
       JSON.stringify({
@@ -360,14 +419,17 @@ describe("Database Migrations", () => {
         fts.rank
       FROM documents_fts fts
       JOIN documents d ON fts.rowid = d.id
+      JOIN versions v ON d.version_id = v.id
+      JOIN libraries l ON v.library_id = l.id
       WHERE documents_fts MATCH ?
-      AND d.library_id = ?
+      AND l.name = ?
+      AND v.name = ?
       ORDER BY fts.rank
     `;
 
     const reactResults = db
       .prepare(reactSearchQuery)
-      .all("react hooks", libraryId) as FTSSearchResult[];
+      .all("react hooks", "docs-lib", "1.0.0") as FTSSearchResult[];
 
     expect(reactResults).toHaveLength(1);
     expect(reactResults[0].content).toContain("React hooks");
@@ -376,7 +438,7 @@ describe("Database Migrations", () => {
     // Test 2: Search for state management across frameworks
     const stateResults = db
       .prepare(reactSearchQuery)
-      .all("state", libraryId) as FTSSearchResult[];
+      .all("state", "docs-lib", "1.0.0") as FTSSearchResult[];
 
     expect(stateResults.length).toBeGreaterThanOrEqual(2);
 
@@ -392,7 +454,7 @@ describe("Database Migrations", () => {
     // Test 3: Search with phrase matching
     const phraseResults = db
       .prepare(reactSearchQuery)
-      .all('"dependency injection"', libraryId) as FTSSearchResult[];
+      .all('"dependency injection"', "docs-lib", "1.0.0") as FTSSearchResult[];
 
     expect(phraseResults).toHaveLength(1);
     expect(phraseResults[0].content).toContain("Dependency injection");
@@ -409,14 +471,17 @@ describe("Database Migrations", () => {
         fts.rank
       FROM documents_fts fts
       JOIN documents d ON fts.rowid = d.id
+      JOIN versions v ON d.version_id = v.id
+      JOIN libraries l ON v.library_id = l.id
       WHERE fts.title MATCH ?
-      AND d.library_id = ?
+      AND l.name = ?
+      AND v.name = ?
       ORDER BY fts.rank
     `;
 
     const titleResults = db
       .prepare(titleSearchQuery)
-      .all("Database", libraryId) as FTSSearchResult[];
+      .all("Database", "docs-lib", "1.0.0") as FTSSearchResult[];
 
     expect(titleResults).toHaveLength(1);
     expect(titleResults[0].title).toBe("Database Design");
@@ -424,14 +489,14 @@ describe("Database Migrations", () => {
     // Test 5: Test empty search results
     const emptyResults = db
       .prepare(reactSearchQuery)
-      .all("nonexistent term", libraryId) as FTSSearchResult[];
+      .all("nonexistent term", "docs-lib", "1.0.0") as FTSSearchResult[];
 
     expect(emptyResults).toHaveLength(0);
 
     // Test 6: Test ranking (more relevant results should have better rank)
     const multiResults = db
       .prepare(reactSearchQuery)
-      .all("component", libraryId) as FTSSearchResult[];
+      .all("component", "docs-lib", "1.0.0") as FTSSearchResult[];
 
     if (multiResults.length > 1) {
       // Results should be ordered by relevance (rank)
@@ -450,12 +515,17 @@ describe("Database Migrations", () => {
         bm25(documents_fts, 10.0, 1.0, 5.0, 1.0) as bm25_score
       FROM documents_fts fts
       JOIN documents d ON fts.rowid = d.id
+      JOIN versions v ON d.version_id = v.id
+      JOIN libraries l ON v.library_id = l.id
       WHERE documents_fts MATCH ?
-      AND d.library_id = ?
+      AND l.name = ?
+      AND v.name = ?
       ORDER BY bm25_score ASC
     `;
 
-    const bm25Results = db.prepare(bm25SearchQuery).all("state", libraryId) as Array<{
+    const bm25Results = db
+      .prepare(bm25SearchQuery)
+      .all("state", "docs-lib", "1.0.0") as Array<{
       id: number;
       content: string;
       title: string;
@@ -482,11 +552,14 @@ describe("Database Migrations", () => {
     // Test exact phrase match vs partial match scoring
     const exactPhraseResults = db
       .prepare(bm25SearchQuery)
-      .all('"component state"', libraryId) as Array<{ id: number; bm25_score: number }>;
+      .all('"component state"', "docs-lib", "1.0.0") as Array<{
+      id: number;
+      bm25_score: number;
+    }>;
 
     const partialMatchResults = db
       .prepare(bm25SearchQuery)
-      .all("component", libraryId) as Array<{ id: number; bm25_score: number }>;
+      .all("component", "docs-lib", "1.0.0") as Array<{ id: number; bm25_score: number }>;
 
     if (exactPhraseResults.length > 0 && partialMatchResults.length > 0) {
       // Exact phrase matches should have better (lower) BM25 scores than partial matches

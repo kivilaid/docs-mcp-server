@@ -9,7 +9,7 @@ export const VECTOR_DIMENSION = 1536;
 export interface DbDocument {
   id: string;
   library_id: number;
-  version: string;
+  version_id: number; // Changed from version: string to use foreign key
   url: string;
   content: string;
   metadata: string; // JSON string of DocumentMetadata
@@ -51,13 +51,55 @@ export interface LibraryVersion {
 }
 
 /**
- * Detailed information about a specific indexed library version.
+ * Database version record type matching the versions table schema
  */
-export interface LibraryVersionDetails {
-  version: string;
+export interface DbVersion {
+  id: number;
+  library_id: number;
+  name: string | null; // NULL for unversioned content
+  created_at: string;
+  indexed_at: string | null;
+}
+
+/**
+ * Detailed information about a specific indexed library version.
+ * Combines database version info with aggregated document statistics.
+ */
+export interface VersionDetails {
+  id: number;
+  library_id: number;
+  name: string | null; // NULL for unversioned, but exposed as string via API
   documentCount: number;
   uniqueUrlCount: number;
   indexedAt: string | null; // ISO 8601 format from MIN(indexed_at)
+  createdAt: string;
+}
+
+/**
+ * Detailed information about a specific indexed library version.
+ * Maintains backward compatibility with existing API.
+ */
+export interface LibraryVersionDetails {
+  version: string; // Normalized to empty string for unversioned
+  documentCount: number;
+  uniqueUrlCount: number;
+  indexedAt: string | null; // ISO 8601 format from MIN(indexed_at)
+}
+
+/**
+ * Helper function to convert NULL version name to empty string for API compatibility.
+ * Database stores NULL for unversioned content, but APIs expect empty string.
+ */
+export function normalizeVersionName(name: string | null): string {
+  return name ?? "";
+}
+
+/**
+ * Helper function to convert empty string to NULL for database storage.
+ * APIs use empty string for unversioned content, but database stores NULL.
+ */
+export function denormalizeVersionName(name: string): string | null {
+  return name === "" ? null : name;
 }
 
 /**
