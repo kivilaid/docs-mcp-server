@@ -30,7 +30,7 @@ export class FileFetcher implements ContentFetcher {
         content,
         mimeType,
         source,
-        encoding: "utf-8", // Assume UTF-8 for text files
+        // Don't assume charset for text files - let the pipeline detect it
       };
     } catch (error: unknown) {
       throw new ScraperError(
