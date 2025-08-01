@@ -13,7 +13,6 @@ CREATE TABLE IF NOT EXISTS versions (
   library_id INTEGER NOT NULL REFERENCES libraries(id),
   name TEXT, -- NULL for unversioned content
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  indexed_at DATETIME,
   UNIQUE(library_id, name) -- Allows one NULL version per library
 );
 

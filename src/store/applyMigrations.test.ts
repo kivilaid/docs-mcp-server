@@ -50,7 +50,6 @@ describe("Database Migrations", () => {
         "content",
         "metadata",
         "sort_order",
-        "indexed_at",
       ]),
     );
 
@@ -70,7 +69,7 @@ describe("Database Migrations", () => {
     const versionsColumns = db.prepare("PRAGMA table_info(versions);").all();
     const versionsColumnNames = (versionsColumns as ColumnInfo[]).map((col) => col.name);
     expect(versionsColumnNames).toEqual(
-      expect.arrayContaining(["id", "library_id", "name", "created_at", "indexed_at"]),
+      expect.arrayContaining(["id", "library_id", "name", "created_at"]),
     );
 
     // Check FTS virtual table

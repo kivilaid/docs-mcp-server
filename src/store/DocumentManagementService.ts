@@ -110,6 +110,46 @@ export class DocumentManagementService {
     await this.store.shutdown();
   }
 
+  // Status tracking methods for pipeline integration
+
+  /**
+   * Gets versions by their current status.
+   */
+  async getVersionsByStatus(
+    statuses: import("./types").VersionStatus[],
+  ): Promise<import("./types").DbVersionWithLibrary[]> {
+    return this.store.getVersionsByStatus(statuses);
+  }
+
+  /**
+   * Gets all versions currently in RUNNING status.
+   */
+  async getRunningVersions(): Promise<import("./types").DbVersionWithLibrary[]> {
+    return this.store.getRunningVersions();
+  }
+
+  /**
+   * Updates the status of a version.
+   */
+  async updateVersionStatus(
+    versionId: number,
+    status: import("./types").VersionStatus,
+    errorMessage?: string,
+  ): Promise<void> {
+    return this.store.updateVersionStatus(versionId, status, errorMessage);
+  }
+
+  /**
+   * Updates the progress of a version being indexed.
+   */
+  async updateVersionProgress(
+    versionId: number,
+    pages: number,
+    maxPages: number,
+  ): Promise<void> {
+    return this.store.updateVersionProgress(versionId, pages, maxPages);
+  }
+
   /**
    * Validates if a library exists in the store (either versioned or unversioned).
    * Throws LibraryNotFoundError with suggestions if the library is not found.
@@ -328,5 +368,30 @@ export class DocumentManagementService {
       library,
       versions, // The versions array already contains LibraryVersionDetails
     }));
+  }
+
+  /**
+   * Gets all versions in active states (queued, running, updating).
+   */
+  async getActiveVersions(): Promise<import("./types").DbVersionWithLibrary[]> {
+    return this.store.getActiveVersions();
+  }
+
+  /**
+   * Ensures a library and version exist in the database and returns the version ID.
+   * Creates the library and version records if they don't exist.
+   */
+  async ensureLibraryAndVersion(library: string, version: string): Promise<number> {
+    // Use the same resolution logic as addDocuments but return the version ID
+    const normalizedLibrary = library.toLowerCase();
+    const normalizedVersion = this.normalizeVersion(version);
+
+    // This will create the library and version if they don't exist
+    const { versionId } = await this.store.resolveLibraryAndVersionIds(
+      normalizedLibrary,
+      normalizedVersion,
+    );
+
+    return versionId;
   }
 }

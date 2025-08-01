@@ -12,7 +12,9 @@ import {
   type DbDocument,
   type DbQueryResult,
   type DbVersion,
+  type DbVersionWithLibrary,
   type LibraryVersionDetails,
+  type VersionStatus,
   type VersionWithStats,
   denormalizeVersionName,
   mapDbDocumentToDocument,
@@ -68,6 +70,12 @@ export class DocumentStore {
     resolveVersionId: Database.Statement<[number, string | null]>;
     getVersionById: Database.Statement<[number]>;
     queryVersionsByLibraryId: Database.Statement<[number]>;
+    // Status tracking statements
+    updateVersionStatus: Database.Statement<[string, string | null, number]>;
+    updateVersionProgress: Database.Statement<[number, number, number]>;
+    getVersionsByStatus: Database.Statement<string[]>;
+    getRunningVersions: Database.Statement<[]>;
+    getActiveVersions: Database.Statement<[]>;
   };
 
   /**
@@ -151,7 +159,7 @@ export class DocumentStore {
       ),
       // New version-related statements
       insertVersion: this.db.prepare<[number, string | null]>(
-        "INSERT INTO versions (library_id, name) VALUES (?, ?) ON CONFLICT(library_id, name) DO NOTHING",
+        "INSERT INTO versions (library_id, name, status) VALUES (?, ?, 'not_indexed') ON CONFLICT(library_id, name) DO NOTHING",
       ),
       resolveVersionId: this.db.prepare<[number, string | null]>(
         "SELECT id FROM versions WHERE library_id = ? AND name IS ?",
@@ -270,6 +278,22 @@ export class DocumentStore {
         ORDER BY d.sort_order DESC
         LIMIT 1
       `),
+      // Status tracking statements (added for PRD-2)
+      updateVersionStatus: this.db.prepare<[string, string | null, number]>(
+        "UPDATE versions SET status = ?, error_message = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+      ),
+      updateVersionProgress: this.db.prepare<[number, number, number]>(
+        "UPDATE versions SET progress_pages = ?, progress_max_pages = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+      ),
+      getVersionsByStatus: this.db.prepare<[string]>(
+        "SELECT v.*, l.name as library_name FROM versions v JOIN libraries l ON v.library_id = l.id WHERE v.status IN (SELECT value FROM json_each(?))",
+      ),
+      getRunningVersions: this.db.prepare<[]>(
+        "SELECT v.*, l.name as library_name FROM versions v JOIN libraries l ON v.library_id = l.id WHERE v.status = 'running' ORDER BY v.started_at",
+      ),
+      getActiveVersions: this.db.prepare<[]>(
+        "SELECT v.*, l.name as library_name FROM versions v JOIN libraries l ON v.library_id = l.id WHERE v.status IN ('queued', 'running', 'updating') ORDER BY v.created_at",
+      ),
     };
     this.statements = statements;
   }
@@ -366,7 +390,7 @@ export class DocumentStore {
    * Resolves a library name and version string to library_id and version_id.
    * Creates library and version records if they don't exist.
    */
-  private async resolveLibraryAndVersionIds(
+  async resolveLibraryAndVersionIds(
     library: string,
     version: string,
   ): Promise<{ libraryId: number; versionId: number }> {
@@ -423,6 +447,85 @@ export class DocumentStore {
       return rows.map((row) => normalizeVersionName(row.name));
     } catch (error) {
       throw new ConnectionError("Failed to query versions", error);
+    }
+  }
+
+  /**
+   * Updates the status of a version record in the database.
+   * @param versionId The version ID to update
+   * @param status The new status to set
+   * @param errorMessage Optional error message for failed statuses
+   */
+  async updateVersionStatus(
+    versionId: number,
+    status: VersionStatus,
+    errorMessage?: string,
+  ): Promise<void> {
+    try {
+      this.statements.updateVersionStatus.run(status, errorMessage ?? null, versionId);
+    } catch (error) {
+      throw new StoreError(`Failed to update version status: ${error}`);
+    }
+  }
+
+  /**
+   * Updates the progress counters for a version being indexed.
+   * @param versionId The version ID to update
+   * @param pages Current number of pages processed
+   * @param maxPages Total number of pages to process
+   */
+  async updateVersionProgress(
+    versionId: number,
+    pages: number,
+    maxPages: number,
+  ): Promise<void> {
+    try {
+      this.statements.updateVersionProgress.run(pages, maxPages, versionId);
+    } catch (error) {
+      throw new StoreError(`Failed to update version progress: ${error}`);
+    }
+  }
+
+  /**
+   * Retrieves versions by their status.
+   * @param statuses Array of statuses to filter by
+   * @returns Array of version records matching the statuses
+   */
+  async getVersionsByStatus(statuses: VersionStatus[]): Promise<DbVersionWithLibrary[]> {
+    try {
+      const statusJson = JSON.stringify(statuses);
+      const rows = this.statements.getVersionsByStatus.all(
+        statusJson,
+      ) as DbVersionWithLibrary[];
+      return rows;
+    } catch (error) {
+      throw new StoreError(`Failed to get versions by status: ${error}`);
+    }
+  }
+
+  /**
+   * Retrieves all versions currently in RUNNING status.
+   * @returns Array of running version records with library names
+   */
+  async getRunningVersions(): Promise<DbVersionWithLibrary[]> {
+    try {
+      const rows = this.statements.getRunningVersions.all() as DbVersionWithLibrary[];
+      return rows;
+    } catch (error) {
+      throw new StoreError(`Failed to get running versions: ${error}`);
+    }
+  }
+
+  /**
+   * Retrieves all versions in active states (queued, running, updating).
+   * @returns Array of active version records with library names
+   */
+  async getActiveVersions(): Promise<DbVersionWithLibrary[]> {
+    try {
+      const rows = this.statements.getActiveVersions.all() as DbVersionWithLibrary[];
+      return rows;
+    } catch (error) {
+      throw new StoreError(`Failed to get active versions: ${error}`);
     }
   }
 

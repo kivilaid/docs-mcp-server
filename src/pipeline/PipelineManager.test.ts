@@ -39,7 +39,11 @@ describe("PipelineManager", () => {
     vi.useFakeTimers(); // Use fake timers for controlling async queue processing
 
     mockStore = {
-      // Add mock methods if manager interacts directly (it shouldn't now)
+      // Database status tracking methods for PRD-2
+      ensureLibraryAndVersion: vi.fn().mockResolvedValue(1), // Return mock version ID
+      updateVersionStatus: vi.fn().mockResolvedValue(undefined),
+      getVersionsByStatus: vi.fn().mockResolvedValue([]),
+      getRunningVersions: vi.fn().mockResolvedValue([]),
     };
 
     // Mock the worker's executeJob method
@@ -237,5 +241,112 @@ describe("PipelineManager", () => {
     const jobB = await manager.getJob(jobIdB);
     expect(jobA?.status).toBe(PipelineJobStatus.RUNNING);
     expect(jobB?.status).toBe(PipelineJobStatus.RUNNING);
+  });
+
+  // --- Database Status Integration Tests (PRD-2) ---
+  describe("Database Status Integration", () => {
+    it("should update database status when job is enqueued", async () => {
+      const options = { url: "http://example.com", library: "test-lib", version: "1.0" };
+      await manager.enqueueJob("test-lib", "1.0", options);
+
+      // Should ensure library/version exists and update status to QUEUED
+      expect(mockStore.ensureLibraryAndVersion).toHaveBeenCalledWith("test-lib", "1.0");
+      expect(mockStore.updateVersionStatus).toHaveBeenCalledWith(1, "queued", undefined);
+    });
+
+    it("should handle unversioned jobs correctly", async () => {
+      const options = { url: "http://example.com", library: "test-lib", version: "" };
+      await manager.enqueueJob("test-lib", null, options);
+
+      // Should treat null version as empty string
+      expect(mockStore.ensureLibraryAndVersion).toHaveBeenCalledWith("test-lib", "");
+      expect(mockStore.updateVersionStatus).toHaveBeenCalledWith(1, "queued", undefined);
+    });
+
+    it("should recover pending jobs from database on start", async () => {
+      const mockQueuedVersions = [
+        {
+          id: 1,
+          library_name: "test-lib",
+          name: "1.0.0",
+          created_at: "2025-01-01T00:00:00.000Z",
+          started_at: null,
+        },
+        {
+          id: 2,
+          library_name: "interrupted-lib",
+          name: "2.0.0",
+          created_at: "2025-01-01T00:00:00.000Z",
+          started_at: "2025-01-01T00:01:00.000Z",
+        },
+      ];
+      const mockRunningVersions = [
+        {
+          id: 2,
+          library_name: "interrupted-lib",
+          name: "2.0.0",
+          created_at: "2025-01-01T00:00:00.000Z",
+          started_at: "2025-01-01T00:01:00.000Z",
+        },
+      ];
+
+      // Create fresh mock store for this test to avoid interference
+      const recoveryMockStore = {
+        ensureLibraryAndVersion: vi.fn().mockResolvedValue(1),
+        updateVersionStatus: vi.fn().mockResolvedValue(undefined),
+        getVersionsByStatus: vi.fn().mockResolvedValue(mockQueuedVersions), // After reset, both should be QUEUED
+        getRunningVersions: vi.fn().mockResolvedValue(mockRunningVersions),
+      };
+
+      const recoveryManager = new PipelineManager(recoveryMockStore as any, 1);
+      await recoveryManager.start();
+
+      // Should reset RUNNING job to QUEUED
+      expect(recoveryMockStore.updateVersionStatus).toHaveBeenCalledWith(2, "queued");
+
+      // Should have loaded both jobs (the originally QUEUED one + the reset one)
+      const allJobs = await recoveryManager.getJobs();
+      expect(allJobs).toHaveLength(2);
+      expect(
+        allJobs.some((job) => job.library === "test-lib" && job.version === "1.0.0"),
+      ).toBe(true);
+      expect(
+        allJobs.some(
+          (job) => job.library === "interrupted-lib" && job.version === "2.0.0",
+        ),
+      ).toBe(true);
+
+      await recoveryManager.stop();
+    });
+
+    it("should map job statuses to database statuses correctly", async () => {
+      // Test that the mapping function works correctly by checking enum values
+      const options = { url: "http://example.com", library: "test-lib", version: "1.0" };
+      const jobId = await manager.enqueueJob("test-lib", "1.0", options);
+
+      // Verify the job was created with correct status
+      const job = await manager.getJob(jobId);
+      expect(job?.status).toBe(PipelineJobStatus.QUEUED);
+      expect(job?.library).toBe("test-lib");
+      expect(job?.version).toBe("1.0");
+
+      // Verify database was called with correct mapped status
+      expect(mockStore.updateVersionStatus).toHaveBeenCalledWith(1, "queued", undefined);
+    });
+
+    it("should handle database errors gracefully", async () => {
+      // Mock database failure
+      (mockStore.updateVersionStatus as Mock).mockRejectedValue(new Error("DB Error"));
+
+      const options = { url: "http://example.com", library: "test-lib", version: "1.0" };
+
+      // Should not throw even if database update fails
+      await expect(manager.enqueueJob("test-lib", "1.0", options)).resolves.toBeDefined();
+
+      // Job should still be created in memory despite database error
+      const allJobs = await manager.getJobs();
+      expect(allJobs).toHaveLength(1);
+      expect(allJobs[0].library).toBe("test-lib");
+    });
   });
 });
