@@ -24,6 +24,24 @@ document.addEventListener("job-list-refresh", () => {
   htmx.ajax("GET", "/api/jobs", "#job-queue");
 });
 
+// Auto-refresh job list every 3 seconds for real-time progress updates
+function autoRefreshJobList() {
+  htmx.ajax("GET", "/api/jobs", "#job-queue");
+}
+
+// Global variable to track the current interval
+let autoRefreshInterval = setInterval(autoRefreshJobList, 3000);
+
+// Stop auto-refresh when page is hidden to save resources
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) {
+    clearInterval(autoRefreshInterval);
+  } else {
+    // Restart auto-refresh when page becomes visible again
+    autoRefreshInterval = setInterval(autoRefreshJobList, 3000);
+  }
+});
+
 // Add a global event listener for 'version-list-refresh' that reloads the version list container using HTMX
 document.addEventListener("version-list-refresh", (event: Event) => {
   const customEvent = event as CustomEvent<{ library: string }>;

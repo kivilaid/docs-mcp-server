@@ -634,7 +634,7 @@ export class PipelineManager {
       }
     }
 
-    // Fire callback
-    await this.callbacks.onJobProgress?.(job, progress);
+    // Note: We don't fire the callback here to avoid infinite loops
+    // The callback in index.ts calls this method, so it would create a cycle
   }
 }

@@ -69,6 +69,8 @@ describe("PipelineWorker", () => {
       completionPromise: Promise.resolve(), // Mock promise parts if needed, but worker doesn't use them directly
       resolveCompletion: vi.fn(),
       rejectCompletion: vi.fn(),
+      sourceUrl: "http://example.com",
+      scraperOptions: null,
     };
   });
 
@@ -149,8 +151,9 @@ describe("PipelineWorker", () => {
       expect.objectContaining({ document: mockDoc2 }),
     );
 
-    // Verify job progress object was updated
-    expect(mockJob.progress).toEqual(expect.objectContaining({ document: mockDoc2 }));
+    // Verify job progress object was NOT updated directly by worker
+    // The worker should only call callbacks - the manager handles progress updates
+    expect(mockJob.progress).toBeNull(); // Should remain null since worker doesn't update it directly
 
     // Verify no errors were reported
     expect(mockCallbacks.onJobError).not.toHaveBeenCalled();

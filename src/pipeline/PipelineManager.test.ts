@@ -15,11 +15,12 @@ vi.mock("uuid", () => {
 });
 
 import { type Mock, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { ScraperService } from "../scraper";
+import type { ScraperProgress } from "../scraper/types";
 import type { DocumentManagementService } from "../store/DocumentManagementService";
+import { ListJobsTool } from "../tools/ListJobsTool";
 import { PipelineManager } from "./PipelineManager";
 import { PipelineWorker } from "./PipelineWorker";
-import type { PipelineManagerCallbacks } from "./types";
+import type { PipelineJob, PipelineManagerCallbacks } from "./types";
 import { PipelineJobStatus } from "./types";
 
 // Mock dependencies
@@ -34,6 +35,44 @@ describe("PipelineManager", () => {
   let manager: PipelineManager;
   let mockCallbacks: PipelineManagerCallbacks;
 
+  // Helper to create a minimal test job with required fields
+  const createTestJob = (overrides: Partial<PipelineJob> = {}): PipelineJob => ({
+    id: "test-job-id",
+    library: "test-lib",
+    version: "1.0.0",
+    versionId: 123,
+    status: PipelineJobStatus.RUNNING,
+    createdAt: new Date(),
+    startedAt: null,
+    finishedAt: null,
+    progress: null,
+    error: null,
+    abortController: new AbortController(),
+    completionPromise: Promise.resolve(),
+    resolveCompletion: () => {},
+    rejectCompletion: () => {},
+    sourceUrl: "https://example.com",
+    scraperOptions: null,
+    options: {
+      url: "https://example.com",
+      library: "test-lib",
+      version: "1.0.0",
+    },
+    ...overrides,
+  });
+
+  // Helper to create progress data
+  const createTestProgress = (
+    pagesScraped: number,
+    maxPages: number,
+  ): ScraperProgress => ({
+    pagesScraped,
+    maxPages,
+    currentUrl: `https://example.com/page-${pagesScraped}`,
+    depth: 1,
+    maxDepth: 3,
+  });
+
   beforeEach(() => {
     vi.resetAllMocks();
     vi.useFakeTimers(); // Use fake timers for controlling async queue processing
@@ -42,6 +81,7 @@ describe("PipelineManager", () => {
       // Database status tracking methods for PRD-2
       ensureLibraryAndVersion: vi.fn().mockResolvedValue(1), // Return mock version ID
       updateVersionStatus: vi.fn().mockResolvedValue(undefined),
+      updateVersionProgress: vi.fn().mockResolvedValue(undefined), // For PRD-5 progress tests
       getVersionsByStatus: vi.fn().mockResolvedValue([]),
       getRunningVersions: vi.fn().mockResolvedValue([]),
     };
@@ -241,6 +281,100 @@ describe("PipelineManager", () => {
     const jobB = await manager.getJob(jobIdB);
     expect(jobA?.status).toBe(PipelineJobStatus.RUNNING);
     expect(jobB?.status).toBe(PipelineJobStatus.RUNNING);
+  });
+
+  // --- Progress Update Tests (PRD-5) ---
+  describe("Progress Updates", () => {
+    it("should update job progress in memory and database", async () => {
+      const job = createTestJob({ versionId: 456 });
+      const progress = createTestProgress(50, 300);
+
+      await manager.updateJobProgress(job, progress);
+
+      // Verify in-memory updates
+      expect(job.progress).toEqual(progress);
+      expect(job.progressPages).toBe(50);
+      expect(job.progressMaxPages).toBe(300);
+      expect(job.updatedAt).toBeInstanceOf(Date);
+
+      // Verify database sync
+      expect(mockStore.updateVersionProgress).toHaveBeenCalledWith(456, 50, 300);
+    });
+
+    it("should handle database errors gracefully during progress updates", async () => {
+      (mockStore.updateVersionProgress as Mock).mockRejectedValue(new Error("DB error"));
+
+      const job = createTestJob();
+      const progress = createTestProgress(30, 150);
+
+      // Should not throw
+      await expect(manager.updateJobProgress(job, progress)).resolves.not.toThrow();
+
+      // In-memory updates should still work
+      expect(job.progress).toEqual(progress);
+      expect(job.progressPages).toBe(30);
+      expect(job.progressMaxPages).toBe(150);
+    });
+
+    it("should provide updated progress data to UI tools", async () => {
+      const listJobsTool = new ListJobsTool(manager);
+      const jobId = "ui-test-job";
+
+      const job = createTestJob({ id: jobId });
+      // Add job to manager's internal tracking
+      (manager as any).jobMap = new Map([[jobId, job]]);
+
+      // Update progress
+      const progress = createTestProgress(75, 200);
+      await manager.updateJobProgress(job, progress);
+
+      // Verify UI tool gets updated data
+      const result = await listJobsTool.execute({});
+      const uiJob = result.jobs.find((j: any) => j.id === jobId);
+
+      expect(uiJob).toBeDefined();
+      expect(uiJob!.progress).toEqual({ pages: 75, maxPages: 200 });
+    });
+
+    it("should handle sequential progress updates correctly", async () => {
+      const listJobsTool = new ListJobsTool(manager);
+      const jobId = "sequential-progress-job";
+
+      const job = createTestJob({ id: jobId });
+      (manager as any).jobMap = new Map([[jobId, job]]);
+
+      // First update
+      await manager.updateJobProgress(job, createTestProgress(25, 100));
+      let result = await listJobsTool.execute({});
+      let uiJob = result.jobs.find((j: any) => j.id === jobId);
+      expect(uiJob!.progress).toEqual({ pages: 25, maxPages: 100 });
+
+      // Second update
+      await manager.updateJobProgress(job, createTestProgress(75, 100));
+      result = await listJobsTool.execute({});
+      uiJob = result.jobs.find((j: any) => j.id === jobId);
+      expect(uiJob!.progress).toEqual({ pages: 75, maxPages: 100 });
+
+      // Verify database was called for each update
+      expect(mockStore.updateVersionProgress).toHaveBeenCalledTimes(2);
+      expect(mockStore.updateVersionProgress).toHaveBeenNthCalledWith(1, 123, 25, 100);
+      expect(mockStore.updateVersionProgress).toHaveBeenNthCalledWith(2, 123, 75, 100);
+    });
+
+    it("should handle jobs without progress gracefully", async () => {
+      const listJobsTool = new ListJobsTool(manager);
+      const jobId = "no-progress-job";
+
+      const job = createTestJob({ id: jobId });
+      (manager as any).jobMap = new Map([[jobId, job]]);
+
+      const result = await listJobsTool.execute({});
+      const uiJob = result.jobs.find((j: any) => j.id === jobId);
+
+      expect(uiJob).toBeDefined();
+      expect(uiJob!.progress).toBeUndefined();
+      expect(uiJob!.id).toBe(jobId);
+    });
   });
 
   // --- Database Status Integration Tests (PRD-2) ---
