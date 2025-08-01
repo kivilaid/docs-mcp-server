@@ -16,7 +16,6 @@ export enum PipelineJobStatus {
 
 /**
  * Represents a single document processing job within the pipeline.
- * Enhanced to include database status fields as single source of truth.
  */
 export interface PipelineJob {
   /** Unique identifier for the job. */

@@ -19,7 +19,6 @@ export interface ListJobsToolResponse {
 
 /**
  * Tool for listing pipeline jobs managed by the PipelineManager.
- * Uses the enhanced PipelineJob interface as single source of truth.
  * Allows filtering jobs by their status.
  */
 export class ListJobsTool {
