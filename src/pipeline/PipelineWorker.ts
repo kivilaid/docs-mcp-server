@@ -47,7 +47,6 @@ export class PipelineWorker {
 
           if (progress.document) {
             try {
-              // TODO: Pass signal to store.addDocument if it supports it
               await this.store.addDocument(library, version, {
                 pageContent: progress.document.content,
                 metadata: progress.document.metadata,

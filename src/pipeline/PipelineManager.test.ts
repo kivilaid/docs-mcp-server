@@ -78,10 +78,10 @@ describe("PipelineManager", () => {
     vi.useFakeTimers(); // Use fake timers for controlling async queue processing
 
     mockStore = {
-      // Database status tracking methods for PRD-2
+      // Database status tracking methods
       ensureLibraryAndVersion: vi.fn().mockResolvedValue(1), // Return mock version ID
       updateVersionStatus: vi.fn().mockResolvedValue(undefined),
-      updateVersionProgress: vi.fn().mockResolvedValue(undefined), // For PRD-5 progress tests
+      updateVersionProgress: vi.fn().mockResolvedValue(undefined), // For progress tests
       getVersionsByStatus: vi.fn().mockResolvedValue([]),
       getRunningVersions: vi.fn().mockResolvedValue([]),
     };
@@ -283,7 +283,7 @@ describe("PipelineManager", () => {
     expect(jobB?.status).toBe(PipelineJobStatus.RUNNING);
   });
 
-  // --- Progress Update Tests (PRD-5) ---
+  // --- Progress Update Tests ---
   describe("Progress Updates", () => {
     it("should update job progress in memory and database", async () => {
       const job = createTestJob({ versionId: 456 });
@@ -377,7 +377,7 @@ describe("PipelineManager", () => {
     });
   });
 
-  // --- Database Status Integration Tests (PRD-2) ---
+  // --- Database Status Integration Tests ---
   describe("Database Status Integration", () => {
     it("should update database status when job is enqueued", async () => {
       const options = { url: "http://example.com", library: "test-lib", version: "1.0" };

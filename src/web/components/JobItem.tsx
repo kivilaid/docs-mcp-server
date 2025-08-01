@@ -15,7 +15,6 @@ interface JobItemProps {
 
 /**
  * Renders a single job item with its details and status.
- * Enhanced to show database status, progress, and error information from PRD-2/PRD-3.
  * @param props - Component props including the job information.
  */
 const JobItem = ({ job }: JobItemProps) => {

@@ -456,7 +456,7 @@ describe("DocumentStore - Integration Tests", () => {
     });
   });
 
-  describe("Status Tracking (PRD-2)", () => {
+  describe("Status Tracking", () => {
     it("should update version status correctly", async () => {
       // Create library and version first by adding documents
       const docs: Document[] = [
@@ -554,7 +554,7 @@ describe("DocumentStore - Integration Tests", () => {
     });
   });
 
-  describe("Scraper Options Storage (PRD-3)", () => {
+  describe("Scraper Options Storage", () => {
     it("should store and retrieve scraper options", async () => {
       // Create a version
       const { versionId } = await store.resolveLibraryAndVersionIds(

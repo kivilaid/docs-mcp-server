@@ -39,13 +39,13 @@ const mockStore = {
     .mockResolvedValue(new Map<string, LibraryVersionDetails[]>()), // Add mock implementation
   addDocuments: vi.fn(),
   deleteDocuments: vi.fn(),
-  // PRD-2 Status tracking methods
+  // Status tracking methods
   updateVersionStatus: vi.fn(),
   updateVersionProgress: vi.fn(),
   getVersionsByStatus: vi.fn(),
   getRunningVersions: vi.fn(),
   getActiveVersions: vi.fn(),
-  // PRD-3 Scraper options methods
+  // Scraper options methods
   storeScraperOptions: vi.fn(),
   getVersionScraperOptions: vi.fn(),
   getVersionWithStoredOptions: vi.fn(),
@@ -788,7 +788,7 @@ describe("DocumentManagementService", () => {
       });
     });
 
-    describe("Pipeline Integration Methods (PRD-2 & PRD-3)", () => {
+    describe("Pipeline Integration Methods", () => {
       it("should delegate status tracking to store", async () => {
         const versionId = 123;
         const status = "queued";

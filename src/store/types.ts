@@ -84,9 +84,6 @@ export interface VersionScraperOptions {
 /**
  * Database version record type matching the versions table schema.
  * Uses snake_case naming to match database column names.
- *
- * Note: This interface includes status tracking fields from PRD-2
- * and scraper options fields from PRD-3.
  */
 export interface DbVersion {
   id: number;

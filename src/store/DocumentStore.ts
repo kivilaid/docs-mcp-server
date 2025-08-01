@@ -284,7 +284,7 @@ export class DocumentStore {
         ORDER BY d.sort_order DESC
         LIMIT 1
       `),
-      // Status tracking statements (added for PRD-2)
+      // Status tracking statements
       updateVersionStatus: this.db.prepare<[string, string | null, number]>(
         "UPDATE versions SET status = ?, error_message = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
       ),
@@ -300,7 +300,7 @@ export class DocumentStore {
       getActiveVersions: this.db.prepare<[]>(
         "SELECT v.*, l.name as library_name FROM versions v JOIN libraries l ON v.library_id = l.id WHERE v.status IN ('queued', 'running', 'updating') ORDER BY v.created_at",
       ),
-      // Scraper options statements (added for PRD-3)
+      // Scraper options statements
       updateVersionScraperOptions: this.db.prepare<[string, string, number]>(
         "UPDATE versions SET source_url = ?, scraper_options = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
       ),

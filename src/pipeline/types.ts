@@ -16,7 +16,7 @@ export enum PipelineJobStatus {
 
 /**
  * Represents a single document processing job within the pipeline.
- * Enhanced to include database status fields as single source of truth (PRD-4).
+ * Enhanced to include database status fields as single source of truth.
  */
 export interface PipelineJob {
   /** Unique identifier for the job. */
@@ -48,7 +48,7 @@ export interface PipelineJob {
   /** Rejector function for the completion promise. */
   rejectCompletion: (reason?: unknown) => void;
 
-  // Database status fields (single source of truth) - PRD-4
+  // Database status fields (single source of truth)
   /** Database version ID for direct updates. */
   versionId?: number;
   /** Database version status (authoritative). */
@@ -62,7 +62,7 @@ export interface PipelineJob {
   /** Last update timestamp from database. */
   updatedAt?: Date;
 
-  // Scraper options fields (PRD-3)
+  // Scraper options fields
   /** Original scraping URL. */
   sourceUrl: string | null;
   /** Stored scraper options for reproducibility. */

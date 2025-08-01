@@ -32,7 +32,7 @@ describe("ListJobsTool", () => {
       completionPromise: Promise.resolve(),
       resolveCompletion: () => {},
       rejectCompletion: () => {},
-      // Database fields (PRD-4)
+      // Database fields
       versionId: 1,
       versionStatus: VersionStatus.QUEUED,
       progressPages: 0,
@@ -63,7 +63,7 @@ describe("ListJobsTool", () => {
       completionPromise: Promise.resolve(),
       resolveCompletion: () => {},
       rejectCompletion: () => {},
-      // Database fields (PRD-4)
+      // Database fields
       versionId: 2,
       versionStatus: VersionStatus.RUNNING,
       progressPages: 5,
@@ -94,7 +94,7 @@ describe("ListJobsTool", () => {
       completionPromise: Promise.resolve(),
       resolveCompletion: () => {},
       rejectCompletion: () => {},
-      // Database fields (PRD-4)
+      // Database fields
       versionId: 3,
       versionStatus: VersionStatus.COMPLETED,
       progressPages: 10,

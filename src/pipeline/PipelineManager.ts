@@ -125,7 +125,7 @@ export class PipelineManager {
           resolveCompletion,
           rejectCompletion,
 
-          // Database fields (single source of truth) - PRD-4
+          // Database fields (single source of truth)
           versionId: version.id,
           versionStatus: version.status,
           progressPages: version.progress_pages,
@@ -228,7 +228,7 @@ export class PipelineManager {
       completionPromise,
       resolveCompletion,
       rejectCompletion,
-      // Database fields (single source of truth) - PRD-4
+      // Database fields (single source of truth)
       // Will be populated by updateJobStatus
       progressPages: 0,
       progressMaxPages: 0,

@@ -12,7 +12,7 @@ export interface GetJobInfoInput {
 
 /**
  * Simplified information about a pipeline job for external use.
- * Enhanced to include database status information from PRD-2 and PRD-3.
+ * Enhanced to include database status information.
  */
 export interface JobInfo {
   id: string;

@@ -20,7 +20,7 @@ export interface RemoveToolArgs {
 export class RemoveTool {
   constructor(
     private readonly documentManagementService: DocumentManagementService,
-    private readonly pipelineManager?: PipelineManager, // Optional for backward compatibility
+    private readonly pipelineManager: PipelineManager,
   ) {}
 
   /**
@@ -36,20 +36,18 @@ export class RemoveTool {
 
     try {
       // Abort any QUEUED or RUNNING job for this library+version
-      if (this.pipelineManager) {
-        const jobs = this.pipelineManager.findJobsByLibraryVersion(
-          library,
-          (version ?? "").toLowerCase(),
-          [PipelineJobStatus.QUEUED, PipelineJobStatus.RUNNING],
+      const jobs = this.pipelineManager.findJobsByLibraryVersion(
+        library,
+        (version ?? "").toLowerCase(),
+        [PipelineJobStatus.QUEUED, PipelineJobStatus.RUNNING],
+      );
+      for (const job of jobs) {
+        logger.info(
+          `🚫 Aborting job for ${library}@${version ?? ""} before deletion: ${job.id}`,
         );
-        for (const job of jobs) {
-          logger.info(
-            `🚫 Aborting job for ${library}@${version ?? ""} before deletion: ${job.id}`,
-          );
-          await this.pipelineManager.cancelJob(job.id);
-          // Wait for job to finish cancelling if running
-          await this.pipelineManager.waitForJobCompletion(job.id);
-        }
+        await this.pipelineManager.cancelJob(job.id);
+        // Wait for job to finish cancelling if running
+        await this.pipelineManager.waitForJobCompletion(job.id);
       }
       // Core logic: Call the document management service
       await this.documentManagementService.removeAllDocuments(library, version);
