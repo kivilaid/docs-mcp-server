@@ -1,6 +1,6 @@
 import { v4 as uuidv4 } from "uuid";
 import { ScraperRegistry, ScraperService } from "../scraper";
-import type { ScraperOptions } from "../scraper/types";
+import type { ScraperOptions, ScraperProgress } from "../scraper/types";
 import type { DocumentManagementService } from "../store";
 import { VersionStatus } from "../store/types";
 import { logger } from "../utils/logger";
@@ -80,8 +80,7 @@ export class PipelineManager {
       // Load all QUEUED versions back into pipeline
       const queuedVersions = await this.store.getVersionsByStatus([VersionStatus.QUEUED]);
       for (const version of queuedVersions) {
-        // Create a minimal job for recovery
-        // Note: Original scraper options are not stored in database yet (future enhancement)
+        // Create complete job with all database state restored
         const jobId = uuidv4();
         const abortController = new AbortController();
         let resolveCompletion!: () => void;
@@ -92,14 +91,28 @@ export class PipelineManager {
           rejectCompletion = reject;
         });
 
+        // Parse stored scraper options
+        let parsedScraperOptions = null;
+        if (version.scraper_options) {
+          try {
+            parsedScraperOptions = JSON.parse(version.scraper_options);
+          } catch (error) {
+            logger.warn(
+              `⚠️ Failed to parse scraper options for ${version.library_name}@${version.name || "unversioned"}: ${error}`,
+            );
+          }
+        }
+
         const job: PipelineJob = {
           id: jobId,
           library: version.library_name,
           version: version.name || "",
           options: {
-            url: "", // Will need to be provided when re-starting the job
+            url: version.source_url || "", // Restore from database
             library: version.library_name,
             version: version.name || "",
+            // Merge stored options
+            ...parsedScraperOptions,
           } as ScraperOptions,
           status: PipelineJobStatus.QUEUED,
           progress: null,
@@ -111,6 +124,16 @@ export class PipelineManager {
           completionPromise,
           resolveCompletion,
           rejectCompletion,
+
+          // Database fields (single source of truth) - PRD-4
+          versionId: version.id,
+          versionStatus: version.status,
+          progressPages: version.progress_pages,
+          progressMaxPages: version.progress_max_pages,
+          errorMessage: version.error_message,
+          updatedAt: new Date(version.updated_at),
+          sourceUrl: version.source_url,
+          scraperOptions: parsedScraperOptions,
         };
 
         this.jobMap.set(jobId, job);
@@ -205,6 +228,14 @@ export class PipelineManager {
       completionPromise,
       resolveCompletion,
       rejectCompletion,
+      // Database fields (single source of truth) - PRD-4
+      // Will be populated by updateJobStatus
+      progressPages: 0,
+      progressMaxPages: 0,
+      errorMessage: null,
+      updatedAt: new Date(),
+      sourceUrl: options.url,
+      scraperOptions: null,
     };
 
     this.jobMap.set(jobId, job);
@@ -520,7 +551,7 @@ export class PipelineManager {
   }
 
   /**
-   * Updates both in-memory job status and database version status.
+   * Updates both in-memory job status and database version status (write-through).
    */
   private async updateJobStatus(
     job: PipelineJob,
@@ -529,6 +560,10 @@ export class PipelineManager {
   ): Promise<void> {
     // Update in-memory status
     job.status = newStatus;
+    if (errorMessage) {
+      job.errorMessage = errorMessage;
+    }
+    job.updatedAt = new Date();
 
     // Update database status
     try {
@@ -538,6 +573,10 @@ export class PipelineManager {
         job.version,
       );
 
+      // Update job object with database fields (single source of truth)
+      job.versionId = versionId;
+      job.versionStatus = this.mapJobStatusToVersionStatus(newStatus);
+
       const dbStatus = this.mapJobStatusToVersionStatus(newStatus);
       await this.store.updateVersionStatus(versionId, dbStatus, errorMessage);
 
@@ -545,6 +584,13 @@ export class PipelineManager {
       if (newStatus === PipelineJobStatus.QUEUED) {
         try {
           await this.store.storeScraperOptions(versionId, job.options);
+          // Update job object with stored options
+          job.scraperOptions = {
+            maxDepth: job.options.maxDepth,
+            maxPages: job.options.maxPages,
+            scope: job.options.scope,
+            followRedirects: job.options.followRedirects,
+          };
           logger.debug(
             `💾 Stored scraper options for ${job.library}@${job.version}: ${job.options.url}`,
           );
@@ -562,5 +608,33 @@ export class PipelineManager {
 
     // Fire callback
     await this.callbacks.onJobStatusChange?.(job);
+  }
+
+  /**
+   * Updates both in-memory job progress and database progress (write-through).
+   */
+  async updateJobProgress(job: PipelineJob, progress: ScraperProgress): Promise<void> {
+    // Update in-memory progress
+    job.progress = progress;
+    job.progressPages = progress.pagesScraped;
+    job.progressMaxPages = progress.maxPages;
+    job.updatedAt = new Date();
+
+    // Update database progress if we have a version ID
+    if (job.versionId) {
+      try {
+        await this.store.updateVersionProgress(
+          job.versionId,
+          progress.pagesScraped,
+          progress.maxPages,
+        );
+      } catch (error) {
+        logger.error(`❌ Failed to update database progress for job ${job.id}: ${error}`);
+        // Don't throw - we don't want to break the pipeline for database issues
+      }
+    }
+
+    // Fire callback
+    await this.callbacks.onJobProgress?.(job, progress);
   }
 }

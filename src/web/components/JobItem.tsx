@@ -1,6 +1,9 @@
 import type { JobInfo } from "../../tools/GetJobInfoTool";
 import { PipelineJobStatus } from "../../pipeline/types";
-import VersionBadge from "./VersionBadge"; // Adjusted import path
+import { VersionStatus, isActiveStatus } from "../../store/types";
+import VersionBadge from "./VersionBadge";
+import StatusBadge from "./StatusBadge";
+import ProgressBar from "./ProgressBar";
 import LoadingSpinner from "./LoadingSpinner";
 
 /**
@@ -12,46 +15,93 @@ interface JobItemProps {
 
 /**
  * Renders a single job item with its details and status.
- * Includes a cancel button with loading spinner for QUEUED/RUNNING jobs.
+ * Enhanced to show database status, progress, and error information from PRD-2/PRD-3.
  * @param props - Component props including the job information.
  */
-const JobItem = ({ job }: JobItemProps) => (
-  // Use Flowbite Card structure with reduced padding and added border
-  <div class="block p-2 bg-gray-50 dark:bg-gray-700 rounded-lg border border-gray-200 dark:border-gray-600">
-    <div class="flex items-center justify-between">
-      <div>
-        <p class="text-sm font-medium text-gray-900 dark:text-white">
-          <span safe>{job.library}</span>{" "}
-          {/* Display version as badge if exists */}
-          <VersionBadge version={job.version} />
-        </p>
-        <p class="text-sm text-gray-500 dark:text-gray-400">
-          Indexed: <span safe>{new Date(job.createdAt).toLocaleString()}</span>
-        </p>
-      </div>
-      <div class="flex flex-col items-end gap-1">
-        {/* Status badge with inline stop button for QUEUED/RUNNING jobs */}
-        <div class="flex items-center gap-2">
-          <span
-            class={`px-1.5 py-0.5 text-xs font-medium rounded ${
-              job.status === PipelineJobStatus.COMPLETED
-                ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300"
-                : job.error
-                  ? "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300"
-                  : "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300"
-            }`}
-          >
-            {job.status}
-          </span>
-          {/* Stop button for QUEUED/RUNNING jobs */}
-          {(job.status === PipelineJobStatus.QUEUED ||
-            job.status === PipelineJobStatus.RUNNING) && (
-            <button
-              type="button"
-              class="font-medium rounded-lg text-xs p-1 text-center inline-flex items-center transition-colors duration-150 ease-in-out border border-gray-300 bg-white text-red-600 hover:bg-red-50 focus:ring-4 focus:outline-none focus:ring-red-100 dark:border-gray-600 dark:bg-gray-800 dark:text-red-400 dark:hover:bg-gray-700 dark:focus:ring-red-900"
-              title="Stop this job"
-              x-data="{}"
-              x-on:click={`
+const JobItem = ({ job }: JobItemProps) => {
+  // Use database status if available, fallback to pipeline status
+  const displayStatus = job.dbStatus || job.status;
+  const isActiveJob = job.dbStatus
+    ? isActiveStatus(job.dbStatus)
+    : job.status === PipelineJobStatus.QUEUED ||
+      job.status === PipelineJobStatus.RUNNING;
+
+  return (
+    <div class="block p-3 bg-gray-50 dark:bg-gray-700 rounded-lg border border-gray-200 dark:border-gray-600">
+      <div class="flex items-start justify-between">
+        <div class="flex-1">
+          <p class="text-sm font-medium text-gray-900 dark:text-white">
+            <span safe>{job.library}</span>{" "}
+            <VersionBadge version={job.version} />
+          </p>
+
+          {/* Timestamps */}
+          <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+            <div>
+              Created:{" "}
+              <span safe>{new Date(job.createdAt).toLocaleString()}</span>
+            </div>
+            {job.startedAt ? (
+              <div>
+                Started:{" "}
+                <span safe>{new Date(job.startedAt).toLocaleString()}</span>
+              </div>
+            ) : null}
+            {job.updatedAt ? (
+              <div>
+                Updated:{" "}
+                <span safe>{new Date(job.updatedAt).toLocaleString()}</span>
+              </div>
+            ) : null}
+          </div>
+
+          {/* Progress bar for active jobs */}
+          {job.progress && job.progress.maxPages > 0 && isActiveJob ? (
+            <div class="mt-2">
+              <ProgressBar progress={job.progress} />
+            </div>
+          ) : null}
+
+          {/* Error message display */}
+          {(job.errorMessage || job.error) && (
+            <div class="mt-2 p-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded text-xs">
+              <div class="font-medium text-red-800 dark:text-red-300 mb-1">
+                Error:
+              </div>
+              <div class="text-red-700 dark:text-red-400">
+                {job.errorMessage || job.error}
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div class="flex flex-col items-end gap-2 ml-4">
+          {/* Status badge */}
+          <div class="flex items-center gap-2">
+            {job.dbStatus ? (
+              <StatusBadge status={job.dbStatus} />
+            ) : (
+              <span
+                class={`px-1.5 py-0.5 text-xs font-medium rounded ${
+                  job.status === PipelineJobStatus.COMPLETED
+                    ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300"
+                    : job.error
+                      ? "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300"
+                      : "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300"
+                }`}
+              >
+                {job.status}
+              </span>
+            )}
+
+            {/* Stop button for active jobs */}
+            {isActiveJob && (
+              <button
+                type="button"
+                class="font-medium rounded-lg text-xs p-1 text-center inline-flex items-center transition-colors duration-150 ease-in-out border border-gray-300 bg-white text-red-600 hover:bg-red-50 focus:ring-4 focus:outline-none focus:ring-red-100 dark:border-gray-600 dark:bg-gray-800 dark:text-red-400 dark:hover:bg-gray-700 dark:focus:ring-red-900"
+                title="Stop this job"
+                x-data="{}"
+                x-on:click={`
                 if ($store.confirmingAction.type === 'job-cancel' && $store.confirmingAction.id === '${job.id}') {
                   $store.confirmingAction.isStopping = true;
                   fetch('/api/jobs/' + '${job.id}' + '/cancel', {
@@ -80,46 +130,47 @@ const JobItem = ({ job }: JobItemProps) => (
                   }, 3000);
                 }
               `}
-              x-bind:disabled={`$store.confirmingAction.type === 'job-cancel' && $store.confirmingAction.id === '${job.id}' && $store.confirmingAction.isStopping`}
-            >
-              <span
-                x-show={`$store.confirmingAction.type !== 'job-cancel' || $store.confirmingAction.id !== '${job.id}' || $store.confirmingAction.isStopping`}
+                x-bind:disabled={`$store.confirmingAction.type === 'job-cancel' && $store.confirmingAction.id === '${job.id}' && $store.confirmingAction.isStopping`}
               >
-                {/* Red Stop Icon */}
-                <svg
-                  class="w-4 h-4"
-                  aria-hidden="true"
-                  fill="currentColor"
-                  viewBox="0 0 20 20"
+                <span
+                  x-show={`$store.confirmingAction.type !== 'job-cancel' || $store.confirmingAction.id !== '${job.id}' || $store.confirmingAction.isStopping`}
                 >
-                  <rect x="5" y="5" width="10" height="10" rx="2" />
-                </svg>
-                <span class="sr-only">Stop job</span>
-              </span>
-              <span
-                x-show={`$store.confirmingAction.type === 'job-cancel' && $store.confirmingAction.id === '${job.id}' && !$store.confirmingAction.isStopping`}
-                class="px-2"
-              >
-                Cancel?
-              </span>
-              <span
-                x-show={`$store.confirmingAction.type === 'job-cancel' && $store.confirmingAction.id === '${job.id}' && $store.confirmingAction.isStopping`}
-              >
-                <LoadingSpinner />
-                <span class="sr-only">Stopping...</span>
-              </span>
-            </button>
+                  {/* Red Stop Icon */}
+                  <svg
+                    class="w-4 h-4"
+                    aria-hidden="true"
+                    fill="currentColor"
+                    viewBox="0 0 20 20"
+                  >
+                    <rect x="5" y="5" width="10" height="10" rx="2" />
+                  </svg>
+                  <span class="sr-only">Stop job</span>
+                </span>
+                <span
+                  x-show={`$store.confirmingAction.type === 'job-cancel' && $store.confirmingAction.id === '${job.id}' && !$store.confirmingAction.isStopping`}
+                  class="px-2"
+                >
+                  Cancel?
+                </span>
+                <span
+                  x-show={`$store.confirmingAction.type === 'job-cancel' && $store.confirmingAction.id === '${job.id}' && $store.confirmingAction.isStopping`}
+                >
+                  <LoadingSpinner />
+                  <span class="sr-only">Stopping...</span>
+                </span>
+              </button>
+            )}
+          </div>
+          {job.error && (
+            // Keep the error badge for clarity if an error occurred
+            <span class="bg-red-100 text-red-800 text-xs font-medium px-1.5 py-0.5 rounded dark:bg-red-900 dark:text-red-300">
+              Error
+            </span>
           )}
         </div>
-        {job.error && (
-          // Keep the error badge for clarity if an error occurred
-          <span class="bg-red-100 text-red-800 text-xs font-medium px-1.5 py-0.5 rounded dark:bg-red-900 dark:text-red-300">
-            Error
-          </span>
-        )}
       </div>
     </div>
-  </div>
-);
+  );
+};
 
 export default JobItem;

@@ -3,6 +3,7 @@ import type { PipelineManager } from "../pipeline/PipelineManager";
 import { type PipelineJob, PipelineJobStatus } from "../pipeline/types";
 import type { ScraperOptions } from "../scraper/types";
 import type { ScraperProgress } from "../scraper/types";
+import { VersionStatus } from "../store/types";
 import { ListJobsTool } from "./ListJobsTool";
 
 // Mock dependencies
@@ -14,7 +15,7 @@ describe("ListJobsTool", () => {
   let mockManagerInstance: Partial<PipelineManager>;
   let listJobsTool: ListJobsTool;
 
-  // Define more complete mock data
+  // Define more complete mock data with enhanced PipelineJob interface
   const mockJobs: PipelineJob[] = [
     {
       id: "job-1",
@@ -22,7 +23,7 @@ describe("ListJobsTool", () => {
       version: "1.0.0",
       status: PipelineJobStatus.QUEUED,
       createdAt: new Date("2023-01-01T10:00:00Z"),
-      options: { library: "lib-a", version: "1.0.0", url: "url1" } as ScraperOptions, // Complete options
+      options: { library: "lib-a", version: "1.0.0", url: "url1" } as ScraperOptions,
       progress: null,
       error: null,
       startedAt: null,
@@ -31,6 +32,15 @@ describe("ListJobsTool", () => {
       completionPromise: Promise.resolve(),
       resolveCompletion: () => {},
       rejectCompletion: () => {},
+      // Database fields (PRD-4)
+      versionId: 1,
+      versionStatus: VersionStatus.QUEUED,
+      progressPages: 0,
+      progressMaxPages: 0,
+      errorMessage: null,
+      updatedAt: new Date("2023-01-01T10:00:00Z"),
+      sourceUrl: "url1",
+      scraperOptions: null,
     },
     {
       id: "job-2",
@@ -39,20 +49,29 @@ describe("ListJobsTool", () => {
       status: PipelineJobStatus.RUNNING,
       createdAt: new Date("2023-01-01T11:00:00Z"),
       startedAt: new Date("2023-01-01T11:05:00Z"),
-      options: { library: "lib-b", version: "2.0.0", url: "url2" } as ScraperOptions, // Complete options
+      options: { library: "lib-b", version: "2.0.0", url: "url2" } as ScraperOptions,
       progress: {
         pagesScraped: 5,
         maxPages: 100,
         currentUrl: "url2/page5",
         depth: 1,
         maxDepth: 3,
-      } as ScraperProgress, // Complete progress
+      } as ScraperProgress,
       error: null,
       finishedAt: null,
       abortController: new AbortController(),
-      completionPromise: Promise.resolve(), // Placeholder
+      completionPromise: Promise.resolve(),
       resolveCompletion: () => {},
       rejectCompletion: () => {},
+      // Database fields (PRD-4)
+      versionId: 2,
+      versionStatus: VersionStatus.RUNNING,
+      progressPages: 5,
+      progressMaxPages: 100,
+      errorMessage: null,
+      updatedAt: new Date("2023-01-01T11:05:00Z"),
+      sourceUrl: "url2",
+      scraperOptions: { maxDepth: 3 },
     },
     {
       id: "job-3",
@@ -62,19 +81,28 @@ describe("ListJobsTool", () => {
       createdAt: new Date("2023-01-01T12:00:00Z"),
       startedAt: new Date("2023-01-01T12:05:00Z"),
       finishedAt: new Date("2023-01-01T12:15:00Z"),
-      options: { library: "lib-a", version: "1.1.0", url: "url3" } as ScraperOptions, // Complete options
+      options: { library: "lib-a", version: "1.1.0", url: "url3" } as ScraperOptions,
       progress: {
         pagesScraped: 10,
         maxPages: 10,
         currentUrl: "url3/page10",
         depth: 2,
         maxDepth: 2,
-      } as ScraperProgress, // Complete progress
+      } as ScraperProgress,
       error: null,
       abortController: new AbortController(),
       completionPromise: Promise.resolve(),
       resolveCompletion: () => {},
       rejectCompletion: () => {},
+      // Database fields (PRD-4)
+      versionId: 3,
+      versionStatus: VersionStatus.COMPLETED,
+      progressPages: 10,
+      progressMaxPages: 10,
+      errorMessage: null,
+      updatedAt: new Date("2023-01-01T12:15:00Z"),
+      sourceUrl: "url3",
+      scraperOptions: { maxDepth: 2 },
     },
   ];
 
