@@ -37,20 +37,10 @@ const JobItem = ({ job }: JobItemProps) => {
 
           {/* Timestamps */}
           <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">
-            <div>
-              Created:{" "}
-              <span safe>{new Date(job.createdAt).toLocaleString()}</span>
-            </div>
             {job.startedAt ? (
               <div>
-                Started:{" "}
+                Last Indexed:{" "}
                 <span safe>{new Date(job.startedAt).toLocaleString()}</span>
-              </div>
-            ) : null}
-            {job.updatedAt ? (
-              <div>
-                Updated:{" "}
-                <span safe>{new Date(job.updatedAt).toLocaleString()}</span>
               </div>
             ) : null}
           </div>

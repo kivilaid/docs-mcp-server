@@ -679,8 +679,13 @@ export class DocumentStore {
           if (a.version === "" && b.version === "") {
             return 0; // Should not happen with GROUP BY, but handle anyway
           }
-          // Both are non-empty, use semver compare
-          return semver.compare(a.version, b.version);
+          // Both are non-empty, use semver compare with fallback to string compare
+          try {
+            return semver.compare(a.version, b.version);
+          } catch (error) {
+            // Fallback to lexicographic comparison if semver parsing fails
+            return a.version.localeCompare(b.version);
+          }
         });
       }
 
