@@ -13,6 +13,7 @@ import {
   type DbQueryResult,
   type DbVersion,
   type LibraryVersionDetails,
+  type VersionWithStats,
   denormalizeVersionName,
   mapDbDocumentToDocument,
   normalizeVersionName,

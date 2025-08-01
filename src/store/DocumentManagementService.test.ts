@@ -310,11 +310,7 @@ describe("DocumentManagementService", () => {
         mockStore.queryUniqueVersions.mockResolvedValue(["1.0.0", "1.1.0", "1.2.0"]); // Fix: Use mockStoreInstance
 
         const versions = await docService.listVersions(library);
-        expect(versions).toEqual([
-          { version: "1.0.0" },
-          { version: "1.1.0" },
-          { version: "1.2.0" },
-        ]);
+        expect(versions).toEqual(["1.0.0", "1.1.0", "1.2.0"]);
         expect(mockStore.queryUniqueVersions).toHaveBeenCalledWith(library); // Fix: Use mockStoreInstance
       });
 
@@ -330,11 +326,7 @@ describe("DocumentManagementService", () => {
         ]);
 
         const versions = await docService.listVersions(library);
-        expect(versions).toEqual([
-          { version: "1.0.0" },
-          { version: "2.0.0-beta" },
-          { version: "2.0.0" },
-        ]);
+        expect(versions).toEqual(["1.0.0", "2.0.0-beta", "2.0.0"]);
         expect(mockStore.queryUniqueVersions).toHaveBeenCalledWith(library); // Fix: Use mockStoreInstance
       });
     });

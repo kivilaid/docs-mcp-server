@@ -19,7 +19,6 @@ import { DocumentStore } from "./DocumentStore";
 import { StoreError } from "./errors";
 import type {
   FindVersionResult,
-  LibraryVersion,
   LibraryVersionDetails,
   StoreSearchResult,
 } from "./types";
@@ -155,9 +154,9 @@ export class DocumentManagementService {
   /**
    * Returns a list of all available semantic versions for a library.
    */
-  async listVersions(library: string): Promise<LibraryVersion[]> {
+  async listVersions(library: string): Promise<string[]> {
     const versions = await this.store.queryUniqueVersions(library);
-    return versions.filter((v) => semver.valid(v)).map((version) => ({ version }));
+    return versions.filter((v) => semver.valid(v));
   }
 
   /**
@@ -191,9 +190,9 @@ export class DocumentManagementService {
 
     // Check if unversioned documents exist *before* filtering for valid semver
     const hasUnversioned = await this.store.checkDocumentExists(library, "");
-    const validSemverVersions = await this.listVersions(library);
+    const versionStrings = await this.listVersions(library);
 
-    if (validSemverVersions.length === 0) {
+    if (versionStrings.length === 0) {
       if (hasUnversioned) {
         logger.info(`ℹ️ Unversioned documents exist for ${library}`);
         return { bestMatch: null, hasUnversioned: true };
@@ -206,7 +205,6 @@ export class DocumentManagementService {
       throw new VersionNotFoundError(library, targetVersion ?? "", libraryDetails);
     }
 
-    const versionStrings = validSemverVersions.map((v) => v.version);
     let bestMatch: string | null = null;
 
     if (!targetVersion || targetVersion === "latest") {

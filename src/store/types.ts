@@ -44,14 +44,8 @@ export interface StoreSearchResult {
 }
 
 /**
- * Represents a library and its indexed versions.
- */
-export interface LibraryVersion {
-  version: string;
-}
-
-/**
- * Database version record type matching the versions table schema
+ * Database version record type matching the versions table schema.
+ * Uses snake_case naming to match database column names.
  */
 export interface DbVersion {
   id: number;
@@ -62,28 +56,23 @@ export interface DbVersion {
 }
 
 /**
- * Detailed information about a specific indexed library version.
- * Combines database version info with aggregated document statistics.
+ * Enhanced version record with computed statistics.
+ * Used when we need both database fields and aggregated document stats.
  */
-export interface VersionDetails {
-  id: number;
-  library_id: number;
-  name: string | null; // NULL for unversioned, but exposed as string via API
-  documentCount: number;
-  uniqueUrlCount: number;
-  indexedAt: string | null; // ISO 8601 format from MIN(indexed_at)
-  createdAt: string;
+export interface VersionWithStats extends DbVersion {
+  document_count: number;
+  unique_url_count: number;
 }
 
 /**
- * Detailed information about a specific indexed library version.
- * Maintains backward compatibility with existing API.
+ * API-friendly version details for external consumption.
+ * Uses camelCase naming for API compatibility.
  */
 export interface LibraryVersionDetails {
   version: string; // Normalized to empty string for unversioned
   documentCount: number;
   uniqueUrlCount: number;
-  indexedAt: string | null; // ISO 8601 format from MIN(indexed_at)
+  indexedAt: string | null; // ISO 8601 format
 }
 
 /**
