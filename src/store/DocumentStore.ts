@@ -3,6 +3,7 @@ import type { Embeddings } from "@langchain/core/embeddings";
 import Database, { type Database as DatabaseType } from "better-sqlite3";
 import semver from "semver";
 import * as sqliteVec from "sqlite-vec";
+import type { ScraperOptions } from "../scraper/types";
 import type { DocumentMetadata } from "../types";
 import { EMBEDDING_BATCH_SIZE } from "../utils/config";
 import { applyMigrations } from "./applyMigrations";
@@ -14,6 +15,7 @@ import {
   type DbVersion,
   type DbVersionWithLibrary,
   type LibraryVersionDetails,
+  type VersionScraperOptions,
   type VersionStatus,
   type VersionWithStats,
   denormalizeVersionName,
@@ -76,6 +78,10 @@ export class DocumentStore {
     getVersionsByStatus: Database.Statement<string[]>;
     getRunningVersions: Database.Statement<[]>;
     getActiveVersions: Database.Statement<[]>;
+    // Scraper options statements
+    updateVersionScraperOptions: Database.Statement<[string, string, number]>;
+    getVersionWithOptions: Database.Statement<[number]>;
+    getVersionsBySourceUrl: Database.Statement<[string]>;
   };
 
   /**
@@ -293,6 +299,16 @@ export class DocumentStore {
       ),
       getActiveVersions: this.db.prepare<[]>(
         "SELECT v.*, l.name as library_name FROM versions v JOIN libraries l ON v.library_id = l.id WHERE v.status IN ('queued', 'running', 'updating') ORDER BY v.created_at",
+      ),
+      // Scraper options statements (added for PRD-3)
+      updateVersionScraperOptions: this.db.prepare<[string, string, number]>(
+        "UPDATE versions SET source_url = ?, scraper_options = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+      ),
+      getVersionWithOptions: this.db.prepare<[number]>(
+        "SELECT * FROM versions WHERE id = ?",
+      ),
+      getVersionsBySourceUrl: this.db.prepare<[string]>(
+        "SELECT v.*, l.name as library_name FROM versions v JOIN libraries l ON v.library_id = l.id WHERE v.source_url = ? ORDER BY v.created_at DESC",
       ),
     };
     this.statements = statements;
@@ -526,6 +542,77 @@ export class DocumentStore {
       return rows;
     } catch (error) {
       throw new StoreError(`Failed to get active versions: ${error}`);
+    }
+  }
+
+  /**
+   * Stores scraper options for a version to enable reproducible indexing.
+   * @param versionId The version ID to update
+   * @param options Complete scraper options used for indexing
+   */
+  async storeScraperOptions(versionId: number, options: ScraperOptions): Promise<void> {
+    try {
+      // Extract source URL and exclude runtime-only fields using destructuring
+      const { url: source_url, library, version, signal, ...scraper_options } = options;
+
+      const optionsJson = JSON.stringify(scraper_options);
+      this.statements.updateVersionScraperOptions.run(source_url, optionsJson, versionId);
+    } catch (error) {
+      throw new StoreError(`Failed to store scraper options: ${error}`);
+    }
+  } /**
+   * Retrieves stored scraper options for a version.
+   * @param versionId The version ID to query
+   * @returns Stored scraper options or null if none stored
+   */
+  async getVersionScraperOptions(
+    versionId: number,
+  ): Promise<VersionScraperOptions | null> {
+    try {
+      const row = this.statements.getVersionWithOptions.get(versionId) as
+        | DbVersion
+        | undefined;
+
+      if (!row?.scraper_options) {
+        return null;
+      }
+
+      return JSON.parse(row.scraper_options) as VersionScraperOptions;
+    } catch (error) {
+      throw new StoreError(`Failed to get version scraper options: ${error}`);
+    }
+  }
+
+  /**
+   * Retrieves a version record with all stored options.
+   * @param versionId The version ID to query
+   * @returns Complete version record or null if not found
+   */
+  async getVersionWithStoredOptions(versionId: number): Promise<DbVersion | null> {
+    try {
+      const row = this.statements.getVersionWithOptions.get(versionId) as
+        | DbVersion
+        | undefined;
+      return row || null;
+    } catch (error) {
+      throw new StoreError(`Failed to get version with stored options: ${error}`);
+    }
+  }
+
+  /**
+   * Finds versions that were indexed from the same source URL.
+   * Useful for finding similar configurations or detecting duplicates.
+   * @param url Source URL to search for
+   * @returns Array of versions with the same source URL
+   */
+  async findVersionsBySourceUrl(url: string): Promise<DbVersionWithLibrary[]> {
+    try {
+      const rows = this.statements.getVersionsBySourceUrl.all(
+        url,
+      ) as DbVersionWithLibrary[];
+      return rows;
+    } catch (error) {
+      throw new StoreError(`Failed to find versions by source URL: ${error}`);
     }
   }
 

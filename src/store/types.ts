@@ -1,3 +1,4 @@
+import type { ScrapeMode } from "../scraper/types";
 import type { DocumentMetadata } from "../types";
 
 /** Default vector dimension used across the application */
@@ -58,12 +59,34 @@ export enum VersionStatus {
 }
 
 /**
+ * Scraper options stored with each version for reproducible indexing.
+ * Excludes runtime-only fields like signal, library, version, and url.
+ */
+export interface VersionScraperOptions {
+  // Core scraping parameters
+  maxPages?: number;
+  maxDepth?: number;
+  scope?: "subpages" | "hostname" | "domain";
+  followRedirects?: boolean;
+  maxConcurrency?: number;
+  ignoreErrors?: boolean;
+
+  // Content filtering
+  excludeSelectors?: string[];
+  includePatterns?: string[];
+  excludePatterns?: string[];
+
+  // Processing options
+  scrapeMode?: ScrapeMode;
+  headers?: Record<string, string>;
+}
+
+/**
  * Database version record type matching the versions table schema.
  * Uses snake_case naming to match database column names.
  *
- * Note: This interface now includes status tracking fields from PRD-2.
- * For backward compatibility, these fields should be optional when reading
- * existing data before migration.
+ * Note: This interface includes status tracking fields from PRD-2
+ * and scraper options fields from PRD-3.
  */
 export interface DbVersion {
   id: number;
@@ -78,6 +101,10 @@ export interface DbVersion {
   error_message: string | null;
   started_at: string | null; // When the indexing job started
   updated_at: string;
+
+  // Scraper options fields (added in migration 006)
+  source_url: string | null; // Original scraping URL
+  scraper_options: string | null; // JSON string of VersionScraperOptions
 }
 
 /**

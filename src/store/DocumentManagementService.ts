@@ -4,6 +4,7 @@ import type { Document } from "@langchain/core/documents";
 import envPaths from "env-paths";
 import Fuse from "fuse.js";
 import semver from "semver";
+import type { ScraperOptions } from "../scraper/types";
 import { GreedySplitter, SemanticMarkdownSplitter } from "../splitter";
 import type { ContentChunk, DocumentSplitter } from "../splitter/types";
 import { LibraryNotFoundError, VersionNotFoundError } from "../tools";
@@ -18,9 +19,12 @@ import { DocumentRetrieverService } from "./DocumentRetrieverService";
 import { DocumentStore } from "./DocumentStore";
 import { StoreError } from "./errors";
 import type {
+  DbVersion,
+  DbVersionWithLibrary,
   FindVersionResult,
   LibraryVersionDetails,
   StoreSearchResult,
+  VersionScraperOptions,
 } from "./types";
 
 /**
@@ -148,6 +152,36 @@ export class DocumentManagementService {
     maxPages: number,
   ): Promise<void> {
     return this.store.updateVersionProgress(versionId, pages, maxPages);
+  }
+
+  /**
+   * Stores scraper options for a version to enable reproducible indexing.
+   */
+  async storeScraperOptions(versionId: number, options: ScraperOptions): Promise<void> {
+    return this.store.storeScraperOptions(versionId, options);
+  }
+
+  /**
+   * Retrieves stored scraper options for a version.
+   */
+  async getVersionScraperOptions(
+    versionId: number,
+  ): Promise<VersionScraperOptions | null> {
+    return this.store.getVersionScraperOptions(versionId);
+  }
+
+  /**
+   * Retrieves a version record with all stored options.
+   */
+  async getVersionWithStoredOptions(versionId: number): Promise<DbVersion | null> {
+    return this.store.getVersionWithStoredOptions(versionId);
+  }
+
+  /**
+   * Finds versions that were indexed from the same source URL.
+   */
+  async findVersionsBySourceUrl(url: string): Promise<DbVersionWithLibrary[]> {
+    return this.store.findVersionsBySourceUrl(url);
   }
 
   /**

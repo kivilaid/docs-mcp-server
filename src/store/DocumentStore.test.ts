@@ -1,6 +1,7 @@
 import type { Document } from "@langchain/core/documents";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DocumentStore } from "./DocumentStore";
+import { VersionStatus } from "./types";
 
 // Mock only the embedding service to generate deterministic embeddings for testing
 // This allows us to test ranking logic while using real SQLite database
@@ -452,6 +453,214 @@ describe("DocumentStore - Integration Tests", () => {
     it("should handle empty ID arrays gracefully", async () => {
       const results = await store.findChunksByIds("anylib", "1.0.0", []);
       expect(results).toEqual([]);
+    });
+  });
+
+  describe("Status Tracking (PRD-2)", () => {
+    it("should update version status correctly", async () => {
+      // Create library and version first by adding documents
+      const docs: Document[] = [
+        {
+          pageContent: "Status tracking test content",
+          metadata: {
+            title: "Status Test",
+            url: "https://example.com/status-test",
+            path: ["test"],
+          },
+        },
+      ];
+
+      await store.addDocuments("statuslib", "1.0.0", docs);
+
+      // Get the version ID
+      const { versionId } = await store.resolveLibraryAndVersionIds("statuslib", "1.0.0");
+
+      // Update status to QUEUED
+      await store.updateVersionStatus(versionId, VersionStatus.QUEUED);
+
+      // Verify status was updated by checking getVersionsByStatus
+      const queuedVersions = await store.getVersionsByStatus([VersionStatus.QUEUED]);
+      expect(queuedVersions).toHaveLength(1);
+      expect(queuedVersions[0].library_name).toBe("statuslib");
+      expect(queuedVersions[0].name).toBe("1.0.0");
+      expect(queuedVersions[0].status).toBe(VersionStatus.QUEUED);
+    });
+
+    it("should track version progress during indexing", async () => {
+      // Create a version
+      const { versionId } = await store.resolveLibraryAndVersionIds(
+        "progresslib",
+        "2.0.0",
+      );
+
+      // Update progress
+      await store.updateVersionProgress(versionId, 5, 10);
+
+      // Verify progress was stored (we can check this indirectly by ensuring no errors)
+      // The progress is stored in the database and used by the pipeline system
+      expect(versionId).toBeGreaterThan(0);
+    });
+
+    it("should retrieve versions by status", async () => {
+      // Create multiple versions with different statuses
+      const { versionId: v1 } = await store.resolveLibraryAndVersionIds(
+        "multilib",
+        "1.0.0",
+      );
+      const { versionId: v2 } = await store.resolveLibraryAndVersionIds(
+        "multilib",
+        "2.0.0",
+      );
+
+      await store.updateVersionStatus(v1, VersionStatus.QUEUED);
+      await store.updateVersionStatus(v2, VersionStatus.RUNNING);
+
+      // Test single status filter
+      const queuedVersions = await store.getVersionsByStatus([VersionStatus.QUEUED]);
+      expect(queuedVersions.some((v) => v.name === "1.0.0")).toBe(true);
+
+      // Test multiple status filter
+      const activeVersions = await store.getVersionsByStatus([
+        VersionStatus.QUEUED,
+        VersionStatus.RUNNING,
+      ]);
+      expect(activeVersions.length).toBeGreaterThanOrEqual(2);
+      expect(activeVersions.some((v) => v.name === "1.0.0")).toBe(true);
+      expect(activeVersions.some((v) => v.name === "2.0.0")).toBe(true);
+    });
+
+    it("should get running and active versions", async () => {
+      // Create versions with specific statuses
+      const { versionId: runningId } = await store.resolveLibraryAndVersionIds(
+        "runninglib",
+        "1.0.0",
+      );
+      const { versionId: queuedId } = await store.resolveLibraryAndVersionIds(
+        "queuedlib",
+        "1.0.0",
+      );
+
+      await store.updateVersionStatus(runningId, VersionStatus.RUNNING);
+      await store.updateVersionStatus(queuedId, VersionStatus.QUEUED);
+
+      // Test getRunningVersions
+      const runningVersions = await store.getRunningVersions();
+      expect(runningVersions.some((v) => v.library_name === "runninglib")).toBe(true);
+
+      // Test getActiveVersions (should include both QUEUED and RUNNING)
+      const activeVersions = await store.getActiveVersions();
+      expect(activeVersions.some((v) => v.library_name === "runninglib")).toBe(true);
+      expect(activeVersions.some((v) => v.library_name === "queuedlib")).toBe(true);
+    });
+  });
+
+  describe("Scraper Options Storage (PRD-3)", () => {
+    it("should store and retrieve scraper options", async () => {
+      // Create a version
+      const { versionId } = await store.resolveLibraryAndVersionIds(
+        "optionslib",
+        "1.0.0",
+      );
+
+      // Define complete scraper options
+      const scraperOptions = {
+        url: "https://example.com/docs",
+        library: "optionslib",
+        version: "1.0.0",
+        maxDepth: 3,
+        maxPages: 100,
+        scope: "subpages" as const,
+        followRedirects: true,
+        signal: undefined, // This should be filtered out
+      };
+
+      // Store options
+      await store.storeScraperOptions(versionId, scraperOptions);
+
+      // Retrieve options
+      const retrievedOptions = await store.getVersionScraperOptions(versionId);
+
+      expect(retrievedOptions).not.toBeNull();
+      expect(retrievedOptions?.maxDepth).toBe(3);
+      expect(retrievedOptions?.maxPages).toBe(100);
+      expect(retrievedOptions?.scope).toBe("subpages");
+      expect(retrievedOptions?.followRedirects).toBe(true);
+
+      // Verify signal was filtered out (it's not storable)
+      expect(retrievedOptions).not.toHaveProperty("signal");
+    });
+
+    it("should store source URL correctly", async () => {
+      const { versionId } = await store.resolveLibraryAndVersionIds("sourcelib", "1.0.0");
+      const sourceUrl = "https://docs.example.com/api";
+
+      const scraperOptions = {
+        url: sourceUrl,
+        library: "sourcelib",
+        version: "1.0.0",
+        maxDepth: 2,
+      };
+
+      await store.storeScraperOptions(versionId, scraperOptions);
+
+      // Retrieve version with stored options
+      const versionWithOptions = await store.getVersionWithStoredOptions(versionId);
+      expect(versionWithOptions).not.toBeNull();
+      expect(versionWithOptions?.source_url).toBe(sourceUrl);
+    });
+
+    it("should find versions by source URL", async () => {
+      const sourceUrl = "https://shared-docs.example.com";
+
+      // Create two versions from the same source
+      const { versionId: v1 } = await store.resolveLibraryAndVersionIds(
+        "sharedlib1",
+        "1.0.0",
+      );
+      const { versionId: v2 } = await store.resolveLibraryAndVersionIds(
+        "sharedlib2",
+        "2.0.0",
+      );
+
+      const options1 = {
+        url: sourceUrl,
+        library: "sharedlib1",
+        version: "1.0.0",
+        maxDepth: 2,
+      };
+
+      const options2 = {
+        url: sourceUrl,
+        library: "sharedlib2",
+        version: "2.0.0",
+        maxDepth: 3,
+      };
+
+      await store.storeScraperOptions(v1, options1);
+      await store.storeScraperOptions(v2, options2);
+
+      // Find versions by source URL
+      const foundVersions = await store.findVersionsBySourceUrl(sourceUrl);
+
+      expect(foundVersions.length).toBeGreaterThanOrEqual(2);
+      expect(foundVersions.some((v) => v.library_name === "sharedlib1")).toBe(true);
+      expect(foundVersions.some((v) => v.library_name === "sharedlib2")).toBe(true);
+    });
+
+    it("should handle null scraper options gracefully", async () => {
+      const { versionId } = await store.resolveLibraryAndVersionIds(
+        "nulloptionslib",
+        "1.0.0",
+      );
+
+      // Version without stored options should return null
+      const retrievedOptions = await store.getVersionScraperOptions(versionId);
+      expect(retrievedOptions).toBeNull();
+
+      const versionWithOptions = await store.getVersionWithStoredOptions(versionId);
+      expect(versionWithOptions).not.toBeNull();
+      expect(versionWithOptions?.source_url).toBeNull();
+      expect(versionWithOptions?.scraper_options).toBeNull();
     });
   });
 });

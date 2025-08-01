@@ -43,6 +43,22 @@ export class PipelineWorker {
 
           // Update job object directly (manager holds the reference)
           job.progress = progress;
+
+          // Update database progress for persistent tracking
+          try {
+            const versionId = await this.store.ensureLibraryAndVersion(library, version);
+            await this.store.updateVersionProgress(
+              versionId,
+              progress.pagesScraped,
+              progress.maxPages,
+            );
+          } catch (progressError) {
+            // Log but don't fail the job for progress update errors
+            logger.warn(
+              `⚠️ [${jobId}] Failed to update progress in database: ${progressError}`,
+            );
+          }
+
           // Report progress via manager's callback
           await callbacks.onJobProgress?.(job, progress);
 

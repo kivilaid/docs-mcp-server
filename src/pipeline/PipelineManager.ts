@@ -227,6 +227,51 @@ export class PipelineManager {
   }
 
   /**
+   * Enqueues a job using stored scraper options from a previous indexing run.
+   * If no stored options are found, throws an error.
+   */
+  async enqueueJobWithStoredOptions(
+    library: string,
+    version: string | undefined | null,
+  ): Promise<string> {
+    const normalizedVersion = version ?? "";
+
+    try {
+      // Get the version ID to retrieve stored options
+      const versionId = await this.store.ensureLibraryAndVersion(
+        library,
+        normalizedVersion,
+      );
+      const versionRecord = await this.store.getVersionWithStoredOptions(versionId);
+
+      if (!versionRecord?.scraper_options || !versionRecord.source_url) {
+        throw new Error(
+          `No stored scraper options found for ${library}@${normalizedVersion || "unversioned"}`,
+        );
+      }
+
+      const storedOptions = JSON.parse(versionRecord.scraper_options);
+
+      // Reconstruct complete scraper options
+      const completeOptions: ScraperOptions = {
+        url: versionRecord.source_url,
+        library,
+        version: normalizedVersion,
+        ...storedOptions,
+      };
+
+      logger.info(
+        `🔄 Re-indexing ${library}@${normalizedVersion || "unversioned"} with stored options from ${versionRecord.source_url}`,
+      );
+
+      return this.enqueueJob(library, normalizedVersion, completeOptions);
+    } catch (error) {
+      logger.error(`❌ Failed to enqueue job with stored options: ${error}`);
+      throw error;
+    }
+  }
+
+  /**
    * Retrieves the current state of a specific job.
    */
   async getJob(jobId: string): Promise<PipelineJob | undefined> {
@@ -495,6 +540,21 @@ export class PipelineManager {
 
       const dbStatus = this.mapJobStatusToVersionStatus(newStatus);
       await this.store.updateVersionStatus(versionId, dbStatus, errorMessage);
+
+      // Store scraper options when job is first queued
+      if (newStatus === PipelineJobStatus.QUEUED) {
+        try {
+          await this.store.storeScraperOptions(versionId, job.options);
+          logger.debug(
+            `💾 Stored scraper options for ${job.library}@${job.version}: ${job.options.url}`,
+          );
+        } catch (optionsError) {
+          // Log warning but don't fail the job - options storage is not critical
+          logger.warn(
+            `⚠️ Failed to store scraper options for job ${job.id}: ${optionsError}`,
+          );
+        }
+      }
     } catch (error) {
       logger.error(`❌ Failed to update database status for job ${job.id}: ${error}`);
       // Don't throw - we don't want to break the pipeline for database issues
