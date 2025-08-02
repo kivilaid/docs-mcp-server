@@ -1,5 +1,5 @@
 import * as cheerio from "cheerio"; // Import cheerio
-import { type Mock, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, type Mock, vi } from "vitest";
 import { logger } from "../../utils/logger";
 import type { ScraperOptions } from "../types";
 import { HtmlSanitizerMiddleware } from "./HtmlSanitizerMiddleware";

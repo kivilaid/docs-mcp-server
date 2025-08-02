@@ -1,7 +1,5 @@
-import { type Mock, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, type Mock, vi } from "vitest";
 import type { DocumentManagementService } from "../store/DocumentManagementService";
-import type { LibraryVersionDetails } from "../store/types"; // Import the new type
-import { logger } from "../utils/logger"; // Assuming logger might be used internally, mock it just in case
 import { ListLibrariesTool } from "./ListLibrariesTool";
 
 // Mock dependencies

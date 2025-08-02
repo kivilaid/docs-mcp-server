@@ -1,5 +1,3 @@
-import { promises as fs } from "node:fs";
-import * as path from "node:path";
 import { vol } from "memfs";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ScraperError } from "../../utils/errors";

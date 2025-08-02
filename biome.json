@@ -3,7 +3,7 @@
   "formatter": {
     "enabled": true,
     "formatWithErrors": false,
-    "ignore": [],
+    "includes": ["**"],
     "attributePosition": "auto",
     "indentStyle": "space",
     "indentWidth": 2,
@@ -11,11 +11,11 @@
     "lineEnding": "lf"
   },
   "files": {
-    "include": ["src/**/*.ts"]
+    "includes": ["**/src/**/*.ts"]
   },
   "overrides": [
     {
-      "include": ["src/**/*.test.ts"],
+      "includes": ["**/src/**/*.test.ts"],
       "linter": {
         "rules": {
           "style": {

@@ -1,9 +1,9 @@
 import * as cheerio from "cheerio";
-import { type MockedObject, afterAll, afterEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, describe, expect, it, type MockedObject, vi } from "vitest";
 import type { ScraperOptions } from "../types";
 import {
-  HtmlPlaywrightMiddleware,
   extractCredentialsAndOrigin,
+  HtmlPlaywrightMiddleware,
   mergePlaywrightHeaders,
 } from "./HtmlPlaywrightMiddleware";
 import type { MiddlewareContext } from "./types"; // Adjusted path
@@ -22,7 +22,7 @@ vi.mock("jsdom", async (importOriginal) => {
   return { ...actual };
 });
 
-import { type Browser, type Page, chromium } from "playwright";
+import { type Browser, chromium, type Page } from "playwright";
 
 // Helper to create a minimal valid ScraperOptions object
 const createMockScraperOptions = (

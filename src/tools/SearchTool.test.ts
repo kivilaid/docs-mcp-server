@@ -1,10 +1,8 @@
-import { type Mock, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, type Mock, vi } from "vitest";
 import type { DocumentManagementService } from "../store";
-import type { StoreSearchResult } from "../store/types";
-import type { LibraryVersionDetails } from "../store/types";
-import { logger } from "../utils/logger";
-import { SearchTool, type SearchToolOptions } from "./SearchTool";
+import type { LibraryVersionDetails, StoreSearchResult } from "../store/types";
 import { LibraryNotFoundError, VersionNotFoundError } from "./errors";
+import { SearchTool, type SearchToolOptions } from "./SearchTool";
 
 // Mock dependencies
 vi.mock("../store");

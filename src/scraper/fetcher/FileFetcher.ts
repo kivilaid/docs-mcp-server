@@ -2,7 +2,6 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import * as mime from "mime-types";
 import { ScraperError } from "../../utils/errors";
-import { logger } from "../../utils/logger";
 import type { ContentFetcher, FetchOptions, RawContent } from "./types";
 
 /**
@@ -17,7 +16,7 @@ export class FileFetcher implements ContentFetcher {
    * Fetches the content of a file given a file:// URL, decoding percent-encoded paths as needed.
    * Only HTML and Markdown files are processed.
    */
-  async fetch(source: string, options?: FetchOptions): Promise<RawContent> {
+  async fetch(source: string, _options?: FetchOptions): Promise<RawContent> {
     // Always decode the file path from file:// URL
     const rawPath = source.replace("file://", "");
     const filePath = decodeURIComponent(rawPath);

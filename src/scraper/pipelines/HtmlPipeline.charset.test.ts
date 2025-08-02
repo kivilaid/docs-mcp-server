@@ -1,6 +1,6 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { HttpFetcher } from "../fetcher/HttpFetcher";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { RawContent } from "../fetcher/types";
+import { ScrapeMode } from "../types";
 import { HtmlPipeline } from "./HtmlPipeline";
 
 // Mock logger
@@ -53,7 +53,7 @@ describe("HtmlPipeline charset integration", () => {
       scope: "subpages",
       followRedirects: true,
       ignoreErrors: false,
-      scrapeMode: "fetch",
+      scrapeMode: ScrapeMode.Fetch,
     });
 
     // Should correctly decode the content using meta charset, not HTTP charset
@@ -94,7 +94,7 @@ describe("HtmlPipeline charset integration", () => {
       scope: "subpages",
       followRedirects: true,
       ignoreErrors: false,
-      scrapeMode: "fetch",
+      scrapeMode: ScrapeMode.Fetch,
     });
 
     // Should correctly decode using HTTP charset
@@ -133,7 +133,7 @@ describe("HtmlPipeline charset integration", () => {
       scope: "subpages",
       followRedirects: true,
       ignoreErrors: false,
-      scrapeMode: "fetch",
+      scrapeMode: ScrapeMode.Fetch,
     });
 
     expect(result.textContent).toContain("Simple ASCII content only");

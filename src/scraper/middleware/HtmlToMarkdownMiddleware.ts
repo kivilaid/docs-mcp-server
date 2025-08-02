@@ -31,7 +31,7 @@ export class HtmlToMarkdownMiddleware implements ContentProcessorMiddleware {
     // Preserve code blocks and syntax (replicated from HtmlProcessor)
     this.turndownService.addRule("pre", {
       filter: ["pre"],
-      replacement: (content, node) => {
+      replacement: (_content, node) => {
         const element = node as unknown as HTMLElement;
         let language = element.getAttribute("data-language") || "";
         if (!language) {

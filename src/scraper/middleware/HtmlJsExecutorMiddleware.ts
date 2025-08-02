@@ -1,4 +1,3 @@
-import { createJSDOM } from "../../utils/dom";
 import { logger } from "../../utils/logger";
 import type { FetchOptions, RawContent } from "../fetcher/types";
 import { executeJsInSandbox } from "../utils/sandbox";

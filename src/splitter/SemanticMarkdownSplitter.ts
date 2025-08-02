@@ -1,4 +1,3 @@
-import { JSDOM } from "jsdom";
 import { RecursiveCharacterTextSplitter } from "langchain/text_splitter";
 import remarkGfm from "remark-gfm";
 import remarkHtml from "remark-html";
@@ -58,7 +57,7 @@ export class SemanticMarkdownSplitter implements DocumentSplitter {
     // Add table rule to preserve markdown table format
     this.turndownService.addRule("table", {
       filter: ["table"],
-      replacement: (content, node) => {
+      replacement: (_content, node) => {
         const table = node as HTMLTableElement;
         const headers = Array.from(table.querySelectorAll("th")).map(
           (th) => th.textContent?.trim() || "",

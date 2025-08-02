@@ -41,7 +41,7 @@ export class ClearCompletedJobsTool {
    * @param input - The input parameters (currently unused).
    * @returns A promise that resolves with the outcome of the clear operation.
    */
-  async execute(input: ClearCompletedJobsInput): Promise<ClearCompletedJobsResult> {
+  async execute(_input: ClearCompletedJobsInput): Promise<ClearCompletedJobsResult> {
     try {
       const clearedCount = await this.manager.clearCompletedJobs();
 

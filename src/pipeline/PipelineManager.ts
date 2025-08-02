@@ -4,8 +4,8 @@ import type { ScraperOptions, ScraperProgress } from "../scraper/types";
 import type { DocumentManagementService } from "../store";
 import { VersionStatus } from "../store/types";
 import { logger } from "../utils/logger";
-import { PipelineWorker } from "./PipelineWorker"; // Import the worker
 import { CancellationError, PipelineStateError } from "./errors";
+import { PipelineWorker } from "./PipelineWorker"; // Import the worker
 import type { PipelineJob, PipelineManagerCallbacks } from "./types";
 import { PipelineJobStatus } from "./types";
 

@@ -1,14 +1,13 @@
 // Copyright (c) 2025
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { RawContent } from "../fetcher/types";
-import { ScrapeMode, type ScraperOptions } from "../types";
-import { HtmlPipeline } from "./HtmlPipeline";
-
 import { HtmlCheerioParserMiddleware } from "../middleware/HtmlCheerioParserMiddleware";
 import { HtmlLinkExtractorMiddleware } from "../middleware/HtmlLinkExtractorMiddleware";
 import { HtmlMetadataExtractorMiddleware } from "../middleware/HtmlMetadataExtractorMiddleware";
 import { HtmlSanitizerMiddleware } from "../middleware/HtmlSanitizerMiddleware";
 import { HtmlToMarkdownMiddleware } from "../middleware/HtmlToMarkdownMiddleware";
+import { ScrapeMode, type ScraperOptions } from "../types";
+import { HtmlPipeline } from "./HtmlPipeline";
 
 describe("HtmlPipeline", () => {
   beforeEach(() => {

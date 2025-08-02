@@ -28,7 +28,7 @@ export class HtmlLinkExtractorMiddleware implements ContentProcessorMiddleware {
       logger.debug(`Found ${linkElements.length} potential links in ${context.source}`);
 
       const extractedLinks: string[] = [];
-      linkElements.each((index, element) => {
+      linkElements.each((_index, element) => {
         const href = $(element).attr("href");
         if (href && href.trim() !== "") {
           try {
@@ -38,7 +38,7 @@ export class HtmlLinkExtractorMiddleware implements ContentProcessorMiddleware {
               return;
             }
             extractedLinks.push(urlObj.href);
-          } catch (e) {
+          } catch (_e) {
             logger.debug(`Ignoring invalid URL syntax: ${href}`);
           }
         }

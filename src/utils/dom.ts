@@ -1,5 +1,5 @@
-import { JSDOM, VirtualConsole } from "jsdom";
 import type { ConstructorOptions } from "jsdom";
+import { JSDOM, VirtualConsole } from "jsdom";
 
 /**
  * Creates a JSDOM instance with a pre-configured virtual console to suppress console noise.

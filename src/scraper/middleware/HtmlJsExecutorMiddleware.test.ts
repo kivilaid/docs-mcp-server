@@ -1,16 +1,15 @@
-import type { DOMWindow } from "jsdom";
 import {
-  type Mock,
-  type MockedObject,
   beforeEach,
   describe,
   expect,
   it,
+  type Mock,
+  type MockedObject,
   vi,
 } from "vitest";
 import type { ContentFetcher, RawContent } from "../fetcher/types";
-import { executeJsInSandbox } from "../utils/sandbox";
 import type { SandboxExecutionOptions, SandboxExecutionResult } from "../utils/sandbox";
+import { executeJsInSandbox } from "../utils/sandbox";
 import { HtmlJsExecutorMiddleware } from "./HtmlJsExecutorMiddleware";
 import type { MiddlewareContext } from "./types";
 

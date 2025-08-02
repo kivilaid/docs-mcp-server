@@ -1,9 +1,9 @@
-import { type Mock, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { ProgressCallback } from "../types";
 import { ScraperError } from "../utils/errors";
 import type { ScraperRegistry } from "./ScraperRegistry";
 import { ScraperService } from "./ScraperService";
-import type { ScraperOptions, ScraperProgress, ScraperStrategy } from "./types";
+import type { ScraperOptions, ScraperProgress } from "./types";
 
 vi.mock("../utils/logger");
 

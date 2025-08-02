@@ -1,5 +1,4 @@
-import type { RawContent } from "../fetcher/types";
-import type { ContentFetcher } from "../fetcher/types";
+import type { ContentFetcher, RawContent } from "../fetcher/types";
 import type { ScraperOptions } from "../types";
 
 /**
