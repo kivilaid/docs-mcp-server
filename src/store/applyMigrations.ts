@@ -43,10 +43,6 @@ function getAppliedMigrations(db: Database): Set<string> {
  * @throws {StoreError} If any migration fails.
  */
 export async function applyMigrations(db: Database): Promise<void> {
-  // Store original settings for restoration
-  const originalJournalMode = db.pragma("journal_mode", { simple: true }) as string;
-  const originalSynchronous = db.pragma("synchronous", { simple: true }) as number;
-
   // Apply performance optimizations for large dataset migrations
   try {
     db.pragma("journal_mode = OFF");
@@ -151,12 +147,27 @@ export async function applyMigrations(db: Database): Promise<void> {
     }
   }
 
-  // Restore original settings
+  // Configure production-ready settings after migrations
   try {
-    db.pragma(`journal_mode = ${originalJournalMode}`);
-    db.pragma(`synchronous = ${originalSynchronous}`);
-    logger.debug("Restored original database settings after migration");
+    // Enable WAL mode for better concurrency (allows readers while writing)
+    db.pragma("journal_mode = WAL");
+
+    // Configure WAL autocheckpoint to prevent unbounded growth
+    db.pragma("wal_autocheckpoint = 1000"); // Checkpoint every 1000 pages (~4MB)
+
+    // Set busy timeout for better handling of concurrent access
+    db.pragma("busy_timeout = 30000"); // 30 seconds
+
+    // Enable foreign key constraints for data integrity
+    db.pragma("foreign_keys = ON");
+
+    // Set synchronous to NORMAL for good balance of safety and performance
+    db.pragma("synchronous = NORMAL");
+
+    logger.debug(
+      "Applied production database configuration (WAL mode, autocheckpoint, foreign keys, busy timeout)",
+    );
   } catch (_error) {
-    logger.warn("⚠️ Could not restore all original database settings");
+    logger.warn("⚠️ Could not apply all production database settings");
   }
 }
