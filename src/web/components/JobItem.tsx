@@ -45,7 +45,7 @@ const JobItem = ({ job }: JobItemProps) => {
           </div>
 
           {/* Progress bar for active jobs */}
-          {job.progress && job.progress.maxPages > 0 && isActiveJob ? (
+          {job.progress && job.progress.totalPages > 0 && isActiveJob ? (
             <div class="mt-2">
               <ProgressBar progress={job.progress} />
             </div>

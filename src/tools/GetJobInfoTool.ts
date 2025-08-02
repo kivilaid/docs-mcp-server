@@ -26,7 +26,8 @@ export interface JobInfo {
   // Progress information from database
   progress?: {
     pages: number;
-    maxPages: number;
+    totalPages: number;
+    totalDiscovered: number;
   };
   // Additional database fields
   updatedAt?: string;
@@ -82,7 +83,8 @@ export class GetJobInfoTool {
         job.progressMaxPages && job.progressMaxPages > 0
           ? {
               pages: job.progressPages || 0,
-              maxPages: job.progressMaxPages,
+              totalPages: job.progressMaxPages,
+              totalDiscovered: job.progress?.totalDiscovered || job.progressMaxPages,
             }
           : undefined,
       updatedAt: job.updatedAt?.toISOString(),

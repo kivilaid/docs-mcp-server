@@ -333,7 +333,11 @@ describe("PipelineManager", () => {
       const uiJob = result.jobs.find((j: any) => j.id === jobId);
 
       expect(uiJob).toBeDefined();
-      expect(uiJob!.progress).toEqual({ pages: 75, maxPages: 200 });
+      expect(uiJob!.progress).toEqual({
+        pages: 75,
+        totalPages: 200,
+        totalDiscovered: 200,
+      });
     });
 
     it("should handle sequential progress updates correctly", async () => {
@@ -347,13 +351,21 @@ describe("PipelineManager", () => {
       await manager.updateJobProgress(job, createTestProgress(25, 100));
       let result = await listJobsTool.execute({});
       let uiJob = result.jobs.find((j: any) => j.id === jobId);
-      expect(uiJob!.progress).toEqual({ pages: 25, maxPages: 100 });
+      expect(uiJob!.progress).toEqual({
+        pages: 25,
+        totalPages: 100,
+        totalDiscovered: 100,
+      });
 
       // Second update
       await manager.updateJobProgress(job, createTestProgress(75, 100));
       result = await listJobsTool.execute({});
       uiJob = result.jobs.find((j: any) => j.id === jobId);
-      expect(uiJob!.progress).toEqual({ pages: 75, maxPages: 100 });
+      expect(uiJob!.progress).toEqual({
+        pages: 75,
+        totalPages: 100,
+        totalDiscovered: 100,
+      });
 
       // Verify database was called for each update
       expect(mockStore.updateVersionProgress).toHaveBeenCalledTimes(2);

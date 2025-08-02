@@ -1,6 +1,7 @@
 import { URL } from "node:url";
 import { CancellationError } from "../../pipeline/errors";
 import type { Document, ProgressCallback } from "../../types";
+import { DEFAULT_MAX_PAGES } from "../../utils/config";
 import { logger } from "../../utils/logger";
 import { normalizeUrl, type UrlNormalizerOptions } from "../../utils/url";
 import type { ScraperOptions, ScraperProgress, ScraperStrategy } from "../types";
@@ -8,7 +9,6 @@ import { shouldIncludeUrl } from "../utils/patternMatcher";
 import { isInScope } from "../utils/scope";
 
 // Define defaults for optional options
-const DEFAULT_MAX_PAGES = 100;
 const DEFAULT_MAX_DEPTH = 3;
 const DEFAULT_CONCURRENCY = 3;
 
@@ -24,7 +24,8 @@ export interface BaseScraperStrategyOptions {
 export abstract class BaseScraperStrategy implements ScraperStrategy {
   protected visited = new Set<string>();
   protected pageCount = 0;
-  protected totalDiscovered = 0; // Track total URLs discovered
+  protected totalDiscovered = 0; // Track total URLs discovered (unlimited)
+  protected effectiveTotal = 0; // Track effective total (limited by maxPages)
 
   abstract canHandle(url: string): boolean;
 
@@ -75,6 +76,7 @@ export abstract class BaseScraperStrategy implements ScraperStrategy {
     progressCallback: ProgressCallback<ScraperProgress>,
     signal?: AbortSignal, // Add signal
   ): Promise<QueueItem[]> {
+    const maxPages = options.maxPages ?? DEFAULT_MAX_PAGES;
     const results = await Promise.all(
       batch.map(async (item) => {
         // Check signal before processing each item in the batch
@@ -95,11 +97,12 @@ export abstract class BaseScraperStrategy implements ScraperStrategy {
             this.pageCount++;
             // maxDepth already resolved above
             logger.info(
-              `🌐 Scraping page ${this.pageCount}/${this.totalDiscovered} (depth ${item.depth}/${maxDepth}): ${item.url}`,
+              `🌐 Scraping page ${this.pageCount}/${this.effectiveTotal} (depth ${item.depth}/${maxDepth}): ${item.url}`,
             );
             await progressCallback({
               pagesScraped: this.pageCount,
-              totalPages: this.totalDiscovered,
+              totalPages: this.effectiveTotal,
+              totalDiscovered: this.totalDiscovered,
               currentUrl: item.url,
               depth: item.depth,
               maxDepth: maxDepth,
@@ -147,7 +150,14 @@ export abstract class BaseScraperStrategy implements ScraperStrategy {
       if (!this.visited.has(normalizedUrl)) {
         this.visited.add(normalizedUrl);
         uniqueLinks.push(item);
-        this.totalDiscovered++; // Increment for each new URL discovered
+
+        // Always increment the unlimited counter
+        this.totalDiscovered++;
+
+        // Only increment effective total if we haven't exceeded maxPages
+        if (this.effectiveTotal < maxPages) {
+          this.effectiveTotal++;
+        }
       }
     }
 
@@ -161,7 +171,8 @@ export abstract class BaseScraperStrategy implements ScraperStrategy {
   ): Promise<void> {
     this.visited.clear();
     this.pageCount = 0;
-    this.totalDiscovered = 1; // Start with the initial URL
+    this.totalDiscovered = 1; // Start with the initial URL (unlimited counter)
+    this.effectiveTotal = 1; // Start with the initial URL (limited counter)
 
     const baseUrl = new URL(options.url);
     const queue = [{ url: options.url, depth: 0 } satisfies QueueItem];
