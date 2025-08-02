@@ -154,7 +154,7 @@ async function main() {
       manager.setCallbacks({
         onJobProgress: async (job, progress) => {
           logger.debug(
-            `📊 Job ${job.id} progress: ${progress.pagesScraped}/${progress.maxPages} pages`,
+            `📊 Job ${job.id} progress: ${progress.pagesScraped}/${progress.totalPages} pages`,
           );
           // Use manager as single source of truth for progress updates
           await manager.updateJobProgress(job, progress);

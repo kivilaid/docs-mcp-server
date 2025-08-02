@@ -88,7 +88,7 @@ export interface ScrapedPage {
  */
 export interface ScraperProgress {
   pagesScraped: number;
-  maxPages: number;
+  totalPages: number; // Total pages discovered (processed + remaining in queue)
   currentUrl: string;
   depth: number;
   maxDepth: number;

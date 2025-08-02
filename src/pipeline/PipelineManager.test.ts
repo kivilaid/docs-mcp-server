@@ -64,10 +64,10 @@ describe("PipelineManager", () => {
   // Helper to create progress data
   const createTestProgress = (
     pagesScraped: number,
-    maxPages: number,
+    totalPages: number,
   ): ScraperProgress => ({
     pagesScraped,
-    maxPages,
+    totalPages,
     currentUrl: `https://example.com/page-${pagesScraped}`,
     depth: 1,
     maxDepth: 3,

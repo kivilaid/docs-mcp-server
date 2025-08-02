@@ -1,12 +1,13 @@
 /**
  * ProgressBar component displays indexing progress.
- * Shows pages processed out of total pages with visual progress bar.
+ * Shows pages processed out of total discovered pages with visual progress bar.
+ * The progress reflects actual queue-based progress: processed vs. discovered pages.
  */
 
 interface ProgressBarProps {
   progress: {
     pages: number;
-    maxPages: number;
+    maxPages: number; // Now represents total discovered pages, not the configured limit
   };
   showText?: boolean;
 }

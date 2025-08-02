@@ -24,6 +24,7 @@ export interface BaseScraperStrategyOptions {
 export abstract class BaseScraperStrategy implements ScraperStrategy {
   protected visited = new Set<string>();
   protected pageCount = 0;
+  protected totalDiscovered = 0; // Track total URLs discovered
 
   abstract canHandle(url: string): boolean;
 
@@ -92,15 +93,13 @@ export abstract class BaseScraperStrategy implements ScraperStrategy {
 
           if (result.document) {
             this.pageCount++;
-            // Resolve defaults for logging and progress callback
-            const maxPages = options.maxPages ?? DEFAULT_MAX_PAGES;
             // maxDepth already resolved above
             logger.info(
-              `🌐 Scraping page ${this.pageCount}/${maxPages} (depth ${item.depth}/${maxDepth}): ${item.url}`,
+              `🌐 Scraping page ${this.pageCount}/${this.totalDiscovered} (depth ${item.depth}/${maxDepth}): ${item.url}`,
             );
             await progressCallback({
               pagesScraped: this.pageCount,
-              maxPages: maxPages,
+              totalPages: this.totalDiscovered,
               currentUrl: item.url,
               depth: item.depth,
               maxDepth: maxDepth,
@@ -148,6 +147,7 @@ export abstract class BaseScraperStrategy implements ScraperStrategy {
       if (!this.visited.has(normalizedUrl)) {
         this.visited.add(normalizedUrl);
         uniqueLinks.push(item);
+        this.totalDiscovered++; // Increment for each new URL discovered
       }
     }
 
@@ -161,6 +161,7 @@ export abstract class BaseScraperStrategy implements ScraperStrategy {
   ): Promise<void> {
     this.visited.clear();
     this.pageCount = 0;
+    this.totalDiscovered = 1; // Start with the initial URL
 
     const baseUrl = new URL(options.url);
     const queue = [{ url: options.url, depth: 0 } satisfies QueueItem];

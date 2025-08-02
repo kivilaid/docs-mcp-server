@@ -99,7 +99,7 @@ describe("PipelineWorker", () => {
       async (_options, progressCallback, _signal) => {
         const progress1: ScraperProgress = {
           pagesScraped: 1,
-          maxPages: 2,
+          totalPages: 2,
           currentUrl: "url1",
           depth: 1,
           maxDepth: 1,
@@ -109,7 +109,7 @@ describe("PipelineWorker", () => {
 
         const progress2: ScraperProgress = {
           pagesScraped: 2,
-          maxPages: 2,
+          totalPages: 2,
           currentUrl: "url2",
           depth: 1,
           maxDepth: 1,
@@ -184,7 +184,7 @@ describe("PipelineWorker", () => {
       async (_options, progressCallback, _signal) => {
         const progress: ScraperProgress = {
           pagesScraped: 1,
-          maxPages: 1,
+          totalPages: 1,
           currentUrl: "url1",
           depth: 1,
           maxDepth: 1,
@@ -222,7 +222,7 @@ describe("PipelineWorker", () => {
       async (_options, progressCallback, _signal) => {
         const progress: ScraperProgress = {
           pagesScraped: 1,
-          maxPages: 2,
+          totalPages: 2,
           currentUrl: "url1",
           depth: 1,
           maxDepth: 1,
