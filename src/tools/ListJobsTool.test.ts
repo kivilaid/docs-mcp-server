@@ -51,7 +51,7 @@ describe("ListJobsTool", () => {
       options: { library: "lib-b", version: "2.0.0", url: "url2" } as ScraperOptions,
       progress: {
         pagesScraped: 5,
-        maxPages: 100,
+        totalPages: 100,
         currentUrl: "url2/page5",
         depth: 1,
         maxDepth: 3,
@@ -83,7 +83,7 @@ describe("ListJobsTool", () => {
       options: { library: "lib-a", version: "1.1.0", url: "url3" } as ScraperOptions,
       progress: {
         pagesScraped: 10,
-        maxPages: 10,
+        totalPages: 10,
         currentUrl: "url3/page10",
         depth: 2,
         maxDepth: 2,

@@ -46,7 +46,8 @@ describe("BaseScraperStrategy", () => {
     expect(strategy.processItem).toHaveBeenCalledTimes(1);
     expect(progressCallback).toHaveBeenCalledWith({
       pagesScraped: 1,
-      maxPages: 1,
+      totalPages: 1,
+      totalDiscovered: 1,
       currentUrl: "https://example.com/",
       depth: 0,
       maxDepth: 1,

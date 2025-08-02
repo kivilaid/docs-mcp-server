@@ -617,7 +617,7 @@ export class PipelineManager {
     // Update in-memory progress
     job.progress = progress;
     job.progressPages = progress.pagesScraped;
-    job.progressMaxPages = progress.maxPages;
+    job.progressMaxPages = progress.totalPages;
     job.updatedAt = new Date();
 
     // Update database progress if we have a version ID
@@ -626,7 +626,7 @@ export class PipelineManager {
         await this.store.updateVersionProgress(
           job.versionId,
           progress.pagesScraped,
-          progress.maxPages,
+          progress.totalPages,
         );
       } catch (error) {
         logger.error(`❌ Failed to update database progress for job ${job.id}: ${error}`);

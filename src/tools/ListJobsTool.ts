@@ -56,7 +56,8 @@ export class ListJobsTool {
           job.progressMaxPages && job.progressMaxPages > 0
             ? {
                 pages: job.progressPages || 0,
-                maxPages: job.progressMaxPages,
+                totalPages: job.progressMaxPages,
+                totalDiscovered: job.progress?.totalDiscovered || job.progressMaxPages,
               }
             : undefined,
         updatedAt: job.updatedAt?.toISOString(),

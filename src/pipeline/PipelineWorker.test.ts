@@ -99,21 +99,23 @@ describe("PipelineWorker", () => {
       async (_options, progressCallback, _signal) => {
         const progress1: ScraperProgress = {
           pagesScraped: 1,
-          maxPages: 2,
+          totalPages: 2,
           currentUrl: "url1",
           depth: 1,
           maxDepth: 1,
           document: mockDoc1,
+          totalDiscovered: 0,
         };
         await progressCallback(progress1);
 
         const progress2: ScraperProgress = {
           pagesScraped: 2,
-          maxPages: 2,
+          totalPages: 2,
           currentUrl: "url2",
           depth: 1,
           maxDepth: 1,
           document: mockDoc2,
+          totalDiscovered: 0,
         };
         await progressCallback(progress2);
       },
@@ -184,11 +186,12 @@ describe("PipelineWorker", () => {
       async (_options, progressCallback, _signal) => {
         const progress: ScraperProgress = {
           pagesScraped: 1,
-          maxPages: 1,
+          totalPages: 1,
           currentUrl: "url1",
           depth: 1,
           maxDepth: 1,
           document: mockDoc,
+          totalDiscovered: 0,
         };
         await progressCallback(progress);
       },
@@ -222,11 +225,12 @@ describe("PipelineWorker", () => {
       async (_options, progressCallback, _signal) => {
         const progress: ScraperProgress = {
           pagesScraped: 1,
-          maxPages: 2,
+          totalPages: 2,
           currentUrl: "url1",
           depth: 1,
           maxDepth: 1,
           document: mockDoc,
+          totalDiscovered: 0,
         };
         // Simulate cancellation happening *before* progress is processed by worker
         abortController.abort();

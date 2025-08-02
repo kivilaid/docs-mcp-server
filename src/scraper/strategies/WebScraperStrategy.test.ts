@@ -435,7 +435,7 @@ describe("WebScraperStrategy", () => {
     // Check structure of a progress call with a document
     expect(callsWithDocs[0][0]).toMatchObject({
       pagesScraped: expect.any(Number),
-      maxPages: options.maxPages,
+      totalPages: expect.any(Number),
       currentUrl: expect.any(String),
       depth: expect.any(Number),
       maxDepth: options.maxDepth,

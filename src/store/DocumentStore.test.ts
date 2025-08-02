@@ -663,4 +663,160 @@ describe("DocumentStore - Integration Tests", () => {
       expect(versionWithOptions?.scraper_options).toBeNull();
     });
   });
+
+  describe("Document URL pre-deletion", () => {
+    /**
+     * Helper function to count documents in the database directly
+     */
+    async function countDocuments(
+      library: string,
+      version: string,
+      url?: string,
+    ): Promise<number> {
+      const normalizedLib = library.toLowerCase();
+      const normalizedVer = version.toLowerCase();
+
+      let query = `
+        SELECT COUNT(*) as count
+        FROM documents d
+        JOIN versions v ON d.version_id = v.id  
+        JOIN libraries l ON v.library_id = l.id
+        WHERE l.name = ? AND COALESCE(v.name, '') = COALESCE(?, '')
+      `;
+
+      const params: any[] = [normalizedLib, normalizedVer];
+
+      if (url) {
+        query += " AND d.url = ?";
+        params.push(url);
+      }
+
+      // Access the internal database connection
+      const result = (store as any).db.prepare(query).get(...params) as { count: number };
+      return result.count;
+    }
+
+    it("should delete existing documents for the same URL before adding new ones", async () => {
+      const library = "url-update-test";
+      const version = "1.0.0";
+      const url = "https://example.com/test-page";
+      const differentUrl = "https://example.com/different-page";
+
+      // Step 1: Add initial documents
+      const initialDocs: Document[] = [
+        {
+          pageContent: "Initial content chunk 1",
+          metadata: { url, title: "Initial Test Page", path: ["section1"] },
+        },
+        {
+          pageContent: "Initial content chunk 2",
+          metadata: { url, title: "Initial Test Page", path: ["section2"] },
+        },
+        {
+          pageContent: "Different URL content",
+          metadata: { url: differentUrl, title: "Different Page", path: ["section1"] },
+        },
+      ];
+
+      await store.addDocuments(library, version, initialDocs);
+
+      // Verify initial state using direct database queries
+      expect(await countDocuments(library, version)).toBe(3); // Total documents
+      expect(await countDocuments(library, version, url)).toBe(2); // Documents for target URL
+      expect(await countDocuments(library, version, differentUrl)).toBe(1); // Documents for different URL
+
+      // Step 2: Add updated documents for the same URL (should trigger pre-deletion)
+      const updatedDocs: Document[] = [
+        {
+          pageContent: "Updated content chunk 1",
+          metadata: { url, title: "Updated Test Page", path: ["updated-section1"] },
+        },
+        {
+          pageContent: "Updated content chunk 2",
+          metadata: { url, title: "Updated Test Page", path: ["updated-section2"] },
+        },
+        {
+          pageContent: "Updated content chunk 3",
+          metadata: { url, title: "Updated Test Page", path: ["updated-section3"] },
+        },
+      ];
+
+      await store.addDocuments(library, version, updatedDocs);
+
+      // Verify final state using direct database queries
+      expect(await countDocuments(library, version)).toBe(4); // 3 updated + 1 different URL
+      expect(await countDocuments(library, version, url)).toBe(3); // Updated documents for target URL
+      expect(await countDocuments(library, version, differentUrl)).toBe(1); // Different URL unchanged
+    });
+
+    it("should handle multiple URLs in the same addDocuments call", async () => {
+      const library = "multi-url-test";
+      const version = "1.0.0";
+      const url1 = "https://example.com/page1";
+      const url2 = "https://example.com/page2";
+
+      // Add initial documents for both URLs
+      const initialDocs: Document[] = [
+        {
+          pageContent: "Page 1 initial content",
+          metadata: { url: url1, title: "Page 1 Initial", path: ["section1"] },
+        },
+        {
+          pageContent: "Page 2 initial content",
+          metadata: { url: url2, title: "Page 2 Initial", path: ["section1"] },
+        },
+      ];
+
+      await store.addDocuments(library, version, initialDocs);
+
+      // Verify initial state
+      expect(await countDocuments(library, version)).toBe(2);
+      expect(await countDocuments(library, version, url1)).toBe(1);
+      expect(await countDocuments(library, version, url2)).toBe(1);
+
+      // Update both URLs in a single call
+      const updatedDocs: Document[] = [
+        {
+          pageContent: "Page 1 updated content chunk 1",
+          metadata: { url: url1, title: "Page 1 Updated", path: ["section1"] },
+        },
+        {
+          pageContent: "Page 1 updated content chunk 2",
+          metadata: { url: url1, title: "Page 1 Updated", path: ["section2"] },
+        },
+        {
+          pageContent: "Page 2 updated content",
+          metadata: { url: url2, title: "Page 2 Updated", path: ["section1"] },
+        },
+      ];
+
+      await store.addDocuments(library, version, updatedDocs);
+
+      // Verify final state using direct database queries
+      expect(await countDocuments(library, version)).toBe(3); // 2 for url1 + 1 for url2
+      expect(await countDocuments(library, version, url1)).toBe(2);
+      expect(await countDocuments(library, version, url2)).toBe(1);
+    });
+
+    it("should work correctly when no existing documents exist for the URL", async () => {
+      const library = "new-url-test";
+      const version = "1.0.0";
+      const url = "https://example.com/brand-new-page";
+
+      // Add documents for a URL that doesn't exist yet
+      const newDocs: Document[] = [
+        {
+          pageContent: "Brand new content",
+          metadata: { url, title: "Brand New Page", path: ["section1"] },
+        },
+      ];
+
+      // This should succeed without errors
+      await expect(store.addDocuments(library, version, newDocs)).resolves.not.toThrow();
+
+      // Verify the document was added using direct database query
+      expect(await countDocuments(library, version)).toBe(1);
+      expect(await countDocuments(library, version, url)).toBe(1);
+    });
+  });
 });

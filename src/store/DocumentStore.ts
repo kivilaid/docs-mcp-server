@@ -6,6 +6,7 @@ import * as sqliteVec from "sqlite-vec";
 import type { ScraperOptions } from "../scraper/types";
 import type { DocumentMetadata } from "../types";
 import { EMBEDDING_BATCH_SIZE } from "../utils/config";
+import { logger } from "../utils/logger";
 import { applyMigrations } from "./applyMigrations";
 import { ConnectionError, DimensionError, StoreError } from "./errors";
 import {
@@ -51,6 +52,7 @@ export class DocumentStore {
     >;
     insertEmbedding: Database.Statement<[bigint, bigint, bigint, string]>;
     deleteDocuments: Database.Statement<[string, string, string]>;
+    deleteDocumentsByUrl: Database.Statement<[string, string, string, string]>;
     queryVersions: Database.Statement<[string]>;
     checkExists: Database.Statement<[string, string]>;
     queryLibraryVersions: Database.Statement<[]>;
@@ -185,6 +187,16 @@ export class DocumentStore {
       deleteDocuments: this.db.prepare<[string, string, string]>(
         `DELETE FROM documents
          WHERE library_id = (SELECT id FROM libraries WHERE name = ?)
+         AND version_id = (
+           SELECT v.id FROM versions v 
+           WHERE v.library_id = (SELECT id FROM libraries WHERE name = ?)
+           AND COALESCE(v.name, '') = COALESCE(?, '')
+         )`,
+      ),
+      deleteDocumentsByUrl: this.db.prepare<[string, string, string, string]>(
+        `DELETE FROM documents
+         WHERE url = ?
+         AND library_id = (SELECT id FROM libraries WHERE name = ?)
          AND version_id = (
            SELECT v.id FROM versions v 
            WHERE v.library_id = (SELECT id FROM libraries WHERE name = ?)
@@ -682,7 +694,8 @@ export class DocumentStore {
 
   /**
    * Stores documents with library and version metadata, generating embeddings
-   * for vector similarity search
+   * for vector similarity search. Automatically removes any existing documents
+   * for the same URLs before adding new ones to prevent UNIQUE constraint violations.
    */
   async addDocuments(
     library: string,
@@ -690,6 +703,20 @@ export class DocumentStore {
     documents: Document[],
   ): Promise<void> {
     try {
+      if (documents.length === 0) {
+        return;
+      }
+
+      // Extract unique URLs from the documents being added
+      const urls = new Set<string>();
+      for (const doc of documents) {
+        const url = doc.metadata.url as string;
+        if (!url || typeof url !== "string" || !url.trim()) {
+          throw new StoreError("Document metadata must include a valid URL");
+        }
+        urls.add(url);
+      }
+
       // Generate embeddings in batch
       const texts = documents.map((doc) => {
         const header = `<title>${doc.metadata.title}</title>\n<url>${doc.metadata.url}</url>\n<path>${doc.metadata.path.join(" / ")}</path>\n`;
@@ -705,20 +732,26 @@ export class DocumentStore {
       }
       const paddedEmbeddings = rawEmbeddings.map((vector) => this.padVector(vector));
 
-      // Resolve library and version IDs
+      // Resolve library and version IDs (creates them if they don't exist)
       const { libraryId, versionId } = await this.resolveLibraryAndVersionIds(
         library,
         version,
       );
+
+      // Delete existing documents for these URLs to prevent UNIQUE constraint violations
+      // This must happen AFTER resolveLibraryAndVersionIds to ensure the library/version exist
+      for (const url of urls) {
+        const deletedCount = await this.deleteDocumentsByUrl(library, version, url);
+        if (deletedCount > 0) {
+          logger.debug(`🗑️ Deleted ${deletedCount} existing documents for URL: ${url}`);
+        }
+      }
 
       // Insert documents in a transaction
       const transaction = this.db.transaction((docs: typeof documents) => {
         for (let i = 0; i < docs.length; i++) {
           const doc = docs[i];
           const url = doc.metadata.url as string;
-          if (!url || typeof url !== "string" || !url.trim()) {
-            throw new StoreError("Document metadata must include a valid URL");
-          }
 
           // Insert into main documents table using foreign key IDs
           const result = this.statements.insertDocument.run(
@@ -763,6 +796,29 @@ export class DocumentStore {
       return result.changes;
     } catch (error) {
       throw new ConnectionError("Failed to delete documents", error);
+    }
+  }
+
+  /**
+   * Removes documents for a specific URL within a library and version
+   * @returns Number of documents deleted
+   */
+  async deleteDocumentsByUrl(
+    library: string,
+    version: string,
+    url: string,
+  ): Promise<number> {
+    try {
+      const normalizedVersion = version.toLowerCase();
+      const result = this.statements.deleteDocumentsByUrl.run(
+        url,
+        library.toLowerCase(),
+        library.toLowerCase(), // library name appears twice in the query
+        normalizedVersion,
+      );
+      return result.changes;
+    } catch (error) {
+      throw new ConnectionError("Failed to delete documents by URL", error);
     }
   }
 
