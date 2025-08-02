@@ -5,6 +5,7 @@ vi.mock("axios");
 vi.mock("../../utils/logger");
 
 import axios from "axios";
+
 const mockedAxios = vi.mocked(axios, true);
 
 import { HttpFetcher } from "./HttpFetcher";

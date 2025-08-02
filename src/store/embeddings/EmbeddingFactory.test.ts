@@ -4,9 +4,9 @@ import { VertexAIEmbeddings } from "@langchain/google-vertexai";
 import { OpenAIEmbeddings } from "@langchain/openai";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import {
+  createEmbeddingModel,
   ModelConfigurationError,
   UnsupportedProviderError,
-  createEmbeddingModel,
 } from "./EmbeddingFactory";
 import { FixedDimensionEmbeddings } from "./FixedDimensionEmbeddings";
 

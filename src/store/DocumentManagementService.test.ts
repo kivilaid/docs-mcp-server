@@ -60,7 +60,6 @@ vi.mock("./DocumentStore", () => {
   return { DocumentStore: MockDocumentStore };
 });
 
-import { existsSync } from "node:fs";
 import { getProjectRoot } from "../utils/paths";
 // Import the mocked constructor AFTER vi.mock
 import { DocumentManagementService } from "./DocumentManagementService";
@@ -142,7 +141,7 @@ describe("DocumentManagementService", () => {
       mockEnvPathsFn.mockReturnValue(mockEnvPaths);
 
       // Instantiate LOCALLY for this specific test
-      const localDocService = new DocumentManagementService();
+      const _localDocService = new DocumentManagementService();
 
       // Verify DocumentStore was called with the standard path
       expect(vi.mocked(DocumentStore)).toHaveBeenCalledWith(expectedStandardDbPath);
@@ -163,7 +162,7 @@ describe("DocumentManagementService", () => {
         // (vol.reset() in beforeEach should handle this)
 
         // Instantiate LOCALLY for this specific test
-        const localDocService = new DocumentManagementService();
+        const _localDocService = new DocumentManagementService();
 
         // Verify DocumentStore was called with the env var path
         expect(vi.mocked(DocumentStore)).toHaveBeenCalledWith(expectedEnvDbPath);

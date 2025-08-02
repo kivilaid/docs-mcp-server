@@ -2,7 +2,6 @@ import * as semver from "semver";
 import type { PipelineManager } from "../pipeline/PipelineManager";
 import { ScrapeMode } from "../scraper/types";
 import type { DocumentManagementService } from "../store/DocumentManagementService";
-import type { ProgressResponse } from "../types";
 import {
   DEFAULT_MAX_CONCURRENCY,
   DEFAULT_MAX_DEPTH,

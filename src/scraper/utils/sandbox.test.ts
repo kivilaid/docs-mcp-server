@@ -1,5 +1,5 @@
 import { JSDOM } from "jsdom"; // Import JSDOM for mocking
-import { type Mock, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { logger } from "../../utils/logger";
 import { executeJsInSandbox } from "./sandbox";
 
@@ -21,7 +21,7 @@ describe("executeJsInSandbox", () => {
     vi.clearAllMocks();
     // Provide a default minimal implementation for JSDOM mock if needed for other tests
     vi.mocked(JSDOM).mockImplementation(
-      (html, options) =>
+      (html, _options) =>
         ({
           window: {
             document: {

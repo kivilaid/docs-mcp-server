@@ -1,11 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { convertToString } from "./buffer";
-import {
-  CHARSET_ALIASES,
-  detectCharsetFromHtml,
-  normalizeCharset,
-  resolveCharset,
-} from "./charset";
+import { detectCharsetFromHtml, normalizeCharset, resolveCharset } from "./charset";
 
 describe("charset detection edge cases", () => {
   describe("detectCharsetFromHtml", () => {

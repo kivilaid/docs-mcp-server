@@ -21,7 +21,7 @@ export class ListLibrariesTool {
     this.docService = docService;
   }
 
-  async execute(options?: Record<string, never>): Promise<ListLibrariesResult> {
+  async execute(_options?: Record<string, never>): Promise<ListLibrariesResult> {
     // docService.listLibraries() now returns the detailed structure directly
     const rawLibraries = await this.docService.listLibraries();
 

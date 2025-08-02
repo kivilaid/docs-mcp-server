@@ -2,6 +2,7 @@ import { vol } from "memfs";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ScraperOptions } from "../types";
 import { LocalFileStrategy } from "./LocalFileStrategy";
+
 vi.mock("node:fs/promises", () => ({ default: vol.promises }));
 vi.mock("../../utils/logger");
 vi.mock("node:fs");

@@ -8,19 +8,18 @@ import type { DocumentMetadata } from "../types";
 import { EMBEDDING_BATCH_SIZE } from "../utils/config";
 import { applyMigrations } from "./applyMigrations";
 import { ConnectionError, DimensionError, StoreError } from "./errors";
-import { VECTOR_DIMENSION } from "./types";
 import {
   type DbDocument,
   type DbQueryResult,
   type DbVersion,
   type DbVersionWithLibrary,
-  type LibraryVersionDetails,
-  type VersionScraperOptions,
-  type VersionStatus,
-  type VersionWithStats,
   denormalizeVersionName,
+  type LibraryVersionDetails,
   mapDbDocumentToDocument,
   normalizeVersionName,
+  VECTOR_DIMENSION,
+  type VersionScraperOptions,
+  type VersionStatus,
 } from "./types";
 
 interface RawSearchResult extends DbDocument {
@@ -439,20 +438,6 @@ export class DocumentStore {
   }
 
   /**
-   * Gets the version name for a given version_id.
-   * Returns empty string for NULL version names (unversioned).
-   */
-  private async getVersionName(versionId: number): Promise<string> {
-    const versionRow = this.statements.getVersionById.get(versionId) as
-      | DbVersion
-      | undefined;
-    if (!versionRow) {
-      throw new StoreError(`Version with ID ${versionId} not found`);
-    }
-    return normalizeVersionName(versionRow.name);
-  }
-
-  /**
    * Retrieves all unique versions for a specific library
    */
   async queryUniqueVersions(library: string): Promise<string[]> {
@@ -552,7 +537,7 @@ export class DocumentStore {
    */
   async storeScraperOptions(versionId: number, options: ScraperOptions): Promise<void> {
     try {
-      // Extract source URL and exclude runtime-only fields using destructuring
+      // biome-ignore lint/correctness/noUnusedVariables: Extract source URL and exclude runtime-only fields using destructuring
       const { url: source_url, library, version, signal, ...scraper_options } = options;
 
       const optionsJson = JSON.stringify(scraper_options);
@@ -682,7 +667,7 @@ export class DocumentStore {
           // Both are non-empty, use semver compare with fallback to string compare
           try {
             return semver.compare(a.version, b.version);
-          } catch (error) {
+          } catch (_error) {
             // Fallback to lexicographic comparison if semver parsing fails
             return a.version.localeCompare(b.version);
           }

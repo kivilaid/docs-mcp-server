@@ -1,4 +1,4 @@
-import { type Mock, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Document } from "../../types";
 import type { ScraperOptions } from "../types";
 import { ScrapeMode } from "../types"; // Import ScrapeMode

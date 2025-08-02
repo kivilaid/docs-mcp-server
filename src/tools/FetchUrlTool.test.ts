@@ -2,8 +2,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { FileFetcher, HttpFetcher } from "../scraper/fetcher";
 import { ScraperError } from "../utils/errors";
 import { logger } from "../utils/logger";
-import { FetchUrlTool, type FetchUrlToolOptions } from "./FetchUrlTool";
 import { ToolError } from "./errors";
+import { FetchUrlTool, type FetchUrlToolOptions } from "./FetchUrlTool";
 
 // Mock dependencies
 vi.mock("../utils/logger");

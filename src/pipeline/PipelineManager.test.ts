@@ -14,7 +14,7 @@ vi.mock("uuid", () => {
   };
 });
 
-import { type Mock, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from "vitest";
 import type { ScraperProgress } from "../scraper/types";
 import type { DocumentManagementService } from "../store/DocumentManagementService";
 import { ListJobsTool } from "../tools/ListJobsTool";

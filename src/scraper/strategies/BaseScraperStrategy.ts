@@ -2,7 +2,7 @@ import { URL } from "node:url";
 import { CancellationError } from "../../pipeline/errors";
 import type { Document, ProgressCallback } from "../../types";
 import { logger } from "../../utils/logger";
-import { type UrlNormalizerOptions, normalizeUrl } from "../../utils/url";
+import { normalizeUrl, type UrlNormalizerOptions } from "../../utils/url";
 import type { ScraperOptions, ScraperProgress, ScraperStrategy } from "../types";
 import { shouldIncludeUrl } from "../utils/patternMatcher";
 import { isInScope } from "../utils/scope";
@@ -121,7 +121,7 @@ export abstract class BaseScraperStrategy implements ScraperStrategy {
                   url: targetUrl.href,
                   depth: item.depth + 1,
                 } satisfies QueueItem;
-              } catch (error) {
+              } catch (_error) {
                 // Invalid URL or path
                 logger.warn(`❌ Invalid URL: ${value}`);
               }

@@ -5,7 +5,7 @@ import type { DocumentManagementService } from "../store/DocumentManagementServi
 import { logger } from "../utils/logger";
 import { startHttpServer } from "./startHttpServer";
 import { startStdioServer } from "./startStdioServer";
-import { type McpServerTools, initializeTools } from "./tools";
+import { initializeTools, type McpServerTools } from "./tools";
 
 // Variables to hold server instances for cleanup
 let runningServer: McpServer | null = null;

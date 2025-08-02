@@ -1,4 +1,4 @@
-import { type Browser, type BrowserContext, type Page, chromium } from "playwright";
+import { type Browser, type BrowserContext, chromium, type Page } from "playwright";
 import { DEFAULT_PAGE_TIMEOUT } from "../../utils/config";
 import { logger } from "../../utils/logger";
 import { ScrapeMode } from "../types";

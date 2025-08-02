@@ -52,10 +52,10 @@ describe("DocumentRetrieverService (consolidated logic)", () => {
       async () => [],
     );
     vi.spyOn(mockDocumentStore, "findChildChunks").mockImplementation(
-      async (lib, ver, id) => (id === "doc1" ? [doc2] : []),
+      async (_lib, _ver, id) => (id === "doc1" ? [doc2] : []),
     );
     vi.spyOn(mockDocumentStore, "findSubsequentSiblingChunks").mockImplementation(
-      async (lib, ver, id) => (id === "doc1" ? [doc2] : []),
+      async (_lib, _ver, id) => (id === "doc1" ? [doc2] : []),
     );
     const findChunksByIdsSpy = vi
       .spyOn(mockDocumentStore, "findChunksByIds")
@@ -147,7 +147,7 @@ describe("DocumentRetrieverService (consolidated logic)", () => {
     vi.spyOn(mockDocumentStore, "findChildChunks").mockResolvedValue([]);
     vi.spyOn(mockDocumentStore, "findSubsequentSiblingChunks").mockResolvedValue([]);
     vi.spyOn(mockDocumentStore, "findChunksByIds").mockImplementation(
-      async (lib, ver, ids) => {
+      async (_lib, _ver, ids) => {
         if (ids.includes("a1")) return [docA];
         if (ids.includes("b1")) return [docB];
         return [];

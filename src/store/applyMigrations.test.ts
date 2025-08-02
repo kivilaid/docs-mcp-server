@@ -116,7 +116,7 @@ describe("Database Migrations", () => {
       .prepare("SELECT id FROM versions WHERE library_id = ? AND name = ?")
       .get(emptyLibraryId, "1.0.0") as { id: number } | undefined;
     expect(versionResult).toBeDefined();
-    const versionId = versionResult!.id;
+    const _versionId = versionResult!.id;
 
     // Search for vectors in empty library with k constraint
     const searchVector = new Array(1536).fill(0.5);

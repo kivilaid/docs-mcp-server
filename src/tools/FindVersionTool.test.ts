@@ -1,9 +1,9 @@
-import { type Mock, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, type Mock, vi } from "vitest";
 import type { DocumentManagementService } from "../store";
 import type { LibraryVersionDetails } from "../store/types"; // Use import type
 import { logger } from "../utils/logger";
-import { FindVersionTool, type FindVersionToolOptions } from "./FindVersionTool";
 import { VersionNotFoundError } from "./errors";
+import { FindVersionTool, type FindVersionToolOptions } from "./FindVersionTool";
 
 // Mock dependencies
 vi.mock("../store"); // Mock the entire store module if DocumentManagementService is complex

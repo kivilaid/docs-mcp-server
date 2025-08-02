@@ -55,7 +55,7 @@ export async function applyMigrations(db: Database): Promise<void> {
     db.pragma("cache_size = -64000"); // 64MB cache (default is ~2MB)
     db.pragma("temp_store = MEMORY"); // Store temporary data in memory
     logger.debug("Applied performance optimizations for migration");
-  } catch (error) {
+  } catch (_error) {
     logger.warn("⚠️ Could not apply all performance optimizations for migration");
   }
 
@@ -156,7 +156,7 @@ export async function applyMigrations(db: Database): Promise<void> {
     db.pragma(`journal_mode = ${originalJournalMode}`);
     db.pragma(`synchronous = ${originalSynchronous}`);
     logger.debug("Restored original database settings after migration");
-  } catch (error) {
+  } catch (_error) {
     logger.warn("⚠️ Could not restore all original database settings");
   }
 }

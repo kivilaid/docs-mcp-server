@@ -1,6 +1,5 @@
 import { MimeTypeUtils } from "../../utils/mimeTypeUtils";
-import type { RawContent } from "../fetcher/types";
-import type { ContentFetcher } from "../fetcher/types";
+import type { ContentFetcher, RawContent } from "../fetcher/types";
 import { HtmlSanitizerMiddleware } from "../middleware";
 import { HtmlCheerioParserMiddleware } from "../middleware/HtmlCheerioParserMiddleware";
 import { HtmlLinkExtractorMiddleware } from "../middleware/HtmlLinkExtractorMiddleware";

@@ -1,3 +1,3 @@
+export * from "./errors";
 export * from "./PipelineManager";
 export * from "./PipelineWorker";
-export * from "./errors";

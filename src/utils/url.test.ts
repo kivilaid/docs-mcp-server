@@ -1,11 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import {
-  type UrlNormalizerOptions,
-  hasSameDomain,
-  hasSameHostname,
-  isSubpath,
-  normalizeUrl,
-} from "./url";
+import { hasSameDomain, hasSameHostname, isSubpath, normalizeUrl } from "./url";
 
 vi.mock("./logger");
 

@@ -1,11 +1,10 @@
 // Copyright (c) 2025
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { RawContent } from "../fetcher/types";
-import { ScrapeMode, type ScraperOptions } from "../types";
-import { MarkdownPipeline } from "./MarkdownPipeline";
-
 import { MarkdownLinkExtractorMiddleware } from "../middleware/MarkdownLinkExtractorMiddleware";
 import { MarkdownMetadataExtractorMiddleware } from "../middleware/MarkdownMetadataExtractorMiddleware";
+import { ScrapeMode, type ScraperOptions } from "../types";
+import { MarkdownPipeline } from "./MarkdownPipeline";
 
 describe("MarkdownPipeline", () => {
   beforeEach(() => {

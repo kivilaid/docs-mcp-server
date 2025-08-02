@@ -1,9 +1,9 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { MockedObject } from "vitest"; // Import MockedObject
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { PipelineManager } from "../pipeline/PipelineManager";
 import type { DocumentManagementService } from "../store";
-import { RemoveTool, type RemoveToolArgs } from "./RemoveTool";
 import { ToolError } from "./errors";
+import { RemoveTool, type RemoveToolArgs } from "./RemoveTool";
 
 // Mock dependencies
 vi.mock("../store");
@@ -14,12 +14,6 @@ const mockDocService = {
   removeAllDocuments: vi.fn(),
   // Add other methods used by DocumentManagementService if needed, mocking them with vi.fn()
 } as MockedObject<DocumentManagementService>;
-
-// Minimal PipelineManager mock type for RemoveTool tests
-type PipelineManagerMock = Pick<
-  PipelineManager,
-  "findJobsByLibraryVersion" | "cancelJob" | "waitForJobCompletion"
->;
 
 // Create pipeline manager mock
 const mockPipelineManager = {
