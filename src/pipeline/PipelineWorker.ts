@@ -42,13 +42,11 @@ export class PipelineWorker {
           }
 
           // Update job object directly (manager holds the reference)
-          job.progress = progress;
-          // Report progress via manager's callback
+          // Report progress via manager's callback (single source of truth)
           await callbacks.onJobProgress?.(job, progress);
 
           if (progress.document) {
             try {
-              // TODO: Pass signal to store.addDocument if it supports it
               await this.store.addDocument(library, version, {
                 pageContent: progress.document.content,
                 metadata: progress.document.metadata,

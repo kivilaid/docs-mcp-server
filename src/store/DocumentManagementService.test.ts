@@ -39,6 +39,18 @@ const mockStore = {
     .mockResolvedValue(new Map<string, LibraryVersionDetails[]>()), // Add mock implementation
   addDocuments: vi.fn(),
   deleteDocuments: vi.fn(),
+  // Status tracking methods
+  updateVersionStatus: vi.fn(),
+  updateVersionProgress: vi.fn(),
+  getVersionsByStatus: vi.fn(),
+  getRunningVersions: vi.fn(),
+  getActiveVersions: vi.fn(),
+  // Scraper options methods
+  storeScraperOptions: vi.fn(),
+  getVersionScraperOptions: vi.fn(),
+  getVersionWithStoredOptions: vi.fn(),
+  findVersionsBySourceUrl: vi.fn(),
+  resolveLibraryAndVersionIds: vi.fn(),
 };
 
 // Mock the DocumentStore module
@@ -310,11 +322,7 @@ describe("DocumentManagementService", () => {
         mockStore.queryUniqueVersions.mockResolvedValue(["1.0.0", "1.1.0", "1.2.0"]); // Fix: Use mockStoreInstance
 
         const versions = await docService.listVersions(library);
-        expect(versions).toEqual([
-          { version: "1.0.0" },
-          { version: "1.1.0" },
-          { version: "1.2.0" },
-        ]);
+        expect(versions).toEqual(["1.0.0", "1.1.0", "1.2.0"]);
         expect(mockStore.queryUniqueVersions).toHaveBeenCalledWith(library); // Fix: Use mockStoreInstance
       });
 
@@ -330,11 +338,7 @@ describe("DocumentManagementService", () => {
         ]);
 
         const versions = await docService.listVersions(library);
-        expect(versions).toEqual([
-          { version: "1.0.0" },
-          { version: "2.0.0-beta" },
-          { version: "2.0.0" },
-        ]);
+        expect(versions).toEqual(["1.0.0", "2.0.0-beta", "2.0.0"]);
         expect(mockStore.queryUniqueVersions).toHaveBeenCalledWith(library); // Fix: Use mockStoreInstance
       });
     });
@@ -781,6 +785,114 @@ describe("DocumentManagementService", () => {
         // Verify the mocks were called with the LOWERCASE name
         expect(mockStore.queryUniqueVersions).toHaveBeenCalledWith(libraryLower);
         expect(mockStore.checkDocumentExists).toHaveBeenCalledWith(libraryLower, "");
+      });
+    });
+
+    describe("Pipeline Integration Methods", () => {
+      it("should delegate status tracking to store", async () => {
+        const versionId = 123;
+        const status = "queued";
+        const errorMessage = "Test error";
+
+        // Test updateVersionStatus
+        await docService.updateVersionStatus(versionId, status as any, errorMessage);
+        expect(mockStore.updateVersionStatus).toHaveBeenCalledWith(
+          versionId,
+          status,
+          errorMessage,
+        );
+
+        // Test updateVersionProgress
+        await docService.updateVersionProgress(versionId, 5, 10);
+        expect(mockStore.updateVersionProgress).toHaveBeenCalledWith(versionId, 5, 10);
+
+        // Test getVersionsByStatus
+        mockStore.getVersionsByStatus.mockResolvedValue([]);
+        await docService.getVersionsByStatus(["queued"] as any);
+        expect(mockStore.getVersionsByStatus).toHaveBeenCalledWith(["queued"]);
+
+        // Test getRunningVersions
+        mockStore.getRunningVersions.mockResolvedValue([]);
+        await docService.getRunningVersions();
+        expect(mockStore.getRunningVersions).toHaveBeenCalled();
+
+        // Test getActiveVersions
+        mockStore.getActiveVersions.mockResolvedValue([]);
+        await docService.getActiveVersions();
+        expect(mockStore.getActiveVersions).toHaveBeenCalled();
+      });
+
+      it("should delegate scraper options storage to store", async () => {
+        const versionId = 456;
+        const scraperOptions = {
+          url: "https://example.com",
+          library: "testlib",
+          version: "1.0.0",
+          maxDepth: 3,
+          maxPages: 100,
+        };
+
+        // Test storeScraperOptions
+        await docService.storeScraperOptions(versionId, scraperOptions);
+        expect(mockStore.storeScraperOptions).toHaveBeenCalledWith(
+          versionId,
+          scraperOptions,
+        );
+
+        // Test getVersionScraperOptions
+        mockStore.getVersionScraperOptions.mockResolvedValue(null);
+        await docService.getVersionScraperOptions(versionId);
+        expect(mockStore.getVersionScraperOptions).toHaveBeenCalledWith(versionId);
+
+        // Test getVersionWithStoredOptions
+        mockStore.getVersionWithStoredOptions.mockResolvedValue(null);
+        await docService.getVersionWithStoredOptions(versionId);
+        expect(mockStore.getVersionWithStoredOptions).toHaveBeenCalledWith(versionId);
+
+        // Test findVersionsBySourceUrl
+        const sourceUrl = "https://docs.example.com";
+        mockStore.findVersionsBySourceUrl.mockResolvedValue([]);
+        await docService.findVersionsBySourceUrl(sourceUrl);
+        expect(mockStore.findVersionsBySourceUrl).toHaveBeenCalledWith(sourceUrl);
+      });
+
+      it("should ensure library and version creation", async () => {
+        const library = "NewLib";
+        const version = "2.0.0";
+        const expectedVersionId = 789;
+
+        // Mock the store method
+        mockStore.resolveLibraryAndVersionIds.mockResolvedValue({
+          libraryId: 123,
+          versionId: expectedVersionId,
+        });
+
+        const result = await docService.ensureLibraryAndVersion(library, version);
+
+        // Should normalize library name to lowercase and version
+        expect(mockStore.resolveLibraryAndVersionIds).toHaveBeenCalledWith(
+          "newlib",
+          "2.0.0",
+        );
+        expect(result).toBe(expectedVersionId);
+      });
+
+      it("should handle version normalization in scraper methods", async () => {
+        const versionId = 999;
+        const versionWithNullName = { id: versionId, name: null, library_id: 1 };
+        const versionWithEmptyName = { id: versionId, name: "", library_id: 1 };
+
+        mockStore.getVersionWithStoredOptions
+          .mockResolvedValueOnce(versionWithNullName as any)
+          .mockResolvedValueOnce(versionWithEmptyName as any);
+
+        // Test that both null and empty version names are handled
+        const result1 = await docService.getVersionWithStoredOptions(versionId);
+        const result2 = await docService.getVersionWithStoredOptions(versionId);
+
+        expect(result1).toEqual(versionWithNullName);
+        expect(result2).toEqual(versionWithEmptyName);
+        expect(mockStore.getVersionWithStoredOptions).toHaveBeenCalledTimes(2);
       });
     });
   }); // Closing brace for describe("Core Functionality", ...)

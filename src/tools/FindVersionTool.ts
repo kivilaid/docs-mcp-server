@@ -24,7 +24,7 @@ export class FindVersionTool {
    */
   async execute(options: FindVersionToolOptions): Promise<string> {
     const { library, targetVersion } = options;
-    const targetVersionString = targetVersion ? `@${targetVersion}` : "";
+    const libraryAndVersion = `${library}${targetVersion ? `@${targetVersion}` : ""}`;
 
     try {
       const { bestMatch, hasUnversioned } = await this.docService.findBestVersion(
@@ -39,18 +39,18 @@ export class FindVersionTool {
           message += " Unversioned docs also available.";
         }
       } else if (hasUnversioned) {
-        message = `No matching version found for ${library}${targetVersionString}, but unversioned docs exist.`;
+        message = `No matching version found for ${libraryAndVersion}, but unversioned docs exist.`;
       } else {
         // This case should ideally be caught by VersionNotFoundError below,
         // but added for completeness.
-        message = `No matching version or unversioned documents found for ${library}${targetVersionString}.`;
+        message = `No matching version or unversioned documents found for ${libraryAndVersion}.`;
       }
       return message;
     } catch (error) {
       if (error instanceof VersionNotFoundError) {
         // This error is thrown when no semver versions AND no unversioned docs exist.
         logger.info(`ℹ️ Version not found: ${error.message}`);
-        return `No matching version or unversioned documents found for ${library}${targetVersionString}. Available: ${
+        return `No matching version or unversioned documents found for ${libraryAndVersion}. Available: ${
           error.availableVersions.length > 0
             ? error.availableVersions.map((v) => v.version).join(", ")
             : "None"
@@ -58,7 +58,7 @@ export class FindVersionTool {
       }
       // Re-throw unexpected errors
       logger.error(
-        `❌ Error finding version for ${library}${targetVersionString}: ${error instanceof Error ? error.message : error}`,
+        `❌ Error finding version for ${libraryAndVersion}: ${error instanceof Error ? error.message : error}`,
       );
       throw error;
     }

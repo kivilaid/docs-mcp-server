@@ -21,19 +21,27 @@ type PipelineManagerMock = Pick<
   "findJobsByLibraryVersion" | "cancelJob" | "waitForJobCompletion"
 >;
 
+// Create pipeline manager mock
+const mockPipelineManager = {
+  findJobsByLibraryVersion: vi.fn(),
+  cancelJob: vi.fn(),
+  waitForJobCompletion: vi.fn(),
+} as unknown as PipelineManager;
+
 describe("RemoveTool", () => {
   let removeTool: RemoveTool;
 
   beforeEach(() => {
     // Reset mocks before each test
     vi.resetAllMocks(); // Resets all mocks, including those on mockDocService
-    removeTool = new RemoveTool(mockDocService); // Pass the typed mock
+    removeTool = new RemoveTool(mockDocService, mockPipelineManager); // Pass both mocks
   });
 
   it("should call removeAllDocuments with library and version", async () => {
     const args: RemoveToolArgs = { library: "react", version: "18.2.0" };
-    // Now TypeScript knows mockDocService.removeAllDocuments is a mock function
+    // Setup mocks
     mockDocService.removeAllDocuments.mockResolvedValue(undefined);
+    (mockPipelineManager.findJobsByLibraryVersion as any).mockReturnValue([]);
 
     const result = await removeTool.execute(args);
 
@@ -46,7 +54,9 @@ describe("RemoveTool", () => {
 
   it("should call removeAllDocuments with library and undefined version for unversioned", async () => {
     const args: RemoveToolArgs = { library: "lodash" };
+    // Setup mocks
     mockDocService.removeAllDocuments.mockResolvedValue(undefined);
+    (mockPipelineManager.findJobsByLibraryVersion as any).mockReturnValue([]);
 
     const result = await removeTool.execute(args);
 
@@ -59,7 +69,9 @@ describe("RemoveTool", () => {
 
   it("should handle empty string version as unversioned", async () => {
     const args: RemoveToolArgs = { library: "moment", version: "" };
+    // Setup mocks
     mockDocService.removeAllDocuments.mockResolvedValue(undefined);
+    (mockPipelineManager.findJobsByLibraryVersion as any).mockReturnValue([]);
 
     const result = await removeTool.execute(args);
 
@@ -73,7 +85,9 @@ describe("RemoveTool", () => {
   it("should throw ToolError if removeAllDocuments fails", async () => {
     const args: RemoveToolArgs = { library: "vue", version: "3.0.0" };
     const testError = new Error("Database connection failed");
+    // Setup mocks
     mockDocService.removeAllDocuments.mockRejectedValue(testError);
+    (mockPipelineManager.findJobsByLibraryVersion as any).mockReturnValue([]);
 
     // Use try-catch to ensure the mock call check happens even after rejection
     try {
@@ -91,7 +105,9 @@ describe("RemoveTool", () => {
   it("should throw ToolError with correct message for unversioned failure", async () => {
     const args: RemoveToolArgs = { library: "angular" };
     const testError = new Error("Filesystem error");
+    // Setup mocks
     mockDocService.removeAllDocuments.mockRejectedValue(testError);
+    (mockPipelineManager.findJobsByLibraryVersion as any).mockReturnValue([]);
 
     // Use try-catch to ensure the mock call check happens even after rejection
     try {

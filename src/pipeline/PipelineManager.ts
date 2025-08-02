@@ -1,7 +1,8 @@
 import { v4 as uuidv4 } from "uuid";
 import { ScraperRegistry, ScraperService } from "../scraper";
-import type { ScraperOptions } from "../scraper/types";
+import type { ScraperOptions, ScraperProgress } from "../scraper/types";
 import type { DocumentManagementService } from "../store";
+import { VersionStatus } from "../store/types";
 import { logger } from "../utils/logger";
 import { PipelineWorker } from "./PipelineWorker"; // Import the worker
 import { CancellationError, PipelineStateError } from "./errors";
@@ -51,7 +52,102 @@ export class PipelineManager {
     }
     this.isRunning = true;
     logger.debug(`PipelineManager started with concurrency ${this.concurrency}.`);
-    this._processQueue(); // Start processing any existing jobs
+
+    // Recover pending jobs from database on startup
+    await this.recoverPendingJobs();
+
+    this._processQueue().catch((error) => {
+      logger.error(`❌ Error in processQueue during start: ${error}`);
+    }); // Start processing any existing jobs
+  }
+
+  /**
+   * Recovers pending jobs from the database after server restart.
+   * Finds versions with RUNNING status and resets them to QUEUED for re-processing.
+   * Also loads all QUEUED versions back into the pipeline queue.
+   */
+  async recoverPendingJobs(): Promise<void> {
+    try {
+      // Reset RUNNING jobs to QUEUED (they were interrupted by server restart)
+      const runningVersions = await this.store.getRunningVersions();
+      for (const version of runningVersions) {
+        await this.store.updateVersionStatus(version.id, VersionStatus.QUEUED);
+        logger.info(
+          `🔄 Reset interrupted job to QUEUED: ${version.library_name}@${version.name || "unversioned"}`,
+        );
+      }
+
+      // Load all QUEUED versions back into pipeline
+      const queuedVersions = await this.store.getVersionsByStatus([VersionStatus.QUEUED]);
+      for (const version of queuedVersions) {
+        // Create complete job with all database state restored
+        const jobId = uuidv4();
+        const abortController = new AbortController();
+        let resolveCompletion!: () => void;
+        let rejectCompletion!: (reason?: unknown) => void;
+
+        const completionPromise = new Promise<void>((resolve, reject) => {
+          resolveCompletion = resolve;
+          rejectCompletion = reject;
+        });
+
+        // Parse stored scraper options
+        let parsedScraperOptions = null;
+        if (version.scraper_options) {
+          try {
+            parsedScraperOptions = JSON.parse(version.scraper_options);
+          } catch (error) {
+            logger.warn(
+              `⚠️ Failed to parse scraper options for ${version.library_name}@${version.name || "unversioned"}: ${error}`,
+            );
+          }
+        }
+
+        const job: PipelineJob = {
+          id: jobId,
+          library: version.library_name,
+          version: version.name || "",
+          options: {
+            url: version.source_url || "", // Restore from database
+            library: version.library_name,
+            version: version.name || "",
+            // Merge stored options
+            ...parsedScraperOptions,
+          } as ScraperOptions,
+          status: PipelineJobStatus.QUEUED,
+          progress: null,
+          error: null,
+          createdAt: new Date(version.created_at),
+          startedAt: version.started_at ? new Date(version.started_at) : null,
+          finishedAt: null,
+          abortController,
+          completionPromise,
+          resolveCompletion,
+          rejectCompletion,
+
+          // Database fields (single source of truth)
+          versionId: version.id,
+          versionStatus: version.status,
+          progressPages: version.progress_pages,
+          progressMaxPages: version.progress_max_pages,
+          errorMessage: version.error_message,
+          updatedAt: new Date(version.updated_at),
+          sourceUrl: version.source_url,
+          scraperOptions: parsedScraperOptions,
+        };
+
+        this.jobMap.set(jobId, job);
+        this.jobQueue.push(jobId);
+      }
+
+      if (queuedVersions.length > 0) {
+        logger.info(`📥 Recovered ${queuedVersions.length} pending job(s) from database`);
+      } else {
+        logger.debug("No pending jobs to recover from database");
+      }
+    } catch (error) {
+      logger.error(`❌ Failed to recover pending jobs: ${error}`);
+    }
   }
 
   /**
@@ -132,6 +228,14 @@ export class PipelineManager {
       completionPromise,
       resolveCompletion,
       rejectCompletion,
+      // Database fields (single source of truth)
+      // Will be populated by updateJobStatus
+      progressPages: 0,
+      progressMaxPages: 0,
+      errorMessage: null,
+      updatedAt: new Date(),
+      sourceUrl: options.url,
+      scraperOptions: null,
     };
 
     this.jobMap.set(jobId, job);
@@ -140,14 +244,62 @@ export class PipelineManager {
       `📝 Job enqueued: ${jobId} for ${library}${normalizedVersion ? `@${normalizedVersion}` : " (unversioned)"}`,
     );
 
-    await this.callbacks.onJobStatusChange?.(job);
+    // Update database status to QUEUED
+    await this.updateJobStatus(job, PipelineJobStatus.QUEUED);
 
     // Trigger processing if manager is running
     if (this.isRunning) {
-      this._processQueue();
+      this._processQueue().catch((error) => {
+        logger.error(`❌ Error in processQueue during enqueue: ${error}`);
+      });
     }
 
     return jobId;
+  }
+
+  /**
+   * Enqueues a job using stored scraper options from a previous indexing run.
+   * If no stored options are found, throws an error.
+   */
+  async enqueueJobWithStoredOptions(
+    library: string,
+    version: string | undefined | null,
+  ): Promise<string> {
+    const normalizedVersion = version ?? "";
+
+    try {
+      // Get the version ID to retrieve stored options
+      const versionId = await this.store.ensureLibraryAndVersion(
+        library,
+        normalizedVersion,
+      );
+      const versionRecord = await this.store.getVersionWithStoredOptions(versionId);
+
+      if (!versionRecord?.scraper_options || !versionRecord.source_url) {
+        throw new Error(
+          `No stored scraper options found for ${library}@${normalizedVersion || "unversioned"}`,
+        );
+      }
+
+      const storedOptions = JSON.parse(versionRecord.scraper_options);
+
+      // Reconstruct complete scraper options
+      const completeOptions: ScraperOptions = {
+        url: versionRecord.source_url,
+        library,
+        version: normalizedVersion,
+        ...storedOptions,
+      };
+
+      logger.info(
+        `🔄 Re-indexing ${library}@${normalizedVersion || "unversioned"} with stored options from ${versionRecord.source_url}`,
+      );
+
+      return this.enqueueJob(library, normalizedVersion, completeOptions);
+    } catch (error) {
+      logger.error(`❌ Failed to enqueue job with stored options: ${error}`);
+      throw error;
+    }
   }
 
   /**
@@ -207,19 +359,17 @@ export class PipelineManager {
       case PipelineJobStatus.QUEUED:
         // Remove from queue and mark as cancelled
         this.jobQueue = this.jobQueue.filter((id) => id !== jobId);
-        job.status = PipelineJobStatus.CANCELLED;
+        await this.updateJobStatus(job, PipelineJobStatus.CANCELLED);
         job.finishedAt = new Date();
         logger.info(`🚫 Job cancelled (was queued): ${jobId}`);
-        await this.callbacks.onJobStatusChange?.(job);
         job.rejectCompletion(new PipelineStateError("Job cancelled before starting"));
         break;
 
       case PipelineJobStatus.RUNNING:
         // Signal cancellation via AbortController
-        job.status = PipelineJobStatus.CANCELLING;
+        await this.updateJobStatus(job, PipelineJobStatus.CANCELLING);
         job.abortController.abort();
         logger.info(`🚫 Signalling cancellation for running job: ${jobId}`);
-        await this.callbacks.onJobStatusChange?.(job);
         // The worker is responsible for transitioning to CANCELLED and rejecting
         break;
 
@@ -280,7 +430,7 @@ export class PipelineManager {
   /**
    * Processes the job queue, starting new workers if capacity allows.
    */
-  private _processQueue(): void {
+  private async _processQueue(): Promise<void> {
     if (!this.isRunning) return;
 
     while (this.activeWorkers.size < this.concurrency && this.jobQueue.length > 0) {
@@ -294,26 +444,27 @@ export class PipelineManager {
       }
 
       this.activeWorkers.add(jobId);
-      job.status = PipelineJobStatus.RUNNING;
+      await this.updateJobStatus(job, PipelineJobStatus.RUNNING);
       job.startedAt = new Date();
-      this.callbacks.onJobStatusChange?.(job); // Fire and forget status update
 
       // Start the actual job execution asynchronously
-      this._runJob(job).catch((error) => {
+      this._runJob(job).catch(async (error) => {
         // Catch unexpected errors during job setup/execution not handled by _runJob itself
         logger.error(`❌ Unhandled error during job ${jobId} execution: ${error}`);
         if (
           job.status !== PipelineJobStatus.FAILED &&
           job.status !== PipelineJobStatus.CANCELLED
         ) {
-          job.status = PipelineJobStatus.FAILED;
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          await this.updateJobStatus(job, PipelineJobStatus.FAILED, errorMessage);
           job.error = error instanceof Error ? error : new Error(String(error));
           job.finishedAt = new Date();
-          this.callbacks.onJobStatusChange?.(job); // Fire and forget
           job.rejectCompletion(job.error);
         }
         this.activeWorkers.delete(jobId);
-        this._processQueue(); // Check if another job can start
+        this._processQueue().catch((error) => {
+          logger.error(`❌ Error in processQueue after job completion: ${error}`);
+        }); // Check if another job can start
       });
     }
   }
@@ -341,9 +492,8 @@ export class PipelineManager {
       }
 
       // Mark as completed
-      job.status = PipelineJobStatus.COMPLETED;
+      await this.updateJobStatus(job, PipelineJobStatus.COMPLETED);
       job.finishedAt = new Date();
-      await this.callbacks.onJobStatusChange?.(job);
       job.resolveCompletion();
 
       logger.info(`✅ Job completed: ${jobId}`);
@@ -351,7 +501,7 @@ export class PipelineManager {
       // Handle errors thrown by the worker, including CancellationError
       if (error instanceof CancellationError || signal.aborted) {
         // Explicitly check for CancellationError or if the signal was aborted
-        job.status = PipelineJobStatus.CANCELLED;
+        await this.updateJobStatus(job, PipelineJobStatus.CANCELLED);
         job.finishedAt = new Date();
         // Don't set job.error for cancellations - cancellation is not an error condition
         const cancellationError =
@@ -359,21 +509,132 @@ export class PipelineManager {
             ? error
             : new CancellationError("Job cancelled by signal");
         logger.info(`🚫 Job execution cancelled: ${jobId}: ${cancellationError.message}`);
-        await this.callbacks.onJobStatusChange?.(job);
         job.rejectCompletion(cancellationError);
       } else {
         // Handle other errors
-        job.status = PipelineJobStatus.FAILED;
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        await this.updateJobStatus(job, PipelineJobStatus.FAILED, errorMessage);
         job.error = error instanceof Error ? error : new Error(String(error));
         job.finishedAt = new Date();
         logger.error(`❌ Job failed: ${jobId}: ${job.error}`);
-        await this.callbacks.onJobStatusChange?.(job);
         job.rejectCompletion(job.error);
       }
     } finally {
       // Ensure worker slot is freed and queue processing continues
       this.activeWorkers.delete(jobId);
-      this._processQueue();
+      this._processQueue().catch((error) => {
+        logger.error(`❌ Error in processQueue after job cleanup: ${error}`);
+      });
     }
+  }
+
+  /**
+   * Maps PipelineJobStatus to VersionStatus for database storage.
+   */
+  private mapJobStatusToVersionStatus(jobStatus: PipelineJobStatus): VersionStatus {
+    switch (jobStatus) {
+      case PipelineJobStatus.QUEUED:
+        return VersionStatus.QUEUED;
+      case PipelineJobStatus.RUNNING:
+        return VersionStatus.RUNNING;
+      case PipelineJobStatus.COMPLETED:
+        return VersionStatus.COMPLETED;
+      case PipelineJobStatus.FAILED:
+        return VersionStatus.FAILED;
+      case PipelineJobStatus.CANCELLED:
+        return VersionStatus.CANCELLED;
+      case PipelineJobStatus.CANCELLING:
+        return VersionStatus.RUNNING; // Keep as running in DB until actually cancelled
+      default:
+        return VersionStatus.NOT_INDEXED;
+    }
+  }
+
+  /**
+   * Updates both in-memory job status and database version status (write-through).
+   */
+  private async updateJobStatus(
+    job: PipelineJob,
+    newStatus: PipelineJobStatus,
+    errorMessage?: string,
+  ): Promise<void> {
+    // Update in-memory status
+    job.status = newStatus;
+    if (errorMessage) {
+      job.errorMessage = errorMessage;
+    }
+    job.updatedAt = new Date();
+
+    // Update database status
+    try {
+      // Ensure the library and version exist and get the version ID
+      const versionId = await this.store.ensureLibraryAndVersion(
+        job.library,
+        job.version,
+      );
+
+      // Update job object with database fields (single source of truth)
+      job.versionId = versionId;
+      job.versionStatus = this.mapJobStatusToVersionStatus(newStatus);
+
+      const dbStatus = this.mapJobStatusToVersionStatus(newStatus);
+      await this.store.updateVersionStatus(versionId, dbStatus, errorMessage);
+
+      // Store scraper options when job is first queued
+      if (newStatus === PipelineJobStatus.QUEUED) {
+        try {
+          await this.store.storeScraperOptions(versionId, job.options);
+          // Update job object with stored options
+          job.scraperOptions = {
+            maxDepth: job.options.maxDepth,
+            maxPages: job.options.maxPages,
+            scope: job.options.scope,
+            followRedirects: job.options.followRedirects,
+          };
+          logger.debug(
+            `💾 Stored scraper options for ${job.library}@${job.version}: ${job.options.url}`,
+          );
+        } catch (optionsError) {
+          // Log warning but don't fail the job - options storage is not critical
+          logger.warn(
+            `⚠️ Failed to store scraper options for job ${job.id}: ${optionsError}`,
+          );
+        }
+      }
+    } catch (error) {
+      logger.error(`❌ Failed to update database status for job ${job.id}: ${error}`);
+      // Don't throw - we don't want to break the pipeline for database issues
+    }
+
+    // Fire callback
+    await this.callbacks.onJobStatusChange?.(job);
+  }
+
+  /**
+   * Updates both in-memory job progress and database progress (write-through).
+   */
+  async updateJobProgress(job: PipelineJob, progress: ScraperProgress): Promise<void> {
+    // Update in-memory progress
+    job.progress = progress;
+    job.progressPages = progress.pagesScraped;
+    job.progressMaxPages = progress.maxPages;
+    job.updatedAt = new Date();
+
+    // Update database progress if we have a version ID
+    if (job.versionId) {
+      try {
+        await this.store.updateVersionProgress(
+          job.versionId,
+          progress.pagesScraped,
+          progress.maxPages,
+        );
+      } catch (error) {
+        logger.error(`❌ Failed to update database progress for job ${job.id}: ${error}`);
+        // Don't throw - we don't want to break the pipeline for database issues
+      }
+    }
+
+    // Note: We don't fire the callback here to avoid infinite loops
+    // The callback in index.ts calls this method, so it would create a cycle
   }
 }

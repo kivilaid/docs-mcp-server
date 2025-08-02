@@ -1,4 +1,5 @@
 import type { ScraperOptions, ScraperProgress } from "../scraper/types";
+import type { VersionScraperOptions, VersionStatus } from "../store/types";
 import type { Document } from "../types"; // Use local Document type
 
 /**
@@ -25,7 +26,7 @@ export interface PipelineJob {
   version: string;
   /** Options provided for the scraper. */
   options: ScraperOptions;
-  /** Current status of the job. */
+  /** Current pipeline status of the job. */
   status: PipelineJobStatus;
   /** Detailed progress information. */
   progress: ScraperProgress | null;
@@ -45,6 +46,26 @@ export interface PipelineJob {
   resolveCompletion: () => void;
   /** Rejector function for the completion promise. */
   rejectCompletion: (reason?: unknown) => void;
+
+  // Database status fields (single source of truth)
+  /** Database version ID for direct updates. */
+  versionId?: number;
+  /** Database version status (authoritative). */
+  versionStatus?: VersionStatus;
+  /** Current number of pages processed. */
+  progressPages?: number;
+  /** Maximum number of pages to process. */
+  progressMaxPages?: number;
+  /** Database error message (more detailed than Error object). */
+  errorMessage?: string | null;
+  /** Last update timestamp from database. */
+  updatedAt?: Date;
+
+  // Scraper options fields
+  /** Original scraping URL. */
+  sourceUrl: string | null;
+  /** Stored scraper options for reproducibility. */
+  scraperOptions: VersionScraperOptions | null;
 }
 
 /**

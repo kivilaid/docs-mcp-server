@@ -149,6 +149,26 @@ async function main() {
     if (!activePipelineManager) {
       logger.debug("Initializing PipelineManager for server mode...");
       const manager = new PipelineManager(ds);
+
+      // Configure progress callbacks for real-time updates
+      manager.setCallbacks({
+        onJobProgress: async (job, progress) => {
+          logger.debug(
+            `📊 Job ${job.id} progress: ${progress.pagesScraped}/${progress.maxPages} pages`,
+          );
+          // Use manager as single source of truth for progress updates
+          await manager.updateJobProgress(job, progress);
+        },
+        onJobStatusChange: async (job) => {
+          logger.debug(`🔄 Job ${job.id} status changed to: ${job.status}`);
+        },
+        onJobError: async (job, error, document) => {
+          logger.warn(
+            `⚠️ Job ${job.id} error ${document ? `on document ${document.metadata.url}` : ""}: ${error.message}`,
+          );
+        },
+      });
+
       await manager.start();
       activePipelineManager = manager;
       logger.debug("PipelineManager initialized for server mode.");
