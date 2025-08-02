@@ -71,6 +71,7 @@ describe("PipelineManager", () => {
     currentUrl: `https://example.com/page-${pagesScraped}`,
     depth: 1,
     maxDepth: 3,
+    totalDiscovered: 0,
   });
 
   beforeEach(() => {

@@ -104,6 +104,7 @@ describe("PipelineWorker", () => {
           depth: 1,
           maxDepth: 1,
           document: mockDoc1,
+          totalDiscovered: 0,
         };
         await progressCallback(progress1);
 
@@ -114,6 +115,7 @@ describe("PipelineWorker", () => {
           depth: 1,
           maxDepth: 1,
           document: mockDoc2,
+          totalDiscovered: 0,
         };
         await progressCallback(progress2);
       },
@@ -189,6 +191,7 @@ describe("PipelineWorker", () => {
           depth: 1,
           maxDepth: 1,
           document: mockDoc,
+          totalDiscovered: 0,
         };
         await progressCallback(progress);
       },
@@ -227,6 +230,7 @@ describe("PipelineWorker", () => {
           depth: 1,
           maxDepth: 1,
           document: mockDoc,
+          totalDiscovered: 0,
         };
         // Simulate cancellation happening *before* progress is processed by worker
         abortController.abort();
