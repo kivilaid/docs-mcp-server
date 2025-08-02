@@ -163,8 +163,8 @@ export class HtmlPlaywrightMiddleware implements ContentProcessorMiddleware {
         if (reqUrl === context.source) {
           return route.fulfill({
             status: 200,
-            contentType: "text/html",
-            body: context.content,
+            contentType: "text/html; charset=utf-8",
+            body: context.content, // context.content is always a string in middleware
           });
         }
         // Abort non-essential resources
