@@ -26,7 +26,10 @@ describe("FileFetcher", () => {
     expect(result.content.toString()).toBe(mockContent);
     expect(result.mimeType).toBe("text/plain");
     expect(result.source).toBe("file:///path/to/file.txt");
-    expect(result.encoding).toBe("utf-8");
+    // charset should be undefined to allow pipeline to detect it
+    expect(result.charset).toBeUndefined();
+    // encoding should be undefined as files are not compressed
+    expect(result.encoding).toBeUndefined();
   });
 
   it("should handle different file types", async () => {
@@ -109,6 +112,9 @@ describe("FileFetcher", () => {
     expect(result.content.toString()).toBe("# Hello with space");
     expect(result.mimeType).toBe("text/markdown");
     expect(result.source).toBe(url);
-    expect(result.encoding).toBe("utf-8");
+    // charset should be undefined to allow pipeline to detect it
+    expect(result.charset).toBeUndefined();
+    // encoding should be undefined as files are not compressed
+    expect(result.encoding).toBeUndefined();
   });
 });

@@ -1,4 +1,5 @@
 import iconv from "iconv-lite";
+import { normalizeCharset } from "./charset";
 
 /**
  * Decodes a Buffer or string to a JavaScript string using the specified charset.
@@ -13,10 +14,18 @@ import iconv from "iconv-lite";
  */
 export function convertToString(content: string | Buffer, charset?: string): string {
   if (typeof content === "string") return content;
+
+  const normalizedCharset = charset ? normalizeCharset(charset) : "utf-8";
+
   try {
-    return iconv.decode(content, charset || "utf-8");
+    return iconv.decode(content, normalizedCharset);
   } catch {
     // Fallback to utf-8 if decoding fails
-    return iconv.decode(content, "utf-8");
+    try {
+      return iconv.decode(content, "utf-8");
+    } catch {
+      // Last resort: decode as latin1 which can handle any byte sequence
+      return iconv.decode(content, "latin1");
+    }
   }
 }

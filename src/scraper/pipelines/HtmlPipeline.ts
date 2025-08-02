@@ -10,6 +10,7 @@ import { HtmlToMarkdownMiddleware } from "../middleware/HtmlToMarkdownMiddleware
 import type { ContentProcessorMiddleware, MiddlewareContext } from "../middleware/types";
 import type { ScraperOptions } from "../types";
 import { convertToString } from "../utils/buffer";
+import { resolveCharset } from "../utils/charset";
 import { BasePipeline } from "./BasePipeline";
 import type { ProcessedContent } from "./types";
 
@@ -41,7 +42,13 @@ export class HtmlPipeline extends BasePipeline {
     options: ScraperOptions,
     fetcher?: ContentFetcher,
   ): Promise<ProcessedContent> {
-    const contentString = convertToString(rawContent.content, rawContent.charset);
+    // Use enhanced charset detection that considers HTML meta tags
+    const resolvedCharset = resolveCharset(
+      rawContent.charset,
+      rawContent.content,
+      rawContent.mimeType,
+    );
+    const contentString = convertToString(rawContent.content, resolvedCharset);
 
     const context: MiddlewareContext = {
       content: contentString,
