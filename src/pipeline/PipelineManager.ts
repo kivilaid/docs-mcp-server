@@ -54,7 +54,8 @@ export class PipelineManager {
     logger.debug(`PipelineManager started with concurrency ${this.concurrency}.`);
 
     // Recover pending jobs from database on startup
-    await this.recoverPendingJobs();
+    // FIXME: Disable this for now to avoid conflicts between multiple processes
+    // await this.recoverPendingJobs();
 
     this._processQueue().catch((error) => {
       logger.error(`❌ Error in processQueue during start: ${error}`);
