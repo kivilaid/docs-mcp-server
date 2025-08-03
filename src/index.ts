@@ -523,8 +523,6 @@ async function main() {
     program.action(async (options) => {
       if (!commandExecuted) {
         logger.debug("No subcommand specified, starting MCP server by default...");
-        const docService = await ensureDocServiceInitialized();
-        const pipelineManager = await ensurePipelineManagerInitialized();
         const protocol = options.protocol as "stdio" | "http";
         const port = Number.parseInt(options.port, 10);
         if (protocol !== "stdio" && protocol !== "http") {
@@ -535,6 +533,14 @@ async function main() {
           console.error("Port must be a number when using http protocol.");
           process.exit(1);
         }
+
+        // Set log level for stdio mode before initializing services
+        if (protocol === "stdio") {
+          setLogLevel(LogLevel.ERROR);
+        }
+
+        const docService = await ensureDocServiceInitialized();
+        const pipelineManager = await ensurePipelineManagerInitialized();
         mcpServerRunning = true;
         // Pass docService and pipelineManager to the startServer from src/mcp/index.ts
         await startMcpServer(

@@ -1,5 +1,6 @@
 import type { PropsWithChildren } from "@kitajs/html";
 import { readFileSync } from "node:fs";
+import { logger } from "../../utils/logger";
 
 /**
  * Props for the Layout component.
@@ -27,7 +28,7 @@ const Layout = ({ title, version, children }: LayoutProps) => {
       };
       versionString = packageJson.version;
     } catch (error) {
-      console.error("Error reading package.json:", error);
+      logger.error(`Error reading package.json: ${error}`);
     }
   }
   return (

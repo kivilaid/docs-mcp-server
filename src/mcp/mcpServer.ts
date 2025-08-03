@@ -1,5 +1,5 @@
 import { McpServer, ResourceTemplate } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { z } from "zod";
+import { z } from "zod/v3";
 import { PipelineJobStatus } from "../pipeline/types";
 import { type JobInfo, LibraryNotFoundError, VersionNotFoundError } from "../tools";
 import { DEFAULT_MAX_DEPTH, DEFAULT_MAX_PAGES } from "../utils/config";
