@@ -102,24 +102,34 @@ export async function applyMigrations(db: Database): Promise<void> {
     } else {
       logger.debug("Database schema is up to date");
     }
+
+    // Return the count of applied migrations so we know if VACUUM is needed
+    return appliedCount;
   });
 
   let retries = 0;
+  let appliedMigrationsCount = 0;
 
   while (true) {
     try {
       // Start a single IMMEDIATE transaction for the entire migration process
-      overallTransaction.immediate(); // Execute the encompassing transaction
+      appliedMigrationsCount = overallTransaction.immediate(); // Execute the encompassing transaction
       logger.debug("Database migrations completed successfully");
 
-      // Run VACUUM after migrations to reclaim space and optimize database
-      // VACUUM cannot run within a transaction, so it runs separately
-      try {
-        db.exec("VACUUM");
-        logger.debug("Database vacuum completed successfully");
-      } catch (error) {
-        logger.warn(`⚠️ Could not vacuum database after migrations: ${error}`);
-        // Don't fail the migration process if vacuum fails
+      // Only run VACUUM if migrations were actually applied
+      if (appliedMigrationsCount > 0) {
+        try {
+          logger.debug(
+            `Running VACUUM after applying ${appliedMigrationsCount} migration(s)...`,
+          );
+          db.exec("VACUUM");
+          logger.debug("Database vacuum completed successfully");
+        } catch (error) {
+          logger.warn(`⚠️ Could not vacuum database after migrations: ${error}`);
+          // Don't fail the migration process if vacuum fails
+        }
+      } else {
+        logger.debug("Skipping VACUUM - no migrations were applied");
       }
 
       break; // Success
