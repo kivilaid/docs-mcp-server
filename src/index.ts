@@ -245,14 +245,119 @@ async function main() {
           process.exit(1);
         }
 
-        // Phase 1: External server support not yet implemented
-        console.error("❌ External server support not yet implemented (Phase 2)");
-        console.error("For now, start MCP server and web interface in embedded mode:");
-        console.error("  docs-mcp-server --protocol http --port 3000");
-        console.error(
-          "  Then open: http://localhost:3000 (web interface will be available there)",
-        );
-        process.exit(1);
+        try {
+          logger.info(
+            `🚀 Starting web interface connecting to MCP server at ${serverUrl}`,
+          );
+
+          // TODO: Update web interface to work with IPipeline interface (Phase 2)
+          console.error(
+            "❌ Web interface with external server support is still being implemented",
+          );
+          console.error("For now, use the embedded mode:");
+          console.error("  docs-mcp-server --protocol http --port 3000");
+          process.exit(1);
+        } catch (error) {
+          logger.error(`❌ Failed to start web interface: ${error}`);
+          process.exit(1);
+        }
+      });
+
+    // --- Worker Command ---
+    program
+      .command("worker")
+      .description("Start external pipeline worker (HTTP API)")
+      .option("--port <number>", "Port for worker API", "8080")
+      .action(async (cmdOptions, _command) => {
+        commandExecuted = true;
+        const port = Number.parseInt(cmdOptions.port);
+
+        if (Number.isNaN(port) || port < 1 || port > 65535) {
+          console.error("❌ Invalid port number");
+          process.exit(1);
+        }
+
+        try {
+          logger.info(`🚀 Starting external pipeline worker on port ${port}`);
+
+          // Ensure browsers are installed for scraping
+          ensurePlaywrightBrowsersInstalled();
+
+          // Initialize services
+          const ds = await ensureDocServiceInitialized();
+
+          // Create PipelineManager with job recovery enabled
+          const pipelineOptions: PipelineOptions = {
+            recoverJobs: true,
+            concurrency: DEFAULT_MAX_CONCURRENCY,
+          };
+
+          logger.debug(
+            `Initializing PipelineManager for worker with options: ${JSON.stringify(pipelineOptions)}`,
+          );
+
+          const pipeline = await PipelineFactory.createPipeline(ds, pipelineOptions);
+
+          // Configure progress callbacks
+          pipeline.setCallbacks({
+            onJobProgress: async (job, progress) => {
+              logger.debug(
+                `📊 Worker job ${job.id} progress: ${progress.pagesScraped}/${progress.totalPages} pages`,
+              );
+              await pipeline.updateJobProgress(job, progress);
+            },
+            onJobStatusChange: async (job) => {
+              logger.debug(`🔄 Worker job ${job.id} status changed to: ${job.status}`);
+            },
+            onJobError: async (job, error, document) => {
+              logger.warn(
+                `⚠️ Worker job ${job.id} error ${document ? `on document ${document.metadata.url}` : ""}: ${error.message}`,
+              );
+            },
+          });
+
+          await pipeline.start();
+
+          // Start HTTP API server for external worker
+          const Fastify = await import("fastify");
+          const { PipelineApiService } = await import("./pipeline/PipelineApiService");
+
+          const server = Fastify.default({
+            logger: false, // Use our own logger
+          });
+
+          // Register Pipeline API routes
+          const pipelineApiService = new PipelineApiService(pipeline);
+          await pipelineApiService.registerRoutes(server);
+
+          // Start server
+          await server.listen({ port, host: "0.0.0.0" });
+          logger.info(
+            `🚀 External pipeline worker API available at http://0.0.0.0:${port}`,
+          );
+
+          // Store references for cleanup
+          activePipelineManager = pipeline;
+
+          // Handle graceful shutdown
+          const cleanup = async () => {
+            logger.info("🛑 Shutting down external pipeline worker...");
+            try {
+              await server.close();
+              await pipeline.stop();
+              await ds.shutdown();
+              logger.info("✅ External pipeline worker stopped gracefully");
+            } catch (error) {
+              logger.error(`❌ Error during worker shutdown: ${error}`);
+            }
+          };
+
+          process.on("SIGINT", cleanup);
+          process.on("SIGTERM", cleanup);
+        } catch (error) {
+          logger.error(`❌ Failed to start external pipeline worker: ${error}`);
+          process.exit(1);
+        }
       });
 
     // --- Scrape Command ---
@@ -334,18 +439,24 @@ async function main() {
         (val: string, prev: string[] = []) => prev.concat([val]),
         [] as string[],
       )
-      .action(async (library, url, options) => {
+      .action(async (library, url, options, command) => {
         commandExecuted = true; // Ensure this is set for CLI commands
+        const globalOptions = command.parent?.opts() || {};
         const docService = new DocumentManagementService();
         let pipeline: IPipeline | null = null;
         try {
           await docService.initialize();
-          pipeline = await PipelineFactory.createPipeline(docService, {
-            recoverJobs: false, // CLI: fast, isolated execution
+
+          // Use global server-url if provided, otherwise run locally
+          const pipelineOptions: PipelineOptions = {
+            recoverJobs: false, // CLI: no job recovery (immediate execution)
             concurrency: 1, // CLI: single job at a time
-          });
+            serverUrl: globalOptions.serverUrl, // Use external worker if specified
+          };
+
+          pipeline = await PipelineFactory.createPipeline(docService, pipelineOptions);
           await pipeline.start();
-          const scrapeTool = new ScrapeTool(docService, pipeline as PipelineManager);
+          const scrapeTool = new ScrapeTool(pipeline as PipelineManager);
 
           // Parse headers from CLI options
           const headers: Record<string, string> = {};

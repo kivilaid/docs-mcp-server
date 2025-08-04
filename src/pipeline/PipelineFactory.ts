@@ -2,6 +2,7 @@ import type { DocumentManagementService } from "../store";
 import { DEFAULT_MAX_CONCURRENCY } from "../utils/config";
 import { logger } from "../utils/logger";
 import type { IPipeline, PipelineOptions } from "./interfaces";
+import { PipelineClient } from "./PipelineClient";
 import { PipelineManager } from "./PipelineManager";
 
 /**
@@ -31,9 +32,8 @@ export namespace PipelineFactory {
 
     if (serverUrl) {
       // External pipeline requested
-      throw new Error(
-        `External pipeline support not yet implemented. Remove serverUrl to use embedded pipeline.`,
-      );
+      logger.debug(`Creating PipelineClient for external worker at: ${serverUrl}`);
+      return new PipelineClient(serverUrl);
     }
 
     // Local embedded pipeline with specified behavior

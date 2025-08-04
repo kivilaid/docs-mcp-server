@@ -42,7 +42,7 @@ export async function initializeTools(
   const tools: McpServerTools = {
     listLibraries: new ListLibrariesTool(docService),
     findVersion: new FindVersionTool(docService),
-    scrape: new ScrapeTool(docService, pipelineManager),
+    scrape: new ScrapeTool(pipelineManager),
     search: new SearchTool(docService),
     listJobs: new ListJobsTool(pipelineManager),
     getJobInfo: new GetJobInfoTool(pipelineManager),

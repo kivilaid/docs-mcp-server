@@ -44,7 +44,7 @@ export async function startWebServer(
   // Instantiate tools using provided services
   const listLibrariesTool = new ListLibrariesTool(docService);
   const listJobsTool = new ListJobsTool(pipelineManager);
-  const scrapeTool = new ScrapeTool(docService, pipelineManager);
+  const scrapeTool = new ScrapeTool(pipelineManager);
   const removeTool = new RemoveTool(docService, pipelineManager);
   const searchTool = new SearchTool(docService);
   const cancelJobTool = new CancelJobTool(pipelineManager);

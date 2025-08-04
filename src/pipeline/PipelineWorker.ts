@@ -32,6 +32,12 @@ export class PipelineWorker {
     logger.debug(`[${jobId}] Worker starting job for ${library}@${version}`);
 
     try {
+      // Clear existing documents for this library/version before scraping
+      await this.store.removeAllDocuments(library, version);
+      logger.info(
+        `💾 Cleared store for ${library}@${version || "[no version]"} before scraping.`,
+      );
+
       // --- Core Job Logic ---
       await this.scraperService.scrape(
         options,

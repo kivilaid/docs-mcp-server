@@ -1,7 +1,6 @@
 import * as semver from "semver";
 import type { PipelineManager } from "../pipeline/PipelineManager";
 import { ScrapeMode } from "../scraper/types";
-import type { DocumentManagementService } from "../store/DocumentManagementService";
 import {
   DEFAULT_MAX_CONCURRENCY,
   DEFAULT_MAX_DEPTH,
@@ -71,13 +70,10 @@ export type ScrapeExecuteResult = ScrapeResult | { jobId: string };
  * Tool for enqueuing documentation scraping jobs via the PipelineManager.
  */
 export class ScrapeTool {
-  private docService: DocumentManagementService;
-  private manager: PipelineManager; // Add manager property
+  private manager: PipelineManager;
 
-  constructor(docService: DocumentManagementService, manager: PipelineManager) {
-    // Add manager to constructor
-    this.docService = docService;
-    this.manager = manager; // Store manager instance
+  constructor(manager: PipelineManager) {
+    this.manager = manager;
   }
 
   async execute(options: ScrapeToolOptions): Promise<ScrapeExecuteResult> {
@@ -117,12 +113,6 @@ export class ScrapeTool {
     }
 
     internalVersion = internalVersion.toLowerCase();
-
-    // Remove any existing documents for this library/version
-    await this.docService.removeAllDocuments(library, internalVersion);
-    logger.info(
-      `💾 Cleared store for ${library}@${internalVersion || "[no version]"} before scraping.`,
-    );
 
     // Use the injected manager instance
     const manager = this.manager;

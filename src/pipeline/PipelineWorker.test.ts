@@ -25,6 +25,7 @@ describe("PipelineWorker", () => {
 
     mockStore = {
       addDocument: vi.fn().mockResolvedValue(undefined),
+      removeAllDocuments: vi.fn().mockResolvedValue(undefined),
     };
 
     mockScraperService = {
@@ -122,6 +123,13 @@ describe("PipelineWorker", () => {
     );
 
     await worker.executeJob(mockJob, mockCallbacks);
+
+    // Verify documents were cleared before scraping started
+    expect(mockStore.removeAllDocuments).toHaveBeenCalledOnce();
+    expect(mockStore.removeAllDocuments).toHaveBeenCalledWith(
+      mockJob.library,
+      mockJob.version,
+    );
 
     // Verify scrape was called
     expect(mockScraperService.scrape).toHaveBeenCalledOnce();
