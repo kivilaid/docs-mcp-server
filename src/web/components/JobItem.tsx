@@ -93,7 +93,7 @@ const JobItem = ({ job }: JobItemProps) => {
                 x-on:click={`
                 if ($store.confirmingAction.type === 'job-cancel' && $store.confirmingAction.id === '${job.id}') {
                   $store.confirmingAction.isStopping = true;
-                  fetch('/api/jobs/' + '${job.id}' + '/cancel', {
+                  fetch('/web/jobs/' + '${job.id}' + '/cancel', {
                     method: 'POST',
                     headers: { 'Accept': 'application/json' },
                   })

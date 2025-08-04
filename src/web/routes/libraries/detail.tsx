@@ -78,7 +78,7 @@ export function registerLibraryDetailRoutes(
 
   // API route for searching a specific library
   server.get(
-    "/api/libraries/:libraryName/search",
+    "/web/libraries/:libraryName/search",
     async (
       request: FastifyRequest<{
         Params: { libraryName: string };

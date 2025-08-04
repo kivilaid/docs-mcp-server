@@ -1,4 +1,4 @@
-import type { PipelineManager } from "../pipeline/PipelineManager";
+import type { IPipeline } from "../pipeline/interfaces";
 import { FileFetcher, HttpFetcher } from "../scraper/fetcher";
 import type { DocumentManagementService } from "../store/DocumentManagementService";
 import {
@@ -32,23 +32,23 @@ export interface McpServerTools {
  * Initializes and returns the shared tool instances.
  * This should be called after initializeServices has completed.
  * @param docService The initialized DocumentManagementService instance.
- * @param pipelineManager The initialized PipelineManager instance.
+ * @param pipeline The initialized pipeline instance.
  * @returns An object containing all instantiated tool instances.
  */
 export async function initializeTools(
   docService: DocumentManagementService,
-  pipelineManager: PipelineManager,
+  pipeline: IPipeline,
 ): Promise<McpServerTools> {
   const tools: McpServerTools = {
     listLibraries: new ListLibrariesTool(docService),
     findVersion: new FindVersionTool(docService),
-    scrape: new ScrapeTool(pipelineManager),
+    scrape: new ScrapeTool(pipeline),
     search: new SearchTool(docService),
-    listJobs: new ListJobsTool(pipelineManager),
-    getJobInfo: new GetJobInfoTool(pipelineManager),
-    cancelJob: new CancelJobTool(pipelineManager),
-    // clearCompletedJobs: new ClearCompletedJobsTool(pipelineManager),
-    remove: new RemoveTool(docService, pipelineManager),
+    listJobs: new ListJobsTool(pipeline),
+    getJobInfo: new GetJobInfoTool(pipeline),
+    cancelJob: new CancelJobTool(pipeline),
+    // clearCompletedJobs: new ClearCompletedJobsTool(pipeline),
+    remove: new RemoveTool(docService, pipeline),
     fetchUrl: new FetchUrlTool(new HttpFetcher(), new FileFetcher()),
   };
 

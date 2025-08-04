@@ -10,9 +10,9 @@ export function registerCancelJobRoute(
   server: FastifyInstance,
   cancelJobTool: CancelJobTool
 ) {
-  // POST /api/jobs/:jobId/cancel - Cancel a job by ID
+  // POST /web/jobs/:jobId/cancel - Cancel a job by ID
   server.post<{ Params: { jobId: string } }>(
-    "/api/jobs/:jobId/cancel",
+    "/web/jobs/:jobId/cancel",
     async (request, reply) => {
       const { jobId } = request.params;
       const result = await cancelJobTool.execute({ jobId });

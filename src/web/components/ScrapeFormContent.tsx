@@ -12,7 +12,7 @@ const ScrapeFormContent = () => (
       Queue New Scrape Job
     </h3>
     <form
-      hx-post="/api/jobs/scrape"
+      hx-post="/web/jobs/scrape"
       hx-target="#job-response"
       hx-swap="innerHTML"
       class="space-y-2"

@@ -11,8 +11,8 @@ export function registerJobListRoutes(
   server: FastifyInstance,
   listJobsTool: ListJobsTool
 ) {
-  // GET /api/jobs - List current jobs (only the list)
-  server.get("/api/jobs", async () => {
+  // GET /web/jobs - List current jobs (only the list)
+  server.get("/web/jobs", async () => {
     const result = await listJobsTool.execute({});
     return <JobList jobs={result.jobs} />;
   });

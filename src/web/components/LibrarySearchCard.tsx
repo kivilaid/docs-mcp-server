@@ -20,7 +20,7 @@ const LibrarySearchCard = ({ library }: LibrarySearchCardProps) => {
         Search {library.name} Documentation
       </h2>
       <form
-        hx-get={`/api/libraries/${encodeURIComponent(library.name)}/search`}
+        hx-get={`/web/libraries/${encodeURIComponent(library.name)}/search`}
         hx-target="#searchResultsContainer .search-results"
         hx-swap="innerHTML"
         hx-indicator="#searchResultsContainer"

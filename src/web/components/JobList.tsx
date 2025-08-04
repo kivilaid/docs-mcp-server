@@ -25,7 +25,7 @@ const JobList = ({ jobs }: JobListProps) => (
     {/* NOTE: To enable live job list refresh after stopping a job, add the following script to your main HTML layout or main.client.ts:
         document.addEventListener('job-list-refresh', function () {
           if (window.htmx) {
-            window.htmx.ajax('GET', '/api/jobs', '#job-list');
+            window.htmx.ajax('GET', '/web/jobs', '#job-list');
           } else {
             window.location.reload();
           }

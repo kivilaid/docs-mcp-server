@@ -29,7 +29,8 @@ export function createMcpServerInstance(tools: McpServerTools): McpServer {
 
   // --- Tool Definitions ---
 
-  // Scrape docs tool
+  // Scrape docs tool - suppress deep inference issues
+  // @ts-ignore TypeScript has issues with deep Zod inference in MCP SDK
   server.tool(
     "scrape_docs",
     "Scrape and index documentation from a URL for a library. Use this tool to index a new library or a new version.",
@@ -210,6 +211,7 @@ ${r.content}\n`,
   );
 
   // Find version tool
+  // @ts-ignore TypeScript has issues with deep Zod inference in MCP SDK
   server.tool(
     "find_version",
     "Find the best matching version for a library. Use to identify available or closest versions.",
@@ -247,13 +249,14 @@ ${r.content}\n`,
     },
   );
 
-  // List jobs tool
+  // List jobs tool - suppress deep inference issues
+  // @ts-expect-error TypeScript has issues with deep Zod inference in MCP SDK
   server.tool(
     "list_jobs",
     "List all indexing jobs. Optionally filter by status.",
     {
       status: z
-        .nativeEnum(PipelineJobStatus)
+        .enum(["queued", "running", "completed", "failed", "cancelling", "cancelled"])
         .optional()
         .describe("Filter jobs by status (optional)."),
     },
@@ -264,7 +267,9 @@ ${r.content}\n`,
     },
     async ({ status }) => {
       try {
-        const result = await tools.listJobs.execute({ status });
+        const result = await tools.listJobs.execute({
+          status: status as PipelineJobStatus | undefined,
+        });
         // Format the simplified job list for display
         const formattedJobs = result.jobs
           .map(

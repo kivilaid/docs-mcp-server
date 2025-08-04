@@ -1,4 +1,4 @@
-import type { PipelineManager } from "../pipeline/PipelineManager";
+import type { IPipeline } from "../pipeline/interfaces";
 import type { PipelineJobStatus } from "../pipeline/types";
 import type { VersionStatus } from "../store/types";
 
@@ -45,14 +45,14 @@ export interface GetJobInfoToolResponse {
  * Tool for retrieving simplified information about a specific pipeline job.
  */
 export class GetJobInfoTool {
-  private manager: PipelineManager;
+  private pipeline: IPipeline;
 
   /**
    * Creates an instance of GetJobInfoTool.
-   * @param manager The PipelineManager instance.
+   * @param pipeline The pipeline instance.
    */
-  constructor(manager: PipelineManager) {
-    this.manager = manager;
+  constructor(pipeline: IPipeline) {
+    this.pipeline = pipeline;
   }
 
   /**
@@ -61,7 +61,7 @@ export class GetJobInfoTool {
    * @returns A promise that resolves with the simplified job info or null if not found.
    */
   async execute(input: GetJobInfoInput): Promise<GetJobInfoToolResponse> {
-    const job = await this.manager.getJob(input.jobId);
+    const job = await this.pipeline.getJob(input.jobId);
 
     if (!job) {
       // Return null in the result if job not found

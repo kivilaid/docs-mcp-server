@@ -1,18 +1,11 @@
-#!/usr/bin/env node
 import { execSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import "dotenv/config";
 import { Command } from "commander";
-import type { FastifyInstance } from "fastify";
 import { chromium } from "playwright";
 import packageJson from "../package.json";
-import { startServer as startMcpServer, stopServer as stopMcpServer } from "./mcp";
-import {
-  type IPipeline,
-  PipelineFactory,
-  type PipelineManager,
-  type PipelineOptions,
-} from "./pipeline";
+import { type AppServerConfig, startAppServer } from "./app";
+import { type IPipeline, PipelineFactory, type PipelineOptions } from "./pipeline";
 import { FileFetcher, HttpFetcher } from "./scraper/fetcher";
 import { ScrapeMode } from "./scraper/types";
 import { DocumentManagementService } from "./store/DocumentManagementService";
@@ -33,7 +26,6 @@ import {
 } from "./utils/config";
 import { LogLevel, logger, setLogLevel } from "./utils/logger";
 import { getProjectRoot } from "./utils/paths";
-import { stopWebServer } from "./web/web";
 
 /**
  * Ensures that the Playwright browsers are installed, unless a system Chromium path is set.
@@ -79,8 +71,7 @@ ensurePlaywrightBrowsersInstalled();
 const formatOutput = (data: unknown) => JSON.stringify(data, null, 2);
 
 // Module-level variables for server instances and shutdown state
-let mcpServerRunning = false;
-let webServerInstance: FastifyInstance | null = null;
+let activeAppServer: ReturnType<typeof startAppServer> | null = null;
 let activeDocService: DocumentManagementService | null = null;
 let activePipelineManager: IPipeline | null = null;
 
@@ -92,17 +83,12 @@ const sigintHandler = async () => {
 
   logger.debug("Received SIGINT. Shutting down gracefully...");
   try {
-    if (webServerInstance) {
-      logger.debug("SIGINT: Stopping web server...");
-      await stopWebServer(webServerInstance);
-      webServerInstance = null;
-      logger.debug("SIGINT: Web server stopped.");
-    }
-    if (mcpServerRunning) {
-      logger.debug("SIGINT: Stopping MCP server instance...");
-      await stopMcpServer(); // This now only stops the McpServer object
-      mcpServerRunning = false;
-      logger.debug("SIGINT: MCP server instance stopped.");
+    if (activeAppServer) {
+      logger.debug("SIGINT: Stopping AppServer...");
+      const appServer = await activeAppServer;
+      await appServer.stop();
+      activeAppServer = null;
+      logger.debug("SIGINT: AppServer stopped.");
     }
 
     // Shutdown active services
@@ -112,16 +98,18 @@ const sigintHandler = async () => {
       activePipelineManager = null;
       logger.debug("SIGINT: PipelineManager stopped.");
     }
+
     if (activeDocService) {
       await activeDocService.shutdown();
       activeDocService = null;
       logger.debug("SIGINT: DocumentManagementService shut down.");
     }
-  } catch (e) {
-    logger.error(`❌ Error during SIGINT shutdown: ${e}`);
-  } finally {
-    logger.debug("SIGINT: Shutdown process completed.");
+
+    logger.info("✅ Graceful shutdown completed");
     process.exit(0);
+  } catch (error) {
+    logger.error(`❌ Error during graceful shutdown: ${error}`);
+    process.exit(1);
   }
 };
 
@@ -218,45 +206,122 @@ async function main() {
       if (actionCommand.name() !== program.name()) commandExecuted = true;
     });
 
+    // --- MCP Command ---
     program
-      .command("web")
-      .description("Start the web interface")
+      .command("mcp")
+      .description("Start MCP server only")
+      .option("--port <number>", "Port for the MCP server", DEFAULT_HTTP_PORT.toString())
       .option(
-        "--port <number>",
-        "Port for the web interface",
-        DEFAULT_WEB_PORT.toString(),
+        "--server-url <url>",
+        "URL of external pipeline worker server (required for MCP-only mode)",
       )
-      .action(async (_cmdOptions, command) => {
+      .action(async (cmdOptions, command) => {
         commandExecuted = true;
         const globalOptions = command.parent?.opts() || {};
-        const serverUrl = globalOptions.serverUrl;
+        const port = Number.parseInt(cmdOptions.port);
+        const serverUrl = cmdOptions.serverUrl || globalOptions.serverUrl;
+
+        if (Number.isNaN(port) || port < 1 || port > 65535) {
+          console.error("❌ Invalid port number");
+          process.exit(1);
+        }
 
         if (!serverUrl) {
-          console.error(
-            "❌ Web interface requires --server-url parameter to connect to MCP server",
-          );
+          console.error("❌ MCP-only mode requires --server-url parameter");
           console.error("Example usage:");
+          console.error("  1. Start worker: docs-mcp-server worker --port 8080");
           console.error(
-            "  1. Start MCP server: docs-mcp-server --protocol http --port 3000",
-          );
-          console.error(
-            "  2. Start web interface: docs-mcp-server web --server-url http://localhost:3000",
+            "  2. Start MCP: docs-mcp-server mcp --server-url http://localhost:8080",
           );
           process.exit(1);
         }
 
         try {
-          logger.info(
-            `🚀 Starting web interface connecting to MCP server at ${serverUrl}`,
-          );
+          const docService = await ensureDocServiceInitialized();
+          const pipeline = await ensurePipelineManagerInitialized({
+            recoverJobs: false, // MCP-only mode uses external worker
+            serverUrl,
+            concurrency: 3,
+          });
 
-          // TODO: Update web interface to work with IPipeline interface (Phase 2)
-          console.error(
-            "❌ Web interface with external server support is still being implemented",
-          );
-          console.error("For now, use the embedded mode:");
-          console.error("  docs-mcp-server --protocol http --port 3000");
+          // Configure MCP-only server
+          const config: AppServerConfig = {
+            enableWebInterface: false,
+            enableMcpServer: true,
+            enablePipelineApi: false,
+            enableWorker: false,
+            port,
+            externalWorkerUrl: serverUrl,
+          };
+
+          logger.info(`🚀 Starting MCP server connecting to worker at ${serverUrl}`);
+          activeAppServer = startAppServer(docService, pipeline, config);
+          await activeAppServer; // Wait for startup to complete
+
+          await new Promise(() => {}); // Keep running forever
+        } catch (error) {
+          logger.error(`❌ Failed to start MCP server: ${error}`);
           process.exit(1);
+        }
+      });
+
+    // --- Web Command ---
+    program
+      .command("web")
+      .description("Start web interface only")
+      .option(
+        "--port <number>",
+        "Port for the web interface",
+        DEFAULT_WEB_PORT.toString(),
+      )
+      .option(
+        "--server-url <url>",
+        "URL of external pipeline worker server (required for web-only mode)",
+      )
+      .action(async (cmdOptions, command) => {
+        commandExecuted = true;
+        const globalOptions = command.parent?.opts() || {};
+        const port = Number.parseInt(cmdOptions.port);
+        const serverUrl = cmdOptions.serverUrl || globalOptions.serverUrl;
+
+        if (Number.isNaN(port) || port < 1 || port > 65535) {
+          console.error("❌ Invalid port number");
+          process.exit(1);
+        }
+
+        if (!serverUrl) {
+          console.error("❌ Web-only mode requires --server-url parameter");
+          console.error("Example usage:");
+          console.error("  1. Start worker: docs-mcp-server worker --port 8080");
+          console.error(
+            "  2. Start web: docs-mcp-server web --server-url http://localhost:8080",
+          );
+          process.exit(1);
+        }
+
+        try {
+          const docService = await ensureDocServiceInitialized();
+          const pipeline = await ensurePipelineManagerInitialized({
+            recoverJobs: false, // Web-only mode uses external worker
+            serverUrl,
+            concurrency: 3,
+          });
+
+          // Configure web-only server
+          const config: AppServerConfig = {
+            enableWebInterface: true,
+            enableMcpServer: false,
+            enablePipelineApi: false,
+            enableWorker: false,
+            port,
+            externalWorkerUrl: serverUrl,
+          };
+
+          logger.info(`🚀 Starting web interface connecting to worker at ${serverUrl}`);
+          activeAppServer = startAppServer(docService, pipeline, config);
+          await activeAppServer; // Wait for startup to complete
+
+          await new Promise(() => {}); // Keep running forever
         } catch (error) {
           logger.error(`❌ Failed to start web interface: ${error}`);
           process.exit(1);
@@ -284,76 +349,26 @@ async function main() {
           ensurePlaywrightBrowsersInstalled();
 
           // Initialize services
-          const ds = await ensureDocServiceInitialized();
-
-          // Create PipelineManager with job recovery enabled
-          const pipelineOptions: PipelineOptions = {
-            recoverJobs: true,
+          const docService = await ensureDocServiceInitialized();
+          const pipeline = await ensurePipelineManagerInitialized({
+            recoverJobs: true, // Workers recover jobs on startup
             concurrency: DEFAULT_MAX_CONCURRENCY,
-          };
-
-          logger.debug(
-            `Initializing PipelineManager for worker with options: ${JSON.stringify(pipelineOptions)}`,
-          );
-
-          const pipeline = await PipelineFactory.createPipeline(ds, pipelineOptions);
-
-          // Configure progress callbacks
-          pipeline.setCallbacks({
-            onJobProgress: async (job, progress) => {
-              logger.debug(
-                `📊 Worker job ${job.id} progress: ${progress.pagesScraped}/${progress.totalPages} pages`,
-              );
-              await pipeline.updateJobProgress(job, progress);
-            },
-            onJobStatusChange: async (job) => {
-              logger.debug(`🔄 Worker job ${job.id} status changed to: ${job.status}`);
-            },
-            onJobError: async (job, error, document) => {
-              logger.warn(
-                `⚠️ Worker job ${job.id} error ${document ? `on document ${document.metadata.url}` : ""}: ${error.message}`,
-              );
-            },
           });
 
-          await pipeline.start();
-
-          // Start HTTP API server for external worker
-          const Fastify = await import("fastify");
-          const { PipelineApiService } = await import("./pipeline/PipelineApiService");
-
-          const server = Fastify.default({
-            logger: false, // Use our own logger
-          });
-
-          // Register Pipeline API routes
-          const pipelineApiService = new PipelineApiService(pipeline);
-          await pipelineApiService.registerRoutes(server);
-
-          // Start server
-          await server.listen({ port, host: "0.0.0.0" });
-          logger.info(
-            `🚀 External pipeline worker API available at http://0.0.0.0:${port}`,
-          );
-
-          // Store references for cleanup
-          activePipelineManager = pipeline;
-
-          // Handle graceful shutdown
-          const cleanup = async () => {
-            logger.info("🛑 Shutting down external pipeline worker...");
-            try {
-              await server.close();
-              await pipeline.stop();
-              await ds.shutdown();
-              logger.info("✅ External pipeline worker stopped gracefully");
-            } catch (error) {
-              logger.error(`❌ Error during worker shutdown: ${error}`);
-            }
+          // Configure worker-only server
+          const config: AppServerConfig = {
+            enableWebInterface: false,
+            enableMcpServer: false,
+            enablePipelineApi: true,
+            enableWorker: true,
+            port,
           };
 
-          process.on("SIGINT", cleanup);
-          process.on("SIGTERM", cleanup);
+          logger.info(`🚀 Starting external pipeline worker with HTTP API`);
+          activeAppServer = startAppServer(docService, pipeline, config);
+          await activeAppServer; // Wait for startup to complete
+
+          await new Promise(() => {}); // Keep running forever
         } catch (error) {
           logger.error(`❌ Failed to start external pipeline worker: ${error}`);
           process.exit(1);
@@ -456,7 +471,7 @@ async function main() {
 
           pipeline = await PipelineFactory.createPipeline(docService, pipelineOptions);
           await pipeline.start();
-          const scrapeTool = new ScrapeTool(pipeline as PipelineManager);
+          const scrapeTool = new ScrapeTool(pipeline);
 
           // Parse headers from CLI options
           const headers: Record<string, string> = {};
@@ -665,39 +680,36 @@ async function main() {
 
     program.action(async (options) => {
       if (!commandExecuted) {
-        logger.debug("No subcommand specified, starting MCP server by default...");
-        const protocol = options.protocol as "stdio" | "http";
+        commandExecuted = true;
+        logger.debug("No subcommand specified, starting unified server by default...");
         const port = Number.parseInt(options.port, 10);
-        if (protocol !== "stdio" && protocol !== "http") {
-          console.error('Invalid protocol specified. Use "stdio" or "http".');
-          process.exit(1);
-        }
-        if (protocol === "http" && Number.isNaN(port)) {
-          console.error("Port must be a number when using http protocol.");
+        if (Number.isNaN(port)) {
+          console.error("Port must be a number.");
           process.exit(1);
         }
 
-        // Set log level for stdio mode before initializing services
-        if (protocol === "stdio") {
-          setLogLevel(LogLevel.ERROR);
-        }
-
-        const serverUrl = options.serverUrl;
         const docService = await ensureDocServiceInitialized();
-        const pipelineManager = await ensurePipelineManagerInitialized({
-          recoverJobs: true, // MCP server: persistent, recovers jobs
-          serverUrl,
-          concurrency: 3, // MCP server: higher concurrency
+        const pipeline = await ensurePipelineManagerInitialized({
+          recoverJobs: !options.serverUrl, // Only recover jobs if using embedded worker
+          serverUrl: options.serverUrl,
+          concurrency: 3,
         });
-        mcpServerRunning = true;
-        // Pass docService and pipelineManager to the startServer from src/mcp/index.ts
-        await startMcpServer(
-          protocol,
-          docService,
-          pipelineManager as PipelineManager,
-          protocol === "http" ? port : undefined,
-        );
-        await new Promise(() => {});
+
+        // Configure unified server (web + MCP + pipeline API + worker)
+        const config: AppServerConfig = {
+          enableWebInterface: true,
+          enableMcpServer: true,
+          enablePipelineApi: true,
+          enableWorker: !options.serverUrl, // Use embedded worker unless external URL provided
+          port,
+          externalWorkerUrl: options.serverUrl,
+        };
+
+        logger.info("🚀 Starting unified server (web + MCP + pipeline + worker)");
+        activeAppServer = startAppServer(docService, pipeline, config);
+        await activeAppServer; // Wait for startup to complete
+
+        await new Promise(() => {}); // Keep running forever
       }
     });
 
@@ -706,17 +718,30 @@ async function main() {
     logger.error(`❌ Error in main: ${error}`);
     if (!isShuttingDown) {
       isShuttingDown = true;
-      if (webServerInstance) await stopWebServer(webServerInstance);
-      if (mcpServerRunning) await stopMcpServer();
-      // For other errors, attempt to shutdown active global services if they exist
-      else {
-        if (activePipelineManager) {
+      if (activeAppServer) {
+        try {
+          const appServer = await activeAppServer;
+          await appServer.stop();
+        } catch (e) {
+          logger.error(`❌ Error stopping AppServer: ${e}`);
+        }
+      }
+
+      // Shutdown other active global services if they exist
+      if (activePipelineManager) {
+        try {
           await activePipelineManager.stop();
           activePipelineManager = null;
+        } catch (e) {
+          logger.error(`❌ Error stopping pipeline: ${e}`);
         }
-        if (activeDocService) {
+      }
+      if (activeDocService) {
+        try {
           await activeDocService.shutdown();
           activeDocService = null;
+        } catch (e) {
+          logger.error(`❌ Error shutting down doc service: ${e}`);
         }
       }
     }
@@ -725,10 +750,7 @@ async function main() {
 
   // This block handles cleanup for CLI commands that completed successfully
   // and were not long-running servers.
-  // Since short-lived commands now manage their own service shutdown,
-  // this block might not need to do anything with activeDocService/activePipelineManager,
-  // as those are intended for server modes.
-  if (commandExecuted && !webServerInstance && !mcpServerRunning) {
+  if (commandExecuted && !activeAppServer) {
     if (!isShuttingDown) {
       // No active server mode services to shut down here,
       // as CLI commands handle their own.
@@ -777,16 +799,13 @@ if (import.meta.hot) {
     isShuttingDown = true; // Mark as shutting down for HMR cleanup
 
     try {
-      if (webServerInstance) {
-        logger.debug("Shutting down web server...");
-        await stopWebServer(webServerInstance);
-        logger.debug("Web server shut down.");
+      if (activeAppServer) {
+        logger.debug("Shutting down AppServer...");
+        const appServer = await activeAppServer;
+        await appServer.stop();
+        logger.debug("AppServer shut down.");
       }
-      if (mcpServerRunning) {
-        logger.debug("Shutting down MCP server...");
-        await stopMcpServer();
-        logger.debug("MCP server shut down.");
-      }
+
       // Shut down active global services for HMR
       logger.debug("Shutting down active services...");
       if (activePipelineManager) {
@@ -804,8 +823,7 @@ if (import.meta.hot) {
       logger.error(`❌ Error during HMR cleanup: ${hmrError}`);
     } finally {
       // Reset state for the next module instantiation
-      webServerInstance = null;
-      mcpServerRunning = false;
+      activeAppServer = null;
       // Only reset isShuttingDown if HMR itself initiated the shutdown state
       // and it wasn't already shutting down due to SIGINT or other error.
       if (!wasAlreadyShuttingDown) {

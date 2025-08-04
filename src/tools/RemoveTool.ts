@@ -1,4 +1,4 @@
-import type { PipelineManager } from "../pipeline/PipelineManager";
+import type { IPipeline } from "../pipeline/interfaces";
 import { PipelineJobStatus } from "../pipeline/types";
 import type { DocumentManagementService } from "../store";
 import { logger } from "../utils/logger";
@@ -20,7 +20,7 @@ export interface RemoveToolArgs {
 export class RemoveTool {
   constructor(
     private readonly documentManagementService: DocumentManagementService,
-    private readonly pipelineManager: PipelineManager,
+    private readonly pipeline: IPipeline,
   ) {}
 
   /**
@@ -36,18 +36,22 @@ export class RemoveTool {
 
     try {
       // Abort any QUEUED or RUNNING job for this library+version
-      const jobs = this.pipelineManager.findJobsByLibraryVersion(
-        library,
-        (version ?? "").toLowerCase(),
-        [PipelineJobStatus.QUEUED, PipelineJobStatus.RUNNING],
+      const allJobs = await this.pipeline.getJobs();
+      const jobs = allJobs.filter(
+        (job) =>
+          job.library === library &&
+          job.version === (version ?? "") &&
+          (job.status === PipelineJobStatus.QUEUED ||
+            job.status === PipelineJobStatus.RUNNING),
       );
+
       for (const job of jobs) {
         logger.info(
           `🚫 Aborting job for ${library}@${version ?? ""} before deletion: ${job.id}`,
         );
-        await this.pipelineManager.cancelJob(job.id);
+        await this.pipeline.cancelJob(job.id);
         // Wait for job to finish cancelling if running
-        await this.pipelineManager.waitForJobCompletion(job.id);
+        await this.pipeline.waitForJobCompletion(job.id);
       }
       // Core logic: Call the document management service
       await this.documentManagementService.removeAllDocuments(library, version);

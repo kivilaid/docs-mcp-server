@@ -14,7 +14,7 @@ export function registerLibrariesRoutes(
   listLibrariesTool: ListLibrariesTool,
   removeTool: RemoveTool // Accept RemoveTool
 ) {
-  server.get("/api/libraries", async (_request, reply) => {
+  server.get("/web/libraries", async (_request, reply) => {
     // Add reply
     try {
       const result = await listLibrariesTool.execute();
@@ -30,7 +30,7 @@ export function registerLibrariesRoutes(
 
   // Add DELETE route for removing versions
   server.delete<{ Params: { libraryName: string; versionParam: string } }>(
-    "/api/libraries/:libraryName/versions/:versionParam",
+    "/web/libraries/:libraryName/versions/:versionParam",
     async (request, reply) => {
       const { libraryName, versionParam } = request.params;
       const version = versionParam === "unversioned" ? undefined : versionParam;

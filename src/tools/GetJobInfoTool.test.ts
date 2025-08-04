@@ -31,6 +31,8 @@ describe("GetJobInfoTool", () => {
     completionPromise: Promise.resolve(),
     resolveCompletion: () => {},
     rejectCompletion: () => {},
+    sourceUrl: "url1",
+    scraperOptions: null,
   };
 
   beforeEach(() => {

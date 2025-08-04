@@ -40,6 +40,8 @@ describe("CancelJobTool", () => {
     completionPromise: Promise.resolve(),
     resolveCompletion: () => {},
     rejectCompletion: () => {},
+    sourceUrl: "url1",
+    scraperOptions: null,
   });
 
   const mockJobsMap = new Map<string, PipelineJob>([
