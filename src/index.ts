@@ -7,7 +7,12 @@ import type { FastifyInstance } from "fastify";
 import { chromium } from "playwright";
 import packageJson from "../package.json";
 import { startServer as startMcpServer, stopServer as stopMcpServer } from "./mcp";
-import { PipelineManager } from "./pipeline/PipelineManager";
+import {
+  type IPipeline,
+  PipelineFactory,
+  type PipelineManager,
+  type PipelineOptions,
+} from "./pipeline";
 import { FileFetcher, HttpFetcher } from "./scraper/fetcher";
 import { ScrapeMode } from "./scraper/types";
 import { DocumentManagementService } from "./store/DocumentManagementService";
@@ -28,7 +33,7 @@ import {
 } from "./utils/config";
 import { LogLevel, logger, setLogLevel } from "./utils/logger";
 import { getProjectRoot } from "./utils/paths";
-import { startWebServer, stopWebServer } from "./web/web";
+import { stopWebServer } from "./web/web";
 
 /**
  * Ensures that the Playwright browsers are installed, unless a system Chromium path is set.
@@ -77,7 +82,7 @@ const formatOutput = (data: unknown) => JSON.stringify(data, null, 2);
 let mcpServerRunning = false;
 let webServerInstance: FastifyInstance | null = null;
 let activeDocService: DocumentManagementService | null = null;
-let activePipelineManager: PipelineManager | null = null;
+let activePipelineManager: IPipeline | null = null;
 
 let isShuttingDown = false; // Use a module-level boolean
 
@@ -144,11 +149,15 @@ async function main() {
     return activeDocService;
   }
 
-  async function ensurePipelineManagerInitialized(): Promise<PipelineManager> {
+  async function ensurePipelineManagerInitialized(
+    options: PipelineOptions = {},
+  ): Promise<IPipeline> {
     const ds = await ensureDocServiceInitialized(); // Depends on DocService
     if (!activePipelineManager) {
-      logger.debug("Initializing PipelineManager for server mode...");
-      const manager = new PipelineManager(ds);
+      logger.debug(
+        `Initializing PipelineManager with options: ${JSON.stringify(options)}`,
+      );
+      const manager = await PipelineFactory.createPipeline(ds, options);
 
       // Configure progress callbacks for real-time updates
       manager.setCallbacks({
@@ -171,7 +180,7 @@ async function main() {
 
       await manager.start();
       activePipelineManager = manager;
-      logger.debug("PipelineManager initialized for server mode.");
+      logger.debug("PipelineManager initialized.");
     }
     return activePipelineManager;
   }
@@ -196,6 +205,10 @@ async function main() {
         "--port <number>",
         "Port for MCP server (if http protocol)",
         DEFAULT_HTTP_PORT.toString(),
+      )
+      .option(
+        "--server-url <url>",
+        "URL of external pipeline worker server (for web interface or external worker mode)",
       );
 
     program.hook("preAction", (thisCommand, actionCommand) => {
@@ -213,17 +226,33 @@ async function main() {
         "Port for the web interface",
         DEFAULT_WEB_PORT.toString(),
       )
-      .action(async (cmdOptions) => {
+      .action(async (_cmdOptions, command) => {
         commandExecuted = true;
-        const docService = await ensureDocServiceInitialized();
-        const pipelineManager = await ensurePipelineManagerInitialized();
-        const port = Number.parseInt(cmdOptions.port, 10);
-        if (Number.isNaN(port)) {
-          console.error("Web port must be a number.");
+        const globalOptions = command.parent?.opts() || {};
+        const serverUrl = globalOptions.serverUrl;
+
+        if (!serverUrl) {
+          console.error(
+            "❌ Web interface requires --server-url parameter to connect to MCP server",
+          );
+          console.error("Example usage:");
+          console.error(
+            "  1. Start MCP server: docs-mcp-server --protocol http --port 3000",
+          );
+          console.error(
+            "  2. Start web interface: docs-mcp-server web --server-url http://localhost:3000",
+          );
           process.exit(1);
         }
-        webServerInstance = await startWebServer(port, docService, pipelineManager);
-        await new Promise(() => {}); // Keep alive
+
+        // Phase 1: External server support not yet implemented
+        console.error("❌ External server support not yet implemented (Phase 2)");
+        console.error("For now, start MCP server and web interface in embedded mode:");
+        console.error("  docs-mcp-server --protocol http --port 3000");
+        console.error(
+          "  Then open: http://localhost:3000 (web interface will be available there)",
+        );
+        process.exit(1);
       });
 
     // --- Scrape Command ---
@@ -308,12 +337,15 @@ async function main() {
       .action(async (library, url, options) => {
         commandExecuted = true; // Ensure this is set for CLI commands
         const docService = new DocumentManagementService();
-        let pipelineManager: PipelineManager | null = null;
+        let pipeline: IPipeline | null = null;
         try {
           await docService.initialize();
-          pipelineManager = new PipelineManager(docService);
-          await pipelineManager.start();
-          const scrapeTool = new ScrapeTool(docService, pipelineManager);
+          pipeline = await PipelineFactory.createPipeline(docService, {
+            recoverJobs: false, // CLI: fast, isolated execution
+            concurrency: 1, // CLI: single job at a time
+          });
+          await pipeline.start();
+          const scrapeTool = new ScrapeTool(docService, pipeline as PipelineManager);
 
           // Parse headers from CLI options
           const headers: Record<string, string> = {};
@@ -355,7 +387,7 @@ async function main() {
             console.log(`✅ Successfully scraped ${result.pagesScraped} pages`);
           else console.log(`🚀 Scraping job started with ID: ${result.jobId}`);
         } finally {
-          if (pipelineManager) await pipelineManager.stop();
+          if (pipeline) await pipeline.stop();
           await docService.shutdown();
         }
       });
@@ -539,14 +571,19 @@ async function main() {
           setLogLevel(LogLevel.ERROR);
         }
 
+        const serverUrl = options.serverUrl;
         const docService = await ensureDocServiceInitialized();
-        const pipelineManager = await ensurePipelineManagerInitialized();
+        const pipelineManager = await ensurePipelineManagerInitialized({
+          recoverJobs: true, // MCP server: persistent, recovers jobs
+          serverUrl,
+          concurrency: 3, // MCP server: higher concurrency
+        });
         mcpServerRunning = true;
         // Pass docService and pipelineManager to the startServer from src/mcp/index.ts
         await startMcpServer(
           protocol,
           docService,
-          pipelineManager,
+          pipelineManager as PipelineManager,
           protocol === "http" ? port : undefined,
         );
         await new Promise(() => {});

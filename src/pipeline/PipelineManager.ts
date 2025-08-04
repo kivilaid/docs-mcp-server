@@ -23,13 +23,16 @@ export class PipelineManager {
   private callbacks: PipelineManagerCallbacks = {};
   private store: DocumentManagementService;
   private scraperService: ScraperService;
+  private shouldRecoverJobs: boolean;
 
   constructor(
     store: DocumentManagementService,
     concurrency: number = DEFAULT_CONCURRENCY,
+    options: { recoverJobs?: boolean } = {},
   ) {
     this.store = store;
     this.concurrency = concurrency;
+    this.shouldRecoverJobs = options.recoverJobs ?? true; // Default to true for backward compatibility
     // ScraperService needs a registry. We create one internally for the manager.
     const registry = new ScraperRegistry();
     this.scraperService = new ScraperService(registry);
@@ -51,11 +54,16 @@ export class PipelineManager {
       return;
     }
     this.isRunning = true;
-    logger.debug(`PipelineManager started with concurrency ${this.concurrency}.`);
+    logger.debug(
+      `PipelineManager started with concurrency ${this.concurrency}, recoverJobs: ${this.shouldRecoverJobs}.`,
+    );
 
-    // Recover pending jobs from database on startup
-    // FIXME: Disable this for now to avoid conflicts between multiple processes
-    // await this.recoverPendingJobs();
+    // Recover pending jobs from database on startup only if enabled
+    if (this.shouldRecoverJobs) {
+      await this.recoverPendingJobs();
+    } else {
+      logger.debug("Job recovery disabled for this PipelineManager instance");
+    }
 
     this._processQueue().catch((error) => {
       logger.error(`❌ Error in processQueue during start: ${error}`);
