@@ -18,14 +18,15 @@ export class PipelineClient implements IPipeline {
   private activePolling = new Set<string>(); // Track jobs being polled for completion
 
   constructor(serverUrl: string) {
-    this.baseUrl = serverUrl.replace(/\/$/, ""); // Remove trailing slash
-    logger.debug(`PipelineClient created for ${this.baseUrl}`);
+    // Use the provided URL as-is, just remove trailing slash for consistency
+    this.baseUrl = serverUrl.replace(/\/$/, "");
+    logger.debug(`PipelineClient created for: ${this.baseUrl}`);
   }
 
   async start(): Promise<void> {
     // Check if external worker is available
     try {
-      const response = await fetch(`${this.baseUrl}/api/health`);
+      const response = await fetch(`${this.baseUrl}/health`);
       if (!response.ok) {
         throw new Error(`External worker health check failed: ${response.status}`);
       }
@@ -49,49 +50,60 @@ export class PipelineClient implements IPipeline {
     options: ScraperOptions,
   ): Promise<string> {
     try {
-      const response = await fetch(`${this.baseUrl}/api/jobs`, {
+      const response = await fetch(`${this.baseUrl}/jobs`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ library, version, options }),
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          library,
+          version,
+          options,
+        }),
       });
 
       if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Failed to enqueue job: ${response.status} ${errorText}`);
+        throw new Error(
+          `Failed to enqueue job: ${response.status} ${response.statusText}`,
+        );
       }
 
       const result = await response.json();
-      logger.debug(`Job enqueued via external worker: ${result.jobId}`);
-      return result.jobId;
+      const jobId = result.jobId;
+
+      logger.debug(`Job ${jobId} enqueued successfully`);
+      return jobId;
     } catch (error) {
-      logger.error(`Failed to enqueue job via external worker: ${error}`);
-      throw error;
+      throw new Error(
+        `Failed to enqueue job: ${error instanceof Error ? error.message : String(error)}`,
+      );
     }
   }
 
   async getJob(jobId: string): Promise<PipelineJob | undefined> {
     try {
-      const response = await fetch(`${this.baseUrl}/api/jobs/${jobId}`);
+      const response = await fetch(`${this.baseUrl}/jobs/${jobId}`);
 
       if (response.status === 404) {
         return undefined;
       }
 
       if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Failed to get job: ${response.status} ${errorText}`);
+        throw new Error(`Failed to get job: ${response.status} ${response.statusText}`);
       }
 
-      return await response.json();
+      const job = await response.json();
+      return job;
     } catch (error) {
-      logger.error(`Failed to get job ${jobId} from external worker: ${error}`);
-      throw error;
+      throw new Error(
+        `Failed to get job ${jobId}: ${error instanceof Error ? error.message : String(error)}`,
+      );
     }
   }
 
   async getJobs(status?: PipelineJobStatus): Promise<PipelineJob[]> {
     try {
-      const url = new URL(`${this.baseUrl}/api/jobs`);
+      const url = new URL(`${this.baseUrl}/jobs`);
       if (status) {
         url.searchParams.set("status", status);
       }
@@ -113,7 +125,7 @@ export class PipelineClient implements IPipeline {
 
   async cancelJob(jobId: string): Promise<void> {
     try {
-      const response = await fetch(`${this.baseUrl}/api/jobs/${jobId}`, {
+      const response = await fetch(`${this.baseUrl}/jobs/${jobId}`, {
         method: "DELETE",
       });
 
@@ -131,7 +143,7 @@ export class PipelineClient implements IPipeline {
 
   async clearCompletedJobs(): Promise<number> {
     try {
-      const response = await fetch(`${this.baseUrl}/api/jobs`, {
+      const response = await fetch(`${this.baseUrl}/jobs`, {
         method: "DELETE",
       });
 

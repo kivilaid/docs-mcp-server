@@ -67,7 +67,7 @@ Run the server and web interface together using Docker Compose.
    - Use `-d` for detached mode. Omit to see logs in your terminal.
    - To rebuild after updates: `docker compose up -d --build`.
 5. **Configure your MCP client:**
-   Add this to your MCP settings:
+   Add this to your MCP client configuration (e.g., VS Code settings for Cline, Claude Desktop config):
    ```json
    {
      "mcpServers": {
@@ -79,7 +79,7 @@ Run the server and web interface together using Docker Compose.
      }
    }
    ```
-   Restart your AI assistant after updating the config.
+   **Important:** You must manually start the server first (`docker compose up -d`), then configure your MCP client to connect to the HTTP endpoint. Restart your AI assistant after updating the config.
 6. **Access the Web Interface:**
    Open `http://localhost:6281` in your browser.
 
@@ -168,6 +168,38 @@ This method is simple and doesn't require cloning the repository.
    ```
    Replace `sk-proj-...` with your OpenAI API key. Restart your application.
 3. **Done!** The server is now available to your AI assistant.
+
+**For HTTP Server Mode:**
+
+Alternatively, you can run the server in HTTP mode and connect via URL (similar to Docker Compose):
+
+1. **Start the HTTP server:**
+
+   ```bash
+   docker run --rm \
+     -e OPENAI_API_KEY="your-openai-api-key" \
+     -v docs-mcp-data:/data \
+     -p 6280:6280 \
+     ghcr.io/arabold/docs-mcp-server:latest \
+     --protocol http --port 6280
+   ```
+
+2. **Configure your MCP client:**
+
+   ```json
+   {
+     "mcpServers": {
+       "docs-mcp-server": {
+         "url": "http://localhost:6280/sse",
+         "disabled": false,
+         "autoApprove": []
+       }
+     }
+   }
+   ```
+
+3. **Access the Web Interface:**
+   Open `http://localhost:6280` in your browser.
 
 **Docker Container Settings:**
 
@@ -280,18 +312,46 @@ docker run --rm ghcr.io/arabold/docs-mcp-server:latest --help
 
 You can run the Docs MCP Server without installing or cloning the repo:
 
-1. **Run the server:**
-   ```bash
-   npx @arabold/docs-mcp-server@latest
+**For Stdio Mode (Direct MCP Integration):**
+
+1. **Configure your MCP client:**
+   ```json
+   {
+     "mcpServers": {
+       "docs-mcp-server": {
+         "command": "npx",
+         "args": ["@arabold/docs-mcp-server@latest"],
+         "env": {
+           "OPENAI_API_KEY": "sk-proj-..." // Your OpenAI API key
+         },
+         "disabled": false,
+         "autoApprove": []
+       }
+     }
+   }
    ```
-2. **Set your OpenAI API key:**
-   - Use the `OPENAI_API_KEY` environment variable.
-   - Example:
-     ```bash
-     OPENAI_API_KEY="sk-proj-..." npx @arabold/docs-mcp-server@latest
-     ```
-3. **Configure your MCP client:**
-   - Use the same settings as in the Docker example, but replace the `command` and `args` with the `npx` command above.
+   Replace `sk-proj-...` with your OpenAI API key. Restart your application.
+
+**For HTTP Mode:**
+
+1. **Start the HTTP server:**
+   ```bash
+   OPENAI_API_KEY="sk-proj-..." npx @arabold/docs-mcp-server@latest --protocol http --port 6280
+   ```
+2. **Configure your MCP client:**
+   ```json
+   {
+     "mcpServers": {
+       "docs-mcp-server": {
+         "url": "http://localhost:6280/sse",
+         "disabled": false,
+         "autoApprove": []
+       }
+     }
+   }
+   ```
+3. **Access the Web Interface:**
+   Open `http://localhost:6280` in your browser.
 
 **Note:** Data is stored in a temporary directory and will not persist between runs. For persistent storage, use Docker or a local install.
 

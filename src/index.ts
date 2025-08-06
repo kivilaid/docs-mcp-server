@@ -1,10 +1,13 @@
 import { execSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import "dotenv/config";
+import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { Command } from "commander";
 import { chromium } from "playwright";
 import packageJson from "../package.json";
 import { type AppServerConfig, startAppServer } from "./app";
+import { startStdioServer } from "./mcp/startStdioServer";
+import { initializeTools } from "./mcp/tools";
 import { type IPipeline, PipelineFactory, type PipelineOptions } from "./pipeline";
 import { FileFetcher, HttpFetcher } from "./scraper/fetcher";
 import { ScrapeMode } from "./scraper/types";
@@ -68,10 +71,44 @@ function ensurePlaywrightBrowsersInstalled(): void {
 
 ensurePlaywrightBrowsersInstalled();
 
+/**
+ * Resolves the protocol based on auto-detection or explicit specification.
+ * Auto-detection uses TTY status to determine appropriate protocol.
+ */
+function resolveProtocol(protocol: string): "stdio" | "http" {
+  if (protocol === "auto") {
+    // VS Code and CI/CD typically run without TTY
+    if (!process.stdin.isTTY && !process.stdout.isTTY) {
+      return "stdio";
+    }
+    return "http";
+  }
+
+  // Explicit protocol specification
+  if (protocol === "stdio" || protocol === "http") {
+    return protocol;
+  }
+
+  throw new Error(`Invalid protocol: ${protocol}. Must be 'auto', 'stdio', or 'http'`);
+}
+
+/**
+ * Validates that --resume flag is only used with in-process workers.
+ */
+function validateResumeFlag(resume: boolean, serverUrl?: string): void {
+  if (resume && serverUrl) {
+    throw new Error(
+      "--resume flag is incompatible with --server-url. " +
+        "External workers handle their own job recovery.",
+    );
+  }
+}
+
 const formatOutput = (data: unknown) => JSON.stringify(data, null, 2);
 
 // Module-level variables for server instances and shutdown state
 let activeAppServer: ReturnType<typeof startAppServer> | null = null;
+let activeMcpStdioServer: McpServer | null = null;
 let activeDocService: DocumentManagementService | null = null;
 let activePipelineManager: IPipeline | null = null;
 
@@ -89,6 +126,13 @@ const sigintHandler = async () => {
       await appServer.stop();
       activeAppServer = null;
       logger.debug("SIGINT: AppServer stopped.");
+    }
+
+    if (activeMcpStdioServer) {
+      logger.debug("SIGINT: Stopping MCP server...");
+      await activeMcpStdioServer.close();
+      activeMcpStdioServer = null;
+      logger.debug("SIGINT: MCP server stopped.");
     }
 
     // Shutdown active services
@@ -186,7 +230,7 @@ async function main() {
       .showHelpAfterError(true)
       .option(
         "--protocol <type>",
-        "Protocol for MCP server (stdio or http)",
+        "Protocol for MCP server: 'auto' (default), 'stdio', or 'http'",
         DEFAULT_PROTOCOL,
       )
       .option(
@@ -195,8 +239,13 @@ async function main() {
         DEFAULT_HTTP_PORT.toString(),
       )
       .option(
+        "--resume",
+        "Resume interrupted jobs on startup (only valid without --server-url)",
+        false,
+      )
+      .option(
         "--server-url <url>",
-        "URL of external pipeline worker server (for web interface or external worker mode)",
+        "URL of external pipeline worker API (e.g., http://localhost:6280/api)",
       );
 
     program.hook("preAction", (thisCommand, actionCommand) => {
@@ -211,14 +260,16 @@ async function main() {
       .command("mcp")
       .description("Start MCP server only")
       .option("--port <number>", "Port for the MCP server", DEFAULT_HTTP_PORT.toString())
+      .option("--resume", "Resume interrupted jobs on startup", false)
       .option(
         "--server-url <url>",
-        "URL of external pipeline worker server (required for MCP-only mode)",
+        "URL of external pipeline worker API (e.g., http://localhost:6280/api)",
       )
       .action(async (cmdOptions, command) => {
         commandExecuted = true;
         const globalOptions = command.parent?.opts() || {};
         const port = Number.parseInt(cmdOptions.port);
+        const resume = cmdOptions.resume || globalOptions.resume;
         const serverUrl = cmdOptions.serverUrl || globalOptions.serverUrl;
 
         if (Number.isNaN(port) || port < 1 || port > 65535) {
@@ -226,39 +277,55 @@ async function main() {
           process.exit(1);
         }
 
-        if (!serverUrl) {
-          console.error("❌ MCP-only mode requires --server-url parameter");
-          console.error("Example usage:");
-          console.error("  1. Start worker: docs-mcp-server worker --port 8080");
-          console.error(
-            "  2. Start MCP: docs-mcp-server mcp --server-url http://localhost:8080",
-          );
-          process.exit(1);
+        validateResumeFlag(resume, serverUrl);
+
+        // Resolve protocol using same logic as default action
+        const resolvedProtocol = resolveProtocol(
+          globalOptions.protocol || DEFAULT_PROTOCOL,
+        );
+
+        // Suppress logging in stdio mode (before any logger calls)
+        if (resolvedProtocol === "stdio") {
+          setLogLevel(LogLevel.ERROR);
         }
 
         try {
           const docService = await ensureDocServiceInitialized();
           const pipeline = await ensurePipelineManagerInitialized({
-            recoverJobs: false, // MCP-only mode uses external worker
+            recoverJobs: resume || false,
             serverUrl,
             concurrency: 3,
           });
 
-          // Configure MCP-only server
-          const config: AppServerConfig = {
-            enableWebInterface: false,
-            enableMcpServer: true,
-            enablePipelineApi: false,
-            enableWorker: false,
-            port,
-            externalWorkerUrl: serverUrl,
-          };
+          if (resolvedProtocol === "stdio") {
+            // Direct stdio mode - bypass AppServer entirely
+            logger.debug(`🔍 Auto-detected stdio protocol (no TTY)`);
+            logger.info("🚀 Starting MCP server (stdio mode)");
 
-          logger.info(`🚀 Starting MCP server connecting to worker at ${serverUrl}`);
-          activeAppServer = startAppServer(docService, pipeline, config);
-          await activeAppServer; // Wait for startup to complete
+            const mcpTools = await initializeTools(docService, pipeline);
+            activeMcpStdioServer = await startStdioServer(mcpTools);
 
-          await new Promise(() => {}); // Keep running forever
+            await new Promise(() => {}); // Keep running forever
+          } else {
+            // HTTP mode - use AppServer
+            logger.debug(`🔍 Auto-detected http protocol (TTY available)`);
+            logger.info("🚀 Starting MCP server (http mode)");
+
+            // Configure MCP-only server
+            const config: AppServerConfig = {
+              enableWebInterface: false, // Never enable web interface in mcp command
+              enableMcpServer: true,
+              enablePipelineApi: false, // Never enable pipeline API in mcp command
+              enableWorker: !serverUrl,
+              port,
+              externalWorkerUrl: serverUrl,
+            };
+
+            activeAppServer = startAppServer(docService, pipeline, config);
+            await activeAppServer; // Wait for startup to complete
+
+            await new Promise(() => {}); // Keep running forever
+          }
         } catch (error) {
           logger.error(`❌ Failed to start MCP server: ${error}`);
           process.exit(1);
@@ -274,14 +341,16 @@ async function main() {
         "Port for the web interface",
         DEFAULT_WEB_PORT.toString(),
       )
+      .option("--resume", "Resume interrupted jobs on startup", false)
       .option(
         "--server-url <url>",
-        "URL of external pipeline worker server (required for web-only mode)",
+        "URL of external pipeline worker API (e.g., http://localhost:6280/api)",
       )
       .action(async (cmdOptions, command) => {
         commandExecuted = true;
         const globalOptions = command.parent?.opts() || {};
         const port = Number.parseInt(cmdOptions.port);
+        const resume = cmdOptions.resume || globalOptions.resume;
         const serverUrl = cmdOptions.serverUrl || globalOptions.serverUrl;
 
         if (Number.isNaN(port) || port < 1 || port > 65535) {
@@ -289,20 +358,12 @@ async function main() {
           process.exit(1);
         }
 
-        if (!serverUrl) {
-          console.error("❌ Web-only mode requires --server-url parameter");
-          console.error("Example usage:");
-          console.error("  1. Start worker: docs-mcp-server worker --port 8080");
-          console.error(
-            "  2. Start web: docs-mcp-server web --server-url http://localhost:8080",
-          );
-          process.exit(1);
-        }
+        validateResumeFlag(resume, serverUrl);
 
         try {
           const docService = await ensureDocServiceInitialized();
           const pipeline = await ensurePipelineManagerInitialized({
-            recoverJobs: false, // Web-only mode uses external worker
+            recoverJobs: resume || false,
             serverUrl,
             concurrency: 3,
           });
@@ -312,12 +373,14 @@ async function main() {
             enableWebInterface: true,
             enableMcpServer: false,
             enablePipelineApi: false,
-            enableWorker: false,
+            enableWorker: !serverUrl,
             port,
             externalWorkerUrl: serverUrl,
           };
 
-          logger.info(`🚀 Starting web interface connecting to worker at ${serverUrl}`);
+          logger.info(
+            `🚀 Starting web interface${serverUrl ? ` connecting to worker at ${serverUrl}` : ""}`,
+          );
           activeAppServer = startAppServer(docService, pipeline, config);
           await activeAppServer; // Wait for startup to complete
 
@@ -681,6 +744,16 @@ async function main() {
     program.action(async (options) => {
       if (!commandExecuted) {
         commandExecuted = true;
+
+        // Resolve protocol and validate flags
+        const resolvedProtocol = resolveProtocol(options.protocol);
+        validateResumeFlag(options.resume, options.serverUrl);
+
+        // Suppress logging in stdio mode (before any logger calls)
+        if (resolvedProtocol === "stdio") {
+          setLogLevel(LogLevel.ERROR);
+        }
+
         logger.debug("No subcommand specified, starting unified server by default...");
         const port = Number.parseInt(options.port, 10);
         if (Number.isNaN(port)) {
@@ -690,26 +763,40 @@ async function main() {
 
         const docService = await ensureDocServiceInitialized();
         const pipeline = await ensurePipelineManagerInitialized({
-          recoverJobs: !options.serverUrl, // Only recover jobs if using embedded worker
+          recoverJobs: options.resume || false, // Use --resume flag for job recovery
           serverUrl: options.serverUrl,
           concurrency: 3,
         });
 
-        // Configure unified server (web + MCP + pipeline API + worker)
-        const config: AppServerConfig = {
-          enableWebInterface: true,
-          enableMcpServer: true,
-          enablePipelineApi: true,
-          enableWorker: !options.serverUrl, // Use embedded worker unless external URL provided
-          port,
-          externalWorkerUrl: options.serverUrl,
-        };
+        if (resolvedProtocol === "stdio") {
+          // Direct stdio mode - bypass AppServer entirely
+          logger.debug(`🔍 Auto-detected stdio protocol (no TTY)`);
+          logger.info("🚀 Starting MCP server (stdio mode)");
 
-        logger.info("🚀 Starting unified server (web + MCP + pipeline + worker)");
-        activeAppServer = startAppServer(docService, pipeline, config);
-        await activeAppServer; // Wait for startup to complete
+          const mcpTools = await initializeTools(docService, pipeline);
+          activeMcpStdioServer = await startStdioServer(mcpTools);
 
-        await new Promise(() => {}); // Keep running forever
+          await new Promise(() => {}); // Keep running forever
+        } else {
+          // HTTP mode - use AppServer
+          logger.debug(`🔍 Auto-detected http protocol (TTY available)`);
+          logger.info("🚀 Starting unified server (web + MCP + pipeline + worker)");
+
+          // Configure services based on resolved protocol
+          const config: AppServerConfig = {
+            enableWebInterface: true, // Enable web interface in http mode
+            enableMcpServer: true, // Always enable MCP server
+            enablePipelineApi: true, // Enable pipeline API in http mode
+            enableWorker: !options.serverUrl, // In-process unless external URL provided
+            port,
+            externalWorkerUrl: options.serverUrl,
+          };
+
+          activeAppServer = startAppServer(docService, pipeline, config);
+          await activeAppServer; // Wait for startup to complete
+
+          await new Promise(() => {}); // Keep running forever
+        }
       }
     });
 
@@ -724,6 +811,15 @@ async function main() {
           await appServer.stop();
         } catch (e) {
           logger.error(`❌ Error stopping AppServer: ${e}`);
+        }
+      }
+
+      if (activeMcpStdioServer) {
+        try {
+          await activeMcpStdioServer.close();
+          activeMcpStdioServer = null;
+        } catch (e) {
+          logger.error(`❌ Error stopping MCP server: ${e}`);
         }
       }
 

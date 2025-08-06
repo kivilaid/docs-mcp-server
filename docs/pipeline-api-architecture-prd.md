@@ -81,7 +81,7 @@ const pipeline = await PipelineFactory.createPipeline(docService, {
 
 // External worker mode
 const pipeline = await PipelineFactory.createPipeline(docService, {
-  serverUrl: "http://worker:8080",
+  serverUrl: "http://worker:8080/api",
 });
 ```
 
@@ -242,6 +242,10 @@ export namespace PipelineFactory {
 // src/pipeline/PipelineClient.ts
 export class PipelineClient implements IPipeline {
   // HTTP API client that matches PipelineManager interface
+  // Simplified URL handling: accepts full API URLs directly
+  constructor(serverUrl: string) {
+    this.baseUrl = serverUrl.replace(/\/$/, ""); // Remove trailing slash only
+  }
 }
 
 // src/pipeline/PipelineApiService.ts
@@ -249,6 +253,15 @@ export class PipelineApiService {
   // HTTP API endpoints for job operations
 }
 ```
+
+**URL Handling Simplification:**
+
+The PipelineClient has been simplified to accept full API URLs directly:
+
+- **Before**: Complex URL parsing with base URLs vs API endpoints
+- **After**: Simple approach - users provide the complete API URL
+- **Example**: `--server-url http://localhost:6280/api` (full API endpoint)
+- **Implementation**: `this.baseUrl = serverUrl.replace(/\/$/, "")` (removes only trailing slash)
 
 **Tasks Completed:**
 
@@ -507,7 +520,7 @@ services:
         "--port",
         "6280",
         "--server-url",
-        "http://worker:8080",
+        "http://worker:8080/api",
       ]
     ports:
       - "6280:6280"
