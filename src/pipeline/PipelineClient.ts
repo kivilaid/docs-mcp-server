@@ -63,9 +63,8 @@ export class PipelineClient implements IPipeline {
       });
 
       if (!response.ok) {
-        throw new Error(
-          `Failed to enqueue job: ${response.status} ${response.statusText}`,
-        );
+        const errorText = await response.text();
+        throw new Error(`Failed to enqueue job: ${response.status} ${errorText}`);
       }
 
       const result = await response.json();

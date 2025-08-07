@@ -210,9 +210,8 @@ async function main() {
         },
       });
 
-      await manager.start();
       activePipelineManager = manager;
-      logger.debug("PipelineManager initialized.");
+      logger.debug("PipelineManager initialized (not started).");
     }
     return activePipelineManager;
   }
@@ -259,6 +258,11 @@ async function main() {
     program
       .command("mcp")
       .description("Start MCP server only")
+      .option(
+        "--protocol <type>",
+        "Protocol for MCP server: 'auto' (default), 'stdio', or 'http'",
+        DEFAULT_PROTOCOL,
+      )
       .option("--port <number>", "Port for the MCP server", DEFAULT_HTTP_PORT.toString())
       .option("--resume", "Resume interrupted jobs on startup", false)
       .option(
@@ -280,9 +284,7 @@ async function main() {
         validateResumeFlag(resume, serverUrl);
 
         // Resolve protocol using same logic as default action
-        const resolvedProtocol = resolveProtocol(
-          globalOptions.protocol || DEFAULT_PROTOCOL,
-        );
+        const resolvedProtocol = resolveProtocol(cmdOptions.protocol);
 
         // Suppress logging in stdio mode (before any logger calls)
         if (resolvedProtocol === "stdio") {
@@ -302,6 +304,7 @@ async function main() {
             logger.debug(`🔍 Auto-detected stdio protocol (no TTY)`);
             logger.info("🚀 Starting MCP server (stdio mode)");
 
+            await pipeline.start(); // Start pipeline for stdio mode
             const mcpTools = await initializeTools(docService, pipeline);
             activeMcpStdioServer = await startStdioServer(mcpTools);
 
@@ -773,6 +776,7 @@ async function main() {
           logger.debug(`🔍 Auto-detected stdio protocol (no TTY)`);
           logger.info("🚀 Starting MCP server (stdio mode)");
 
+          await pipeline.start(); // Start pipeline for stdio mode
           const mcpTools = await initializeTools(docService, pipeline);
           activeMcpStdioServer = await startStdioServer(mcpTools);
 

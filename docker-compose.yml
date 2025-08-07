@@ -1,37 +1,80 @@
+# Docker Compose configuration for Docs MCP Server
+#
+# Scaling setup with separate services:
+# - worker: Handles documentation processing
+# - mcp: MCP server endpoint for AI tools
+# - web: Web interface for management
+#
 services:
-  docs-mcp-server:
+  # Worker service - handles the actual documentation processing
+  worker:
     image: ghcr.io/arabold/docs-mcp-server:latest
     build:
       context: .
       dockerfile: Dockerfile
-    command: ["--protocol", "http", "--port", "6280"]
-    # platform: linux/amd64
+    command: ["worker", "--port", "8080"]
+    container_name: docs-mcp-worker
+    env_file:
+      - .env
+    volumes:
+      - docs-mcp-data:/data
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 1G
+
+  # MCP server - provides AI tool integration endpoint
+  mcp:
+    image: ghcr.io/arabold/docs-mcp-server:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command:
+      [
+        "mcp",
+        "--protocol",
+        "http",
+        "--port",
+        "6280",
+        "--server-url",
+        "http://worker:8080/api",
+      ]
     container_name: docs-mcp-server
     ports:
       - "6280:6280"
     env_file:
       - .env
-    environment:
-      - MCP_PORT=6280
-    volumes:
-      - docs-mcp-data:/data
+    depends_on:
+      - worker
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
 
-  docs-mcp-web:
+  # Web interface - provides browser-based management
+  web:
     image: ghcr.io/arabold/docs-mcp-server:latest
     build:
       context: .
       dockerfile: Dockerfile
-    command: ["web", "--port", "6281"]
-    # platform: linux/amd64
+    command: ["web", "--port", "6281", "--server-url", "http://worker:8080/api"]
     container_name: docs-mcp-web
     ports:
       - "6281:6281"
     env_file:
       - .env
-    environment:
-      - WEB_PORT=6281
-    volumes:
-      - docs-mcp-data:/data
+    depends_on:
+      - worker
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
 
 volumes:
   docs-mcp-data:
