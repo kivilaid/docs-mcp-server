@@ -1,6 +1,6 @@
 /**
  * MCP service that registers MCP protocol routes for AI tool integration.
- * Extracted from src/mcp/startHttpServer.ts to enable modular server composition.
+ * Provides modular server composition for MCP endpoints.
  */
 
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
