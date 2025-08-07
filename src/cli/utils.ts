@@ -13,6 +13,7 @@ import {
   DEFAULT_HTTP_PORT,
   DEFAULT_MAX_CONCURRENCY,
   DEFAULT_PROTOCOL,
+  DEFAULT_WEB_PORT,
 } from "../utils/config";
 import { LogLevel, logger, setLogLevel } from "../utils/logger";
 import { getProjectRoot } from "../utils/paths";
@@ -210,5 +211,6 @@ export function parseHeaders(headerOptions: string[]): Record<string, string> {
 export const CLI_DEFAULTS = {
   PROTOCOL: DEFAULT_PROTOCOL,
   HTTP_PORT: DEFAULT_HTTP_PORT,
+  WEB_PORT: DEFAULT_WEB_PORT,
   MAX_CONCURRENCY: DEFAULT_MAX_CONCURRENCY,
 } as const;

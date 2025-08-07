@@ -86,8 +86,6 @@ Protocol can be explicitly set via `--protocol stdio|http` flag, bypassing auto-
 
 ### Environment Variables
 
-- `DOCS_MCP_PORT`: HTTP server port (default: 6280)
-- `DOCS_MCP_DATA_DIR`: Database and storage location
 - `DOCS_MCP_EMBEDDING_MODEL`: Embedding provider configuration
 
 ### CLI Arguments

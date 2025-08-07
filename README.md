@@ -324,8 +324,6 @@ The Docs MCP Server is configured via environment variables. Set these in your s
 | `AZURE_OPENAI_API_INSTANCE_NAME`   | Azure OpenAI instance name.                           |
 | `AZURE_OPENAI_API_DEPLOYMENT_NAME` | Azure OpenAI deployment name.                         |
 | `AZURE_OPENAI_API_VERSION`         | Azure OpenAI API version.                             |
-| `DOCS_MCP_DATA_DIR`                | Data directory (default: `./data`).                   |
-| `DOCS_MCP_PORT`                    | Server port (default: `6280`).                        |
 
 See [examples above](#alternative-using-docker) for usage.
 

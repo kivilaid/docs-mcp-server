@@ -9,6 +9,7 @@ import { initializeTools } from "../../mcp/tools";
 import type { PipelineOptions } from "../../pipeline";
 import { logger } from "../../utils/logger";
 import {
+  CLI_DEFAULTS,
   createAppServerConfig,
   ensurePlaywrightBrowsersInstalled,
   initializeDocumentService,
@@ -25,7 +26,7 @@ export function createDefaultAction(program: Command): Command {
       "Protocol for MCP server: 'auto' (default), 'stdio', or 'http'",
       "auto",
     )
-    .option("--port <number>", "Port for the server", "3000")
+    .option("--port <number>", "Port for the server", CLI_DEFAULTS.HTTP_PORT.toString())
     .option("--resume", "Resume interrupted jobs on startup", false)
     .action(
       async (

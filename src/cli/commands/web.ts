@@ -7,6 +7,7 @@ import { startAppServer } from "../../app";
 import type { PipelineOptions } from "../../pipeline";
 import { logger } from "../../utils/logger";
 import {
+  CLI_DEFAULTS,
   createAppServerConfig,
   initializeDocumentService,
   initializePipeline,
@@ -21,7 +22,7 @@ export function createWebCommand(program: Command): Command {
     .option(
       "--port <number>",
       "Port for the web interface",
-      "3000", // Different default port for web
+      CLI_DEFAULTS.WEB_PORT.toString(),
     )
     .option(
       "--server-url <url>",
