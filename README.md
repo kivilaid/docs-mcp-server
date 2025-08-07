@@ -255,7 +255,106 @@ Set `DOCS_MCP_EMBEDDING_MODEL` to one of:
 - `microsoft:text-embedding-ada-002` (Azure OpenAI)
 - Or any OpenAI-compatible model name
 
-For more, see the [ARCHITECTURE.md](ARCHITECTURE.md) and [examples above](#alternative-using-docker).
+### Provider-Specific Configuration Examples
+
+Here are complete configuration examples for different embedding providers:
+
+**OpenAI (Default):**
+
+```bash
+docker run --rm \
+  -e OPENAI_API_KEY="sk-proj-your-openai-api-key" \
+  -e DOCS_MCP_EMBEDDING_MODEL="text-embedding-3-small" \
+  -v docs-mcp-data:/data \
+  -p 6280:6280 \
+  ghcr.io/arabold/docs-mcp-server:latest \
+  --protocol http --port 6280
+```
+
+**Ollama (Local):**
+
+```bash
+docker run --rm \
+  -e OPENAI_API_KEY="ollama" \
+  -e OPENAI_API_BASE="http://host.docker.internal:11434/v1" \
+  -e DOCS_MCP_EMBEDDING_MODEL="nomic-embed-text" \
+  -v docs-mcp-data:/data \
+  -p 6280:6280 \
+  ghcr.io/arabold/docs-mcp-server:latest \
+  --protocol http --port 6280
+```
+
+**LM Studio (Local):**
+
+```bash
+docker run --rm \
+  -e OPENAI_API_KEY="lmstudio" \
+  -e OPENAI_API_BASE="http://host.docker.internal:1234/v1" \
+  -e DOCS_MCP_EMBEDDING_MODEL="text-embedding-qwen3-embedding-4b" \
+  -v docs-mcp-data:/data \
+  -p 6280:6280 \
+  ghcr.io/arabold/docs-mcp-server:latest \
+  --protocol http --port 6280
+```
+
+**Google Gemini:**
+
+```bash
+docker run --rm \
+  -e GOOGLE_API_KEY="your-google-api-key" \
+  -e DOCS_MCP_EMBEDDING_MODEL="gemini:embedding-001" \
+  -v docs-mcp-data:/data \
+  -p 6280:6280 \
+  ghcr.io/arabold/docs-mcp-server:latest \
+  --protocol http --port 6280
+```
+
+**Google Vertex AI:**
+
+```bash
+# Mount your service account JSON file
+docker run --rm \
+  -e GOOGLE_APPLICATION_CREDENTIALS="/app/gcp-key.json" \
+  -e DOCS_MCP_EMBEDDING_MODEL="vertex:text-embedding-004" \
+  -v /path/to/your/gcp-service-account.json:/app/gcp-key.json:ro \
+  -v docs-mcp-data:/data \
+  -p 6280:6280 \
+  ghcr.io/arabold/docs-mcp-server:latest \
+  --protocol http --port 6280
+```
+
+**AWS Bedrock:**
+
+```bash
+docker run --rm \
+  -e AWS_ACCESS_KEY_ID="your-aws-access-key-id" \
+  -e AWS_SECRET_ACCESS_KEY="your-aws-secret-access-key" \
+  -e AWS_REGION="us-east-1" \
+  -e DOCS_MCP_EMBEDDING_MODEL="aws:amazon.titan-embed-text-v1" \
+  -v docs-mcp-data:/data \
+  -p 6280:6280 \
+  ghcr.io/arabold/docs-mcp-server:latest \
+  --protocol http --port 6280
+```
+
+**Azure OpenAI:**
+
+```bash
+docker run --rm \
+  -e AZURE_OPENAI_API_KEY="your-azure-openai-api-key" \
+  -e AZURE_OPENAI_API_INSTANCE_NAME="your-instance-name" \
+  -e AZURE_OPENAI_API_DEPLOYMENT_NAME="your-deployment-name" \
+  -e AZURE_OPENAI_API_VERSION="2024-02-01" \
+  -e DOCS_MCP_EMBEDDING_MODEL="microsoft:text-embedding-ada-002" \
+  -v docs-mcp-data:/data \
+  -p 6280:6280 \
+  ghcr.io/arabold/docs-mcp-server:latest \
+  --protocol http --port 6280
+```
+
+> **Note for Local APIs (Ollama, LM Studio):** When running in Docker, use `host.docker.internal` instead of `localhost` to access services running on your host machine.
+
+For more architectural details, see the [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ## Development
 
