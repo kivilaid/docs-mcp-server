@@ -8,7 +8,7 @@ The system supports two deployment patterns with automatic protocol detection fo
 
 Single process containing all services on one port (default: 6280). This mode combines:
 
-- MCP server accessible via `/sse` endpoint
+- MCP server accessible via `/mcp` and `/sse` endpoints
 - Web interface for job management
 - Embedded worker for document processing
 - Pipeline API for programmatic access

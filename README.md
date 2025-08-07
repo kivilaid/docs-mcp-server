@@ -63,18 +63,29 @@ The easiest way to get started is using the pre-built Docker image for simple, s
    Replace `your-openai-api-key` with your actual OpenAI API key.
 
 3. **Configure your MCP client:**
-   Add this to your MCP settings (VS Code, Claude Desktop, etc.):
+   Add this to your MCP settings (VS Code, Claude Desktop, etc.). Choose one of the following connection types:
 
    ```json
    {
      "mcpServers": {
        "docs-mcp-server": {
+         "type": "sse",
          "url": "http://localhost:6280/sse",
          "disabled": false,
          "autoApprove": []
        }
      }
    }
+   ```
+
+   **Alternative connection types:**
+
+   ```json
+   // Streamable HTTP
+   "url": "http://localhost:6280/mcp"
+
+   // SSE (Server-Sent Events)
+   "url": "http://localhost:6280/sse"
    ```
 
    Restart your AI assistant after updating the config.
@@ -205,7 +216,7 @@ docker compose up -d --scale worker=3
 {
   "mcpServers": {
     "docs-mcp-server": {
-      "url": "http://localhost:6280/sse",
+      "url": "http://localhost:6280/mcp",
       "disabled": false,
       "autoApprove": []
     }
@@ -213,10 +224,24 @@ docker compose up -d --scale worker=3
 }
 ```
 
+**Alternative connection types:**
+
+```json
+// HTTP (Streamable) - Recommended
+"url": "http://localhost:6280/mcp"
+
+// SSE (Server-Sent Events)
+"url": "http://localhost:6280/sse"
+
+// stdio (Command line)
+"command": ["npx", "@arabold/docs-mcp-server", "--protocol", "stdio"]
+```
+
 **Access interfaces:**
 
 - Web Interface: `http://localhost:6281`
-- MCP Endpoint: `http://localhost:6280/sse`
+- MCP Endpoint (HTTP): `http://localhost:6280/mcp`
+- MCP Endpoint (SSE): `http://localhost:6280/sse`
 
 This architecture allows independent scaling of processing (workers) and user interfaces.
 

@@ -212,7 +212,12 @@ HTMX and AlpineJS integration uses custom events to decouple component interacti
 
 ### MCP Protocol Integration
 
-The MCP server exposes tools as protocol-compliant endpoints. Both stdio and HTTP transports are supported, with automatic selection based on TTY detection.
+The MCP server exposes tools as protocol-compliant endpoints. Multiple transports are supported:
+
+- **stdio transport**: For command-line integration and AI tools
+- **HTTP transport**: Provides `/mcp` (Streamable HTTP) and `/sse` (Server-Sent Events) endpoints
+
+Protocol selection is automatic - stdio transport for AI tools (no TTY), HTTP transport for interactive terminals (has TTY).
 
 Available MCP tools mirror CLI functionality: document scraping, search, library management, and job control. Tools maintain identical interfaces across CLI and MCP access methods.
 
