@@ -1,3 +1,43 @@
+# [1.18.0](https://github.com/arabold/docs-mcp-server/compare/v1.17.0...v1.18.0) (2025-08-08)
+
+
+### Bug Fixes
+
+* add comprehensive tests for DocumentStore functionality ([5a7c480](https://github.com/arabold/docs-mcp-server/commit/5a7c480a8b8c235d620432748a274142f9a63862))
+* adjust linter rules to disable noExplicitAny warning in suspicious category ([c8cec16](https://github.com/arabold/docs-mcp-server/commit/c8cec16704a4819d6d1b691266263a56c89d1b89))
+* **cli:** removes redundant server startup log messages ([6919198](https://github.com/arabold/docs-mcp-server/commit/691919828ba41d47a8b0a7c2f4daafe9b5555703))
+* **cli:** unifies CLI port defaults and updates related docs ([7663332](https://github.com/arabold/docs-mcp-server/commit/766333205cc73448fb1ef03a547b4990e04cfc31))
+* **db:** only vacuum database after successful migration ([0d12ac0](https://github.com/arabold/docs-mcp-server/commit/0d12ac006574aad8ea1c4e77734e9d1c0dd2faa5))
+* disable recovery of old pipeline jobs for now ([53ebbf5](https://github.com/arabold/docs-mcp-server/commit/53ebbf52de0d95ddb7bc822a3a72dc642cea6815))
+* **docs:** update schema URL in biome.json to the latest version ([727698c](https://github.com/arabold/docs-mcp-server/commit/727698cf4f1cbc9b1662d441cec86e3c2c99a46c))
+* enhance version comparison with fallback to string comparison and update job item timestamps ([c06f396](https://github.com/arabold/docs-mcp-server/commit/c06f396a8d782aef6ee99c26edcb4bbeefcc6546))
+* ensures job progress is always persisted in pipeline manager ([d4fa1b7](https://github.com/arabold/docs-mcp-server/commit/d4fa1b7abfdb17d9a319e567ef6e5701c29c3fdc))
+* **fetcher:** enhance content fetching and charset handling ([d3e4076](https://github.com/arabold/docs-mcp-server/commit/d3e40764f659b1d056eb0e5c3c832dc87ad472c2))
+* **mcp:** fixed serialization issues caused by dependencies update ([c36b723](https://github.com/arabold/docs-mcp-server/commit/c36b723138b39aa38954d5cb8660fa77280a933c))
+* reverse sorting order for vector and FTS scores in rank assignment ([e2e5d13](https://github.com/arabold/docs-mcp-server/commit/e2e5d130b9eaa757a30b2283a2283b37bc76bf55))
+* **scraper:** ensures URL-specific documents are replaced on add ([f4b60bd](https://github.com/arabold/docs-mcp-server/commit/f4b60bd1a66f88a3be3b3d41a84866a590062917))
+* **scraper:** invalid characters when scraping some docs (charset issue) ([feb03e5](https://github.com/arabold/docs-mcp-server/commit/feb03e53c5c80b2cfdf16251eb48c668facdd880))
+* **tests:** adds totalDiscovered field to test progress objects ([a3c5906](https://github.com/arabold/docs-mcp-server/commit/a3c59066b7abb92cc535e6bfcb763d925e89475f))
+
+
+### Features
+
+* add scraper options tracking ([952dd8f](https://github.com/arabold/docs-mcp-server/commit/952dd8f0bc106ccab039bc6a2179377560307181))
+* adds external pipeline worker and HTTP API support ([85a93ca](https://github.com/arabold/docs-mcp-server/commit/85a93caa0d54495365ebdd1571d302ff27cd52f1))
+* apply production-ready SQLite settings post-migration ([3d20968](https://github.com/arabold/docs-mcp-server/commit/3d20968fe156b1406e99d03df1e00f169747c036))
+* complete vector table normalization with data preservation ([ead3987](https://github.com/arabold/docs-mcp-server/commit/ead3987a3c99e84f02a55e576116adec78c6d07e))
+* **docs:** adds note about Docker Compose feature limitations ([cb42b76](https://github.com/arabold/docs-mcp-server/commit/cb42b76b7bb42a8d3728726e245ae0d46c829d93))
+* **docs:** adds provider-specific embedding config examples ([503beea](https://github.com/arabold/docs-mcp-server/commit/503beea117be6cc4921ffc4b3389a147415711fb))
+* **docs:** update MCP server transport options and configuration examples ([fc9ba11](https://github.com/arabold/docs-mcp-server/commit/fc9ba114306c12b2024afcbff78f90dce675c214))
+* enhance database migrations and vector search functionality ([2b661d5](https://github.com/arabold/docs-mcp-server/commit/2b661d507719494cf92f829958b24dd64f8383aa))
+* enhance job management with database status and progress tracking ([5922b4a](https://github.com/arabold/docs-mcp-server/commit/5922b4a9409f131ba1e33095ac310686b7487b99))
+* implement auto protocol detection and explicit job recovery control ([b30e82c](https://github.com/arabold/docs-mcp-server/commit/b30e82cef5e36760d945f2b577cdddd1acc21724))
+* implement hybrid pipeline architecture with functionality-based selection ([e274f07](https://github.com/arabold/docs-mcp-server/commit/e274f07a449a7024002d32f207e1d82c9c0d9690))
+* implement real-time job progress updates with auto-refresh functionality ([d04a27c](https://github.com/arabold/docs-mcp-server/commit/d04a27c6a333625478af8366901204c22ecd2675))
+* implement unified server architecture with modular service composition ([83f642d](https://github.com/arabold/docs-mcp-server/commit/83f642d10f8eea2f67763838f46f6d46e924e37e)), closes [#161](https://github.com/arabold/docs-mcp-server/issues/161)
+* implement version status tracking and related database operations ([8c6975d](https://github.com/arabold/docs-mcp-server/commit/8c6975df7c6fe133a9c73c70c489195788329346))
+* normalize database schema by introducing versions table and updating documents ([aece02a](https://github.com/arabold/docs-mcp-server/commit/aece02a35649c0a5d68d518dc85075ee598556ba))
+
 # [1.17.0](https://github.com/arabold/docs-mcp-server/compare/v1.16.1...v1.17.0) (2025-05-26)
 
 
