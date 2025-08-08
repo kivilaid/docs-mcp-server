@@ -1,4 +1,4 @@
-import type { ScraperOptions, ScraperProgress } from "../scraper/types";
+import type { ScraperProgress } from "../scraper/types";
 import type { VersionScraperOptions, VersionStatus } from "../store/types";
 import type { Document } from "../types"; // Use local Document type
 
@@ -15,7 +15,8 @@ export enum PipelineJobStatus {
 }
 
 /**
- * Represents a single document processing job within the pipeline.
+ * Public interface for pipeline jobs exposed through API boundaries.
+ * Contains only serializable fields suitable for JSON transport.
  */
 export interface PipelineJob {
   /** Unique identifier for the job. */
@@ -23,31 +24,19 @@ export interface PipelineJob {
   /** The library name associated with the job. */
   library: string;
   /** The library version associated with the job. */
-  version: string;
-  /** Options provided for the scraper. */
-  options: ScraperOptions;
+  version: string | null;
   /** Current pipeline status of the job. */
   status: PipelineJobStatus;
   /** Detailed progress information. */
   progress: ScraperProgress | null;
-  /** Error object if the job failed. */
-  error: Error | null;
+  /** Error information if the job failed. */
+  error: { message: string } | null;
   /** Timestamp when the job was created. */
   createdAt: Date;
   /** Timestamp when the job started running. */
   startedAt: Date | null;
   /** Timestamp when the job finished (completed, failed, or cancelled). */
   finishedAt: Date | null;
-  /** AbortController to signal cancellation. */
-  abortController: AbortController;
-  /** Promise that resolves/rejects when the job finishes. */
-  completionPromise: Promise<void>;
-  /** Resolver function for the completion promise. */
-  resolveCompletion: () => void;
-  /** Rejector function for the completion promise. */
-  rejectCompletion: (reason?: unknown) => void;
-
-  // Database status fields (single source of truth)
   /** Database version ID for direct updates. */
   versionId?: number;
   /** Database version status (authoritative). */
@@ -60,12 +49,29 @@ export interface PipelineJob {
   errorMessage?: string | null;
   /** Last update timestamp from database. */
   updatedAt?: Date;
-
-  // Scraper options fields
   /** Original scraping URL. */
   sourceUrl: string | null;
   /** Stored scraper options for reproducibility. */
   scraperOptions: VersionScraperOptions | null;
+}
+
+/**
+ * Internal pipeline job representation used within PipelineManager.
+ * Contains non-serializable fields for job management and control.
+ */
+export interface InternalPipelineJob extends Omit<PipelineJob, "version" | "error"> {
+  /** The library version associated with the job (internal uses string). */
+  version: string;
+  /** Error object if the job failed. */
+  error: Error | null;
+  /** AbortController to signal cancellation. */
+  abortController: AbortController;
+  /** Promise that resolves/rejects when the job finishes. */
+  completionPromise: Promise<void>;
+  /** Resolver function for the completion promise. */
+  resolveCompletion: () => void;
+  /** Rejector function for the completion promise. */
+  rejectCompletion: (reason?: unknown) => void;
 }
 
 /**
@@ -74,9 +80,13 @@ export interface PipelineJob {
  */
 export interface PipelineManagerCallbacks {
   /** Callback triggered when a job's status changes. */
-  onJobStatusChange?: (job: PipelineJob) => Promise<void>;
+  onJobStatusChange?: (job: InternalPipelineJob) => Promise<void>;
   /** Callback triggered when a job makes progress. */
-  onJobProgress?: (job: PipelineJob, progress: ScraperProgress) => Promise<void>;
+  onJobProgress?: (job: InternalPipelineJob, progress: ScraperProgress) => Promise<void>;
   /** Callback triggered when a job encounters an error during processing (e.g., storing a doc). */
-  onJobError?: (job: PipelineJob, error: Error, document?: Document) => Promise<void>;
+  onJobError?: (
+    job: InternalPipelineJob,
+    error: Error,
+    document?: Document,
+  ) => Promise<void>;
 }

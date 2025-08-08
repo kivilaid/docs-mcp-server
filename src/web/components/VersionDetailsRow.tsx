@@ -114,7 +114,7 @@ const VersionDetailsRow = ({
               }, 3000);
             }
           `}
-          hx-delete={`/api/libraries/${encodeURIComponent(libraryName)}/versions/${encodeURIComponent(versionParam)}`}
+          hx-delete={`/web/libraries/${encodeURIComponent(libraryName)}/versions/${encodeURIComponent(versionParam)}`}
           hx-target={`#${rowId}`}
           hx-swap="outerHTML"
           hx-trigger="confirmed-delete"

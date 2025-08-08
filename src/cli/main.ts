@@ -1,0 +1,221 @@
+/**
+ * CLI main entry point with global shutdown and error handling.
+ */
+
+import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { IPipeline } from "../pipeline";
+import type { DocumentManagementService } from "../store/DocumentManagementService";
+import { logger } from "../utils/logger";
+import { createCliProgram } from "./index";
+
+// Module-level variables for active services and shutdown state
+let activeAppServer: Promise<{ stop: () => Promise<void> }> | null = null;
+let activeMcpStdioServer: McpServer | null = null;
+let activeDocService: DocumentManagementService | null = null;
+let activePipelineManager: IPipeline | null = null;
+let isShuttingDown = false;
+
+/**
+ * Graceful shutdown handler for SIGINT
+ */
+const sigintHandler = async (): Promise<void> => {
+  if (isShuttingDown) return;
+  isShuttingDown = true;
+
+  logger.debug("Received SIGINT. Shutting down gracefully...");
+  try {
+    if (activeAppServer) {
+      logger.debug("SIGINT: Stopping AppServer...");
+      const appServer = await activeAppServer;
+      await appServer.stop();
+      activeAppServer = null;
+      logger.debug("SIGINT: AppServer stopped.");
+    }
+
+    if (activeMcpStdioServer) {
+      logger.debug("SIGINT: Stopping MCP server...");
+      await activeMcpStdioServer.close();
+      activeMcpStdioServer = null;
+      logger.debug("SIGINT: MCP server stopped.");
+    }
+
+    // Shutdown active services
+    logger.debug("SIGINT: Shutting down active services...");
+    if (activePipelineManager) {
+      await activePipelineManager.stop();
+      activePipelineManager = null;
+      logger.debug("SIGINT: PipelineManager stopped.");
+    }
+
+    if (activeDocService) {
+      await activeDocService.shutdown();
+      activeDocService = null;
+      logger.debug("SIGINT: DocumentManagementService shut down.");
+    }
+
+    logger.info("✅ Graceful shutdown completed");
+    process.exit(0);
+  } catch (error) {
+    logger.error(`❌ Error during graceful shutdown: ${error}`);
+    process.exit(1);
+  }
+};
+
+/**
+ * Registers global services for shutdown handling
+ */
+export function registerGlobalServices(services: {
+  appServer?: Promise<{ stop: () => Promise<void> }>;
+  mcpStdioServer?: McpServer;
+  docService?: DocumentManagementService;
+  pipelineManager?: IPipeline;
+}): void {
+  if (services.appServer) activeAppServer = services.appServer;
+  if (services.mcpStdioServer) activeMcpStdioServer = services.mcpStdioServer;
+  if (services.docService) activeDocService = services.docService;
+  if (services.pipelineManager) activePipelineManager = services.pipelineManager;
+}
+
+/**
+ * Main CLI execution function
+ */
+export async function runCli(): Promise<void> {
+  let commandExecuted = false;
+
+  // Reset shutdown state for new execution
+  isShuttingDown = false;
+
+  // Ensure only one SIGINT handler is active
+  process.removeListener("SIGINT", sigintHandler);
+  process.on("SIGINT", sigintHandler);
+
+  try {
+    const program = createCliProgram();
+
+    // Track if a command was executed
+    program.hook("preAction", () => {
+      commandExecuted = true;
+    });
+
+    await program.parseAsync(process.argv);
+  } catch (error) {
+    logger.error(`❌ Error in CLI: ${error}`);
+    if (!isShuttingDown) {
+      isShuttingDown = true;
+
+      // Shutdown active services on error
+      const shutdownPromises: Promise<void>[] = [];
+
+      if (activeAppServer) {
+        shutdownPromises.push(
+          activeAppServer
+            .then(async (appServer) => {
+              await appServer.stop();
+              activeAppServer = null;
+            })
+            .catch((e) => logger.error(`❌ Error stopping AppServer: ${e}`)),
+        );
+      }
+
+      if (activeMcpStdioServer) {
+        shutdownPromises.push(
+          activeMcpStdioServer
+            .close()
+            .then(() => {
+              activeMcpStdioServer = null;
+            })
+            .catch((e) => logger.error(`❌ Error stopping MCP server: ${e}`)),
+        );
+      }
+
+      if (activePipelineManager) {
+        shutdownPromises.push(
+          activePipelineManager
+            .stop()
+            .then(() => {
+              activePipelineManager = null;
+            })
+            .catch((e) => logger.error(`❌ Error stopping pipeline: ${e}`)),
+        );
+      }
+
+      if (activeDocService) {
+        shutdownPromises.push(
+          activeDocService
+            .shutdown()
+            .then(() => {
+              activeDocService = null;
+            })
+            .catch((e) => logger.error(`❌ Error shutting down doc service: ${e}`)),
+        );
+      }
+
+      await Promise.allSettled(shutdownPromises);
+    }
+    process.exit(1);
+  }
+
+  // This block handles cleanup for CLI commands that completed successfully
+  // and were not long-running servers.
+  if (commandExecuted && !activeAppServer) {
+    if (!isShuttingDown) {
+      logger.debug(
+        "CLI command executed. No global services to shut down from this path.",
+      );
+    }
+  }
+}
+
+// Handle HMR for vite-node --watch
+if (import.meta.hot) {
+  import.meta.hot.on("vite:beforeFullReload", async () => {
+    logger.info("🔥 Hot reload detected");
+    process.removeListener("SIGINT", sigintHandler);
+
+    const wasAlreadyShuttingDown = isShuttingDown;
+    isShuttingDown = true;
+
+    try {
+      const shutdownPromises: Promise<void>[] = [];
+
+      if (activeAppServer) {
+        logger.debug("Shutting down AppServer...");
+        shutdownPromises.push(
+          activeAppServer.then(async (appServer) => {
+            await appServer.stop();
+            logger.debug("AppServer shut down.");
+          }),
+        );
+      }
+
+      if (activePipelineManager) {
+        shutdownPromises.push(
+          activePipelineManager.stop().then(() => {
+            activePipelineManager = null;
+            logger.debug("PipelineManager stopped.");
+          }),
+        );
+      }
+
+      if (activeDocService) {
+        shutdownPromises.push(
+          activeDocService.shutdown().then(() => {
+            activeDocService = null;
+            logger.debug("DocumentManagementService shut down.");
+          }),
+        );
+      }
+
+      await Promise.allSettled(shutdownPromises);
+      logger.debug("Active services shut down.");
+    } catch (hmrError) {
+      logger.error(`❌ Error during HMR cleanup: ${hmrError}`);
+    } finally {
+      // Reset state for the next module instantiation
+      activeAppServer = null;
+      if (!wasAlreadyShuttingDown) {
+        isShuttingDown = false;
+      }
+    }
+  });
+}

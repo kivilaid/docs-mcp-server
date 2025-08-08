@@ -15,15 +15,15 @@ export function registerNewJobRoutes(
   server: FastifyInstance,
   scrapeTool: ScrapeTool
 ) {
-  // GET /api/jobs/new - Return the form component wrapped in its container
-  server.get("/api/jobs/new", async () => {
+  // GET /web/jobs/new - Return the form component wrapped in its container
+  server.get("/web/jobs/new", async () => {
     // Return the wrapper component which includes the container div
     return <ScrapeForm />;
   });
 
-  // POST /api/jobs/scrape - Queue a new scrape job
+  // POST /web/jobs/scrape - Queue a new scrape job
   server.post(
-    "/api/jobs/scrape",
+    "/web/jobs/scrape",
     async (
       request: FastifyRequest<{
         Body: {

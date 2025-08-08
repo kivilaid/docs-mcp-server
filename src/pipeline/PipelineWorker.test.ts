@@ -4,7 +4,7 @@ import type { ScraperProgress } from "../scraper/types";
 import type { DocumentManagementService } from "../store/DocumentManagementService";
 import type { Document } from "../types";
 import { PipelineWorker } from "./PipelineWorker";
-import type { PipelineJob, PipelineManagerCallbacks } from "./types";
+import type { InternalPipelineJob, PipelineManagerCallbacks } from "./types";
 import { PipelineJobStatus } from "./types";
 
 // Mock dependencies
@@ -17,7 +17,7 @@ describe("PipelineWorker", () => {
   let mockScraperService: Partial<ScraperService>;
   let mockCallbacks: PipelineManagerCallbacks;
   let worker: PipelineWorker;
-  let mockJob: PipelineJob;
+  let mockJob: InternalPipelineJob;
   let abortController: AbortController;
 
   beforeEach(() => {
@@ -25,6 +25,7 @@ describe("PipelineWorker", () => {
 
     mockStore = {
       addDocument: vi.fn().mockResolvedValue(undefined),
+      removeAllDocuments: vi.fn().mockResolvedValue(undefined),
     };
 
     mockScraperService = {
@@ -52,13 +53,6 @@ describe("PipelineWorker", () => {
       id: "test-job-id",
       library: "test-lib",
       version: "1.0.0",
-      options: {
-        url: "http://example.com",
-        library: "test-lib",
-        version: "1.0.0",
-        maxPages: 10,
-        maxDepth: 1,
-      },
       status: PipelineJobStatus.RUNNING, // Assume worker receives a running job
       progress: null,
       error: null,
@@ -70,7 +64,10 @@ describe("PipelineWorker", () => {
       resolveCompletion: vi.fn(),
       rejectCompletion: vi.fn(),
       sourceUrl: "http://example.com",
-      scraperOptions: null,
+      scraperOptions: {
+        maxPages: 10,
+        maxDepth: 1,
+      },
     };
   });
 
@@ -123,10 +120,22 @@ describe("PipelineWorker", () => {
 
     await worker.executeJob(mockJob, mockCallbacks);
 
+    // Verify documents were cleared before scraping started
+    expect(mockStore.removeAllDocuments).toHaveBeenCalledOnce();
+    expect(mockStore.removeAllDocuments).toHaveBeenCalledWith(
+      mockJob.library,
+      mockJob.version,
+    );
+
     // Verify scrape was called
     expect(mockScraperService.scrape).toHaveBeenCalledOnce();
     expect(mockScraperService.scrape).toHaveBeenCalledWith(
-      mockJob.options,
+      {
+        url: mockJob.sourceUrl,
+        library: mockJob.library,
+        version: mockJob.version,
+        ...mockJob.scraperOptions,
+      },
       expect.any(Function), // The progress callback
       abortController.signal,
     );

@@ -21,12 +21,12 @@ initFlowbite();
 // Add a global event listener for 'job-list-refresh' that uses HTMX to reload the job list
 // This is still useful for manual refresh after actions like clearing jobs
 document.addEventListener("job-list-refresh", () => {
-  htmx.ajax("GET", "/api/jobs", "#job-queue");
+  htmx.ajax("get", "/web/jobs", "#job-queue");
 });
 
 // Auto-refresh job list every 3 seconds for real-time progress updates
 function autoRefreshJobList() {
-  htmx.ajax("GET", "/api/jobs", "#job-queue");
+  htmx.ajax("get", "/web/jobs", "#job-queue");
 }
 
 // Global variable to track the current interval
@@ -48,8 +48,8 @@ document.addEventListener("version-list-refresh", (event: Event) => {
   const library = customEvent.detail?.library;
   if (library) {
     htmx.ajax(
-      "GET",
-      `/api/libraries/${encodeURIComponent(library)}/versions`,
+      "get",
+      `/web/libraries/${encodeURIComponent(library)}/versions`,
       "#version-list",
     );
   }

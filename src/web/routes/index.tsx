@@ -23,7 +23,7 @@ export function registerIndexRoute(server: FastifyInstance) {
                 type="button"
                 class="text-xs px-3 py-1.5 text-gray-700 bg-gray-100 border border-gray-300 rounded-lg hover:bg-gray-200 focus:ring-4 focus:outline-none focus:ring-gray-100 dark:bg-gray-600 dark:text-gray-300 dark:border-gray-500 dark:hover:bg-gray-700 dark:focus:ring-gray-700 transition-colors duration-150"
                 title="Clear all completed, cancelled, and failed jobs"
-                hx-post="/api/jobs/clear-completed"
+                hx-post="/web/jobs/clear-completed"
                 hx-trigger="click"
                 hx-on="htmx:afterRequest: document.dispatchEvent(new Event('job-list-refresh'))"
                 hx-swap="none"
@@ -32,7 +32,7 @@ export function registerIndexRoute(server: FastifyInstance) {
               </button>
             </div>
             {/* Container for the job list, loaded via HTMX */}
-            <div id="job-queue" hx-get="/api/jobs" hx-trigger="load, every 1s">
+            <div id="job-queue" hx-get="/web/jobs" hx-trigger="load, every 1s">
               {/* Initial loading state */}
               <div class="animate-pulse">
                 <div class="h-[0.8em] bg-gray-200 rounded-full dark:bg-gray-700 w-48 mb-4" />
@@ -44,7 +44,7 @@ export function registerIndexRoute(server: FastifyInstance) {
           {/* Add New Job Section */}
           <section class="mb-8">
             {/* Container for the add job form, loaded via HTMX */}
-            <div id="addJobForm" hx-get="/api/jobs/new" hx-trigger="load">
+            <div id="addJobForm" hx-get="/web/jobs/new" hx-trigger="load">
               {/* Initial loading state (optional, could just be empty) */}
               <div class="p-6 bg-white rounded-lg shadow dark:bg-gray-800 animate-pulse">
                 <div class="h-6 bg-gray-200 rounded-full dark:bg-gray-700 w-1/3 mb-4" />
@@ -60,7 +60,7 @@ export function registerIndexRoute(server: FastifyInstance) {
             </h2>
             <div
               id="indexed-docs"
-              hx-get="/api/libraries"
+              hx-get="/web/libraries"
               hx-trigger="load, every 10s"
             >
               <div class="animate-pulse">

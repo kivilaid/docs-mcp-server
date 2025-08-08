@@ -12,7 +12,7 @@ export const DEFAULT_MAX_DEPTH = 3;
 export const DEFAULT_MAX_CONCURRENCY = 3;
 
 /** Default protocol for the MCP server */
-export const DEFAULT_PROTOCOL = "stdio";
+export const DEFAULT_PROTOCOL = "auto";
 
 /** Default port for the HTTP protocol */
 export const DEFAULT_HTTP_PORT = 6280;

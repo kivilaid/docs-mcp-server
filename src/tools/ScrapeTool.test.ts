@@ -3,16 +3,13 @@ import { PipelineManager } from "../pipeline/PipelineManager";
 import type { PipelineJob } from "../pipeline/types";
 import { PipelineJobStatus } from "../pipeline/types";
 import { ScrapeMode } from "../scraper/types";
-import type { DocumentManagementService } from "../store/DocumentManagementService";
 import { ScrapeTool, type ScrapeToolOptions } from "./ScrapeTool";
 
 // Mock dependencies
-vi.mock("../store/DocumentManagementService");
 vi.mock("../pipeline/PipelineManager");
 vi.mock("../utils/logger");
 
 describe("ScrapeTool", () => {
-  let mockDocService: Partial<DocumentManagementService>;
   let mockManagerInstance: Partial<PipelineManager>; // Mock manager instance
   let scrapeTool: ScrapeTool;
 
@@ -20,11 +17,6 @@ describe("ScrapeTool", () => {
 
   beforeEach(() => {
     vi.resetAllMocks();
-
-    mockDocService = {
-      initialize: vi.fn().mockResolvedValue(undefined),
-      removeAllDocuments: vi.fn().mockResolvedValue(undefined),
-    };
 
     // Mock the manager instance methods
     mockManagerInstance = {
@@ -44,11 +36,8 @@ describe("ScrapeTool", () => {
     // Mock the constructor of PipelineManager to return our mock instance
     (PipelineManager as Mock).mockImplementation(() => mockManagerInstance);
 
-    // Pass both mockDocService and mockManagerInstance to constructor
-    scrapeTool = new ScrapeTool(
-      mockDocService as DocumentManagementService,
-      mockManagerInstance as PipelineManager,
-    );
+    // Pass mockManagerInstance to constructor
+    scrapeTool = new ScrapeTool(mockManagerInstance as PipelineManager);
     // mockOnProgress initialization removed
     // managerCallbacks reset removed
   });
@@ -75,10 +64,6 @@ describe("ScrapeTool", () => {
       const options = getBaseOptions(input);
       await scrapeTool.execute(options);
 
-      expect(mockDocService.removeAllDocuments).toHaveBeenCalledWith(
-        "test-lib",
-        expectedInternal.toLowerCase(),
-      );
       // Check enqueueJob call (implies constructor was called)
       expect(mockManagerInstance.enqueueJob).toHaveBeenCalledWith(
         "test-lib",
@@ -97,7 +82,6 @@ describe("ScrapeTool", () => {
       await expect(scrapeTool.execute(options)).rejects.toThrow(
         /Invalid version format for scraping/,
       );
-      expect(mockDocService.removeAllDocuments).not.toHaveBeenCalled();
       expect(mockManagerInstance.enqueueJob).not.toHaveBeenCalled();
     },
   );

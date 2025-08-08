@@ -3,7 +3,7 @@ import type { ScraperProgress } from "../scraper/types";
 import type { DocumentManagementService } from "../store";
 import { logger } from "../utils/logger";
 import { CancellationError } from "./errors";
-import type { PipelineJob, PipelineManagerCallbacks } from "./types";
+import type { InternalPipelineJob, PipelineManagerCallbacks } from "./types";
 
 /**
  * Executes a single document processing job.
@@ -25,16 +25,40 @@ export class PipelineWorker {
    * @param job - The job to execute.
    * @param callbacks - Callbacks provided by the manager for reporting.
    */
-  async executeJob(job: PipelineJob, callbacks: PipelineManagerCallbacks): Promise<void> {
-    const { id: jobId, library, version, options, abortController } = job;
+  async executeJob(
+    job: InternalPipelineJob,
+    callbacks: PipelineManagerCallbacks,
+  ): Promise<void> {
+    const {
+      id: jobId,
+      library,
+      version,
+      sourceUrl,
+      scraperOptions,
+      abortController,
+    } = job;
     const signal = abortController.signal;
 
     logger.debug(`[${jobId}] Worker starting job for ${library}@${version}`);
 
     try {
+      // Clear existing documents for this library/version before scraping
+      await this.store.removeAllDocuments(library, version);
+      logger.info(
+        `💾 Cleared store for ${library}@${version || "[no version]"} before scraping.`,
+      );
+
+      // Construct runtime options from job context + stored configuration
+      const runtimeOptions = {
+        url: sourceUrl ?? "",
+        library,
+        version,
+        ...scraperOptions,
+      };
+
       // --- Core Job Logic ---
       await this.scraperService.scrape(
-        options,
+        runtimeOptions,
         async (progress: ScraperProgress) => {
           // Check for cancellation signal before processing each document
           if (signal.aborted) {

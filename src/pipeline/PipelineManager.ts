@@ -1,45 +1,104 @@
+/**
+ * PipelineManager orchestrates a queue of scraping/indexing jobs.
+ * - Controls concurrency, recovery, and job lifecycle
+ * - Bridges in-memory job state with the persistent store
+ * - Delegates execution to PipelineWorker and emits callbacks
+ * Note: completionPromise has an attached no-op catch to avoid unhandled
+ * promise rejection warnings when a job fails before a consumer awaits it.
+ */
+
 import { v4 as uuidv4 } from "uuid";
 import { ScraperRegistry, ScraperService } from "../scraper";
 import type { ScraperOptions, ScraperProgress } from "../scraper/types";
 import type { DocumentManagementService } from "../store";
 import { VersionStatus } from "../store/types";
+import { DEFAULT_MAX_CONCURRENCY } from "../utils/config";
 import { logger } from "../utils/logger";
 import { CancellationError, PipelineStateError } from "./errors";
+import type { IPipeline } from "./interfaces";
 import { PipelineWorker } from "./PipelineWorker"; // Import the worker
-import type { PipelineJob, PipelineManagerCallbacks } from "./types";
+import type { InternalPipelineJob, PipelineJob, PipelineManagerCallbacks } from "./types";
 import { PipelineJobStatus } from "./types";
-
-const DEFAULT_CONCURRENCY = 3;
 
 /**
  * Manages a queue of document processing jobs, controlling concurrency and tracking progress.
  */
-export class PipelineManager {
-  private jobMap: Map<string, PipelineJob> = new Map();
+export class PipelineManager implements IPipeline {
+  private jobMap: Map<string, InternalPipelineJob> = new Map();
   private jobQueue: string[] = [];
   private activeWorkers: Set<string> = new Set();
   private isRunning = false;
   private concurrency: number;
   private callbacks: PipelineManagerCallbacks = {};
+  private composedCallbacks: PipelineManagerCallbacks = {};
   private store: DocumentManagementService;
   private scraperService: ScraperService;
+  private shouldRecoverJobs: boolean;
 
   constructor(
     store: DocumentManagementService,
-    concurrency: number = DEFAULT_CONCURRENCY,
+    concurrency: number = DEFAULT_MAX_CONCURRENCY,
+    options: { recoverJobs?: boolean } = {},
   ) {
     this.store = store;
     this.concurrency = concurrency;
+    this.shouldRecoverJobs = options.recoverJobs ?? true; // Default to true for backward compatibility
     // ScraperService needs a registry. We create one internally for the manager.
     const registry = new ScraperRegistry();
     this.scraperService = new ScraperService(registry);
+
+    // Initialize composed callbacks to ensure progress persistence even before setCallbacks is called
+    this.rebuildComposedCallbacks();
   }
 
   /**
    * Registers callback handlers for pipeline manager events.
    */
   setCallbacks(callbacks: PipelineManagerCallbacks): void {
-    this.callbacks = callbacks;
+    this.callbacks = callbacks || {};
+    this.rebuildComposedCallbacks();
+  }
+
+  /** Build composed callbacks that ensure persistence then delegate to user callbacks */
+  private rebuildComposedCallbacks(): void {
+    const user = this.callbacks;
+    this.composedCallbacks = {
+      onJobProgress: async (job, progress) => {
+        await this.updateJobProgress(job, progress);
+        await user.onJobProgress?.(job, progress);
+      },
+      onJobStatusChange: async (job) => {
+        await user.onJobStatusChange?.(job);
+      },
+      onJobError: async (job, error, document) => {
+        await user.onJobError?.(job, error, document);
+      },
+    };
+  }
+
+  /**
+   * Converts internal job representation to public job interface.
+   */
+  private toPublicJob(job: InternalPipelineJob): PipelineJob {
+    return {
+      id: job.id,
+      library: job.library,
+      version: job.version || null, // Convert empty string to null for public API
+      status: job.status,
+      progress: job.progress,
+      error: job.error ? { message: job.error.message } : null,
+      createdAt: job.createdAt,
+      startedAt: job.startedAt,
+      finishedAt: job.finishedAt,
+      versionId: job.versionId,
+      versionStatus: job.versionStatus,
+      progressPages: job.progressPages,
+      progressMaxPages: job.progressMaxPages,
+      errorMessage: job.errorMessage,
+      updatedAt: job.updatedAt,
+      sourceUrl: job.sourceUrl,
+      scraperOptions: job.scraperOptions,
+    };
   }
 
   /**
@@ -51,11 +110,16 @@ export class PipelineManager {
       return;
     }
     this.isRunning = true;
-    logger.debug(`PipelineManager started with concurrency ${this.concurrency}.`);
+    logger.debug(
+      `PipelineManager started with concurrency ${this.concurrency}, recoverJobs: ${this.shouldRecoverJobs}.`,
+    );
 
-    // Recover pending jobs from database on startup
-    // FIXME: Disable this for now to avoid conflicts between multiple processes
-    // await this.recoverPendingJobs();
+    // Recover pending jobs from database on startup only if enabled
+    if (this.shouldRecoverJobs) {
+      await this.recoverPendingJobs();
+    } else {
+      logger.debug("Job recovery disabled for this PipelineManager instance");
+    }
 
     this._processQueue().catch((error) => {
       logger.error(`❌ Error in processQueue during start: ${error}`);
@@ -91,6 +155,8 @@ export class PipelineManager {
           resolveCompletion = resolve;
           rejectCompletion = reject;
         });
+        // Prevent unhandled rejection warnings if rejection occurs before consumers attach handlers
+        completionPromise.catch(() => {});
 
         // Parse stored scraper options
         let parsedScraperOptions = null;
@@ -104,22 +170,16 @@ export class PipelineManager {
           }
         }
 
-        const job: PipelineJob = {
+        const job: InternalPipelineJob = {
           id: jobId,
           library: version.library_name,
           version: version.name || "",
-          options: {
-            url: version.source_url || "", // Restore from database
-            library: version.library_name,
-            version: version.name || "",
-            // Merge stored options
-            ...parsedScraperOptions,
-          } as ScraperOptions,
           status: PipelineJobStatus.QUEUED,
           progress: null,
           error: null,
           createdAt: new Date(version.created_at),
-          startedAt: version.started_at ? new Date(version.started_at) : null,
+          // For recovered QUEUED jobs, startedAt must be null to reflect queued state.
+          startedAt: null,
           finishedAt: null,
           abortController,
           completionPromise,
@@ -167,22 +227,6 @@ export class PipelineManager {
   }
 
   /**
-   * Finds jobs by library, version, and optional status.
-   */
-  findJobsByLibraryVersion(
-    library: string,
-    version: string,
-    statuses?: PipelineJobStatus[],
-  ): PipelineJob[] {
-    return Array.from(this.jobMap.values()).filter(
-      (job) =>
-        job.library === library &&
-        job.version === version &&
-        (!statuses || statuses.includes(job.status)),
-    );
-  }
-
-  /**
    * Enqueues a new document processing job, aborting any existing QUEUED/RUNNING job for the same library+version (including unversioned).
    */
   async enqueueJob(
@@ -192,11 +236,24 @@ export class PipelineManager {
   ): Promise<string> {
     // Normalize version: treat undefined/null as "" (unversioned)
     const normalizedVersion = version ?? "";
+
+    // Extract URL and convert ScraperOptions to VersionScraperOptions
+    const {
+      url,
+      library: _library,
+      version: _version,
+      signal: _signal,
+      ...versionOptions
+    } = options;
+
     // Abort any existing QUEUED or RUNNING job for the same library+version
-    const duplicateJobs = this.findJobsByLibraryVersion(library, normalizedVersion, [
-      PipelineJobStatus.QUEUED,
-      PipelineJobStatus.RUNNING,
-    ]);
+    const allJobs = await this.getJobs();
+    const duplicateJobs = allJobs.filter(
+      (job) =>
+        job.library === library &&
+        (job.version ?? "") === normalizedVersion && // Normalize null to empty string for comparison
+        [PipelineJobStatus.QUEUED, PipelineJobStatus.RUNNING].includes(job.status),
+    );
     for (const job of duplicateJobs) {
       logger.info(
         `🚫 Aborting duplicate job for ${library}@${normalizedVersion}: ${job.id}`,
@@ -213,12 +270,13 @@ export class PipelineManager {
       resolveCompletion = resolve;
       rejectCompletion = reject;
     });
+    // Prevent unhandled rejection warnings if rejection occurs before consumers attach handlers
+    completionPromise.catch(() => {});
 
-    const job: PipelineJob = {
+    const job: InternalPipelineJob = {
       id: jobId,
       library,
       version: normalizedVersion,
-      options,
       status: PipelineJobStatus.QUEUED,
       progress: null,
       error: null,
@@ -235,8 +293,8 @@ export class PipelineManager {
       progressMaxPages: 0,
       errorMessage: null,
       updatedAt: new Date(),
-      sourceUrl: options.url,
-      scraperOptions: null,
+      sourceUrl: url,
+      scraperOptions: versionOptions,
     };
 
     this.jobMap.set(jobId, job);
@@ -307,7 +365,8 @@ export class PipelineManager {
    * Retrieves the current state of a specific job.
    */
   async getJob(jobId: string): Promise<PipelineJob | undefined> {
-    return this.jobMap.get(jobId);
+    const internalJob = this.jobMap.get(jobId);
+    return internalJob ? this.toPublicJob(internalJob) : undefined;
   }
 
   /**
@@ -315,10 +374,10 @@ export class PipelineManager {
    */
   async getJobs(status?: PipelineJobStatus): Promise<PipelineJob[]> {
     const allJobs = Array.from(this.jobMap.values());
-    if (status) {
-      return allJobs.filter((job) => job.status === status);
-    }
-    return allJobs;
+    const filteredJobs = status
+      ? allJobs.filter((job) => job.status === status)
+      : allJobs;
+    return filteredJobs.map((job) => this.toPublicJob(job));
   }
 
   /**
@@ -474,7 +533,7 @@ export class PipelineManager {
    * Executes a single pipeline job by delegating to a PipelineWorker.
    * Handles final status updates and promise resolution/rejection.
    */
-  private async _runJob(job: PipelineJob): Promise<void> {
+  private async _runJob(job: InternalPipelineJob): Promise<void> {
     const { id: jobId, abortController } = job;
     const signal = abortController.signal; // Get signal for error checking
 
@@ -483,8 +542,8 @@ export class PipelineManager {
     const worker = new PipelineWorker(this.store, this.scraperService);
 
     try {
-      // Delegate the actual work to the worker
-      await worker.executeJob(job, this.callbacks);
+      // Delegate the actual work to the worker using composed callbacks
+      await worker.executeJob(job, this.composedCallbacks);
 
       // If executeJob completes without throwing, and we weren't cancelled meanwhile...
       if (signal.aborted) {
@@ -555,7 +614,7 @@ export class PipelineManager {
    * Updates both in-memory job status and database version status (write-through).
    */
   private async updateJobStatus(
-    job: PipelineJob,
+    job: InternalPipelineJob,
     newStatus: PipelineJobStatus,
     errorMessage?: string,
   ): Promise<void> {
@@ -582,18 +641,18 @@ export class PipelineManager {
       await this.store.updateVersionStatus(versionId, dbStatus, errorMessage);
 
       // Store scraper options when job is first queued
-      if (newStatus === PipelineJobStatus.QUEUED) {
+      if (newStatus === PipelineJobStatus.QUEUED && job.scraperOptions) {
         try {
-          await this.store.storeScraperOptions(versionId, job.options);
-          // Update job object with stored options
-          job.scraperOptions = {
-            maxDepth: job.options.maxDepth,
-            maxPages: job.options.maxPages,
-            scope: job.options.scope,
-            followRedirects: job.options.followRedirects,
+          // Reconstruct ScraperOptions for storage (DocumentStore will filter runtime fields)
+          const fullOptions = {
+            url: job.sourceUrl ?? "",
+            library: job.library,
+            version: job.version,
+            ...job.scraperOptions,
           };
+          await this.store.storeScraperOptions(versionId, fullOptions);
           logger.debug(
-            `💾 Stored scraper options for ${job.library}@${job.version}: ${job.options.url}`,
+            `💾 Stored scraper options for ${job.library}@${job.version}: ${job.sourceUrl}`,
           );
         } catch (optionsError) {
           // Log warning but don't fail the job - options storage is not critical
@@ -614,7 +673,10 @@ export class PipelineManager {
   /**
    * Updates both in-memory job progress and database progress (write-through).
    */
-  async updateJobProgress(job: PipelineJob, progress: ScraperProgress): Promise<void> {
+  async updateJobProgress(
+    job: InternalPipelineJob,
+    progress: ScraperProgress,
+  ): Promise<void> {
     // Update in-memory progress
     job.progress = progress;
     job.progressPages = progress.pagesScraped;
@@ -635,7 +697,7 @@ export class PipelineManager {
       }
     }
 
-    // Note: We don't fire the callback here to avoid infinite loops
-    // The callback in index.ts calls this method, so it would create a cycle
+    // Note: Do not invoke onJobProgress callback here.
+    // Callbacks are wired by services (e.g., workerService/CLI) and already call this method.
   }
 }

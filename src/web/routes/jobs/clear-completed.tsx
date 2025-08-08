@@ -10,8 +10,8 @@ export function registerClearCompletedJobsRoute(
   server: FastifyInstance,
   clearCompletedJobsTool: ClearCompletedJobsTool
 ) {
-  // POST /api/jobs/clear-completed - Clear all completed jobs
-  server.post("/api/jobs/clear-completed", async (_, reply) => {
+  // POST /web/jobs/clear-completed - Clear all completed jobs
+  server.post("/web/jobs/clear-completed", async (_, reply) => {
     try {
       const result = await clearCompletedJobsTool.execute({});
 

@@ -62,6 +62,7 @@
 - Consider maintainability and efforts when writing tests.
 - Focus on high value, low effort tests first. Defer complex mocking, complex state management testing and concurrent processing unless explicitly requested by the user.
 - Always test the intended bevavior, not the implementation details.
+- Avoid timing sensitive tests unless absolutely necessary.
 
 ## Git
 

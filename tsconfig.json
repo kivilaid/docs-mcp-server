@@ -17,7 +17,13 @@
     "allowJs": true,
     "resolveJsonModule": true,
     "rootDir": "src",
-    "types": ["@kitajs/html/htmx.d.ts", "vite/client"]
+    "types": ["@kitajs/html/htmx.d.ts", "vite/client"],
+    "incremental": true,
+    "tsBuildInfoFile": ".tsbuildinfo",
+    "noUncheckedIndexedAccess": false,
+    "exactOptionalPropertyTypes": false,
+    "assumeChangesOnlyAffectDirectDependencies": true
   },
-  "include": ["src/**/*"]
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist", "**/*.test.ts", "**/*.test.tsx"]
 }

@@ -1,5 +1,5 @@
 interface VersionBadgeProps {
-  version: string;
+  version: string | null;
 }
 
 const VersionBadge = ({ version }: VersionBadgeProps) => {

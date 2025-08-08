@@ -1,4 +1,4 @@
-import type { PipelineManager } from "../pipeline/PipelineManager";
+import type { IPipeline } from "../pipeline/interfaces";
 import type { PipelineJob, PipelineJobStatus } from "../pipeline/types";
 import type { JobInfo } from "./GetJobInfoTool"; // Import JobInfo
 
@@ -18,18 +18,18 @@ export interface ListJobsToolResponse {
 }
 
 /**
- * Tool for listing pipeline jobs managed by the PipelineManager.
+ * Tool for listing pipeline jobs managed by the pipeline.
  * Allows filtering jobs by their status.
  */
 export class ListJobsTool {
-  private manager: PipelineManager;
+  private pipeline: IPipeline;
 
   /**
    * Creates an instance of ListJobsTool.
-   * @param manager The PipelineManager instance.
+   * @param pipeline The pipeline instance.
    */
-  constructor(manager: PipelineManager) {
-    this.manager = manager;
+  constructor(pipeline: IPipeline) {
+    this.pipeline = pipeline;
   }
 
   /**
@@ -38,7 +38,7 @@ export class ListJobsTool {
    * @returns A promise that resolves with the list of simplified job objects.
    */
   async execute(input: ListJobsInput): Promise<ListJobsToolResponse> {
-    const jobs = await this.manager.getJobs(input.status);
+    const jobs = await this.pipeline.getJobs(input.status);
 
     // Transform jobs into simplified objects using enhanced PipelineJob interface
     const simplifiedJobs: JobInfo[] = jobs.map((job: PipelineJob): JobInfo => {

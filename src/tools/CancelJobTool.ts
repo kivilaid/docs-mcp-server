@@ -1,4 +1,4 @@
-import type { PipelineManager } from "../pipeline/PipelineManager";
+import type { IPipeline } from "../pipeline/interfaces";
 import { PipelineJobStatus } from "../pipeline/types";
 import { logger } from "../utils/logger";
 
@@ -24,14 +24,14 @@ export interface CancelJobResult {
  * Tool for attempting to cancel a pipeline job.
  */
 export class CancelJobTool {
-  private manager: PipelineManager;
+  private pipeline: IPipeline;
 
   /**
    * Creates an instance of CancelJobTool.
-   * @param manager The PipelineManager instance.
+   * @param pipeline The pipeline instance.
    */
-  constructor(manager: PipelineManager) {
-    this.manager = manager;
+  constructor(pipeline: IPipeline) {
+    this.pipeline = pipeline;
   }
 
   /**
@@ -42,7 +42,7 @@ export class CancelJobTool {
   async execute(input: CancelJobInput): Promise<CancelJobResult> {
     try {
       // Retrieve the job first to check its status before attempting cancellation
-      const job = await this.manager.getJob(input.jobId);
+      const job = await this.pipeline.getJob(input.jobId);
 
       if (!job) {
         logger.warn(`❓ [CancelJobTool] Job not found: ${input.jobId}`);
@@ -66,11 +66,11 @@ export class CancelJobTool {
       }
 
       // Attempt cancellation
-      await this.manager.cancelJob(input.jobId);
+      await this.pipeline.cancelJob(input.jobId);
 
       // Re-fetch the job to confirm status change (or check status directly if cancelJob returned it)
       // PipelineManager.cancelJob doesn't return status, so re-fetch is needed for confirmation.
-      const updatedJob = await this.manager.getJob(input.jobId);
+      const updatedJob = await this.pipeline.getJob(input.jobId);
       const finalStatus = updatedJob?.status ?? "UNKNOWN (job disappeared?)";
 
       logger.debug(
