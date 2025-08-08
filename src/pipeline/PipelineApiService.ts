@@ -7,7 +7,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { ScraperOptions } from "../scraper/types";
 import { logger } from "../utils/logger";
 import type { IPipeline } from "./interfaces";
-import type { PipelineJob, PipelineJobStatus } from "./types";
+import { type PipelineJob, PipelineJobStatus } from "./types";
 
 /**
  * Request/Response types for the pipeline API
@@ -22,31 +22,8 @@ interface EnqueueJobResponse {
   jobId: string;
 }
 
-/**
- * Serialized version of PipelineJob for JSON responses
- */
-interface SerializedPipelineJob {
-  id: string;
-  library: string;
-  version: string | null;
-  status: string;
-  progress: unknown;
-  error: { message: string } | null;
-  createdAt: Date;
-  startedAt: Date | null;
-  finishedAt: Date | null;
-  versionId?: number;
-  versionStatus?: string;
-  progressPages?: number;
-  progressMaxPages?: number;
-  errorMessage?: string | null;
-  updatedAt?: Date;
-  sourceUrl: string | null;
-  scraperOptions: unknown;
-}
-
 interface GetJobsResponse {
-  jobs: SerializedPipelineJob[];
+  jobs: PipelineJob[];
 }
 
 interface ClearJobsResponse {
@@ -83,15 +60,12 @@ export class PipelineApiService {
             timestamp: new Date().toISOString(),
             jobCounts: {
               total: jobs.length,
-              queued: jobs.filter((j: { status: string }) => j.status === "queued")
+              queued: jobs.filter((j) => j.status === PipelineJobStatus.QUEUED).length,
+              running: jobs.filter((j) => j.status === PipelineJobStatus.RUNNING).length,
+              completed: jobs.filter((j) => j.status === PipelineJobStatus.COMPLETED)
                 .length,
-              running: jobs.filter((j: { status: string }) => j.status === "running")
-                .length,
-              completed: jobs.filter((j: { status: string }) => j.status === "completed")
-                .length,
-              failed: jobs.filter((j: { status: string }) => j.status === "failed")
-                .length,
-              cancelled: jobs.filter((j: { status: string }) => j.status === "cancelled")
+              failed: jobs.filter((j) => j.status === PipelineJobStatus.FAILED).length,
+              cancelled: jobs.filter((j) => j.status === PipelineJobStatus.CANCELLED)
                 .length,
             },
           });
@@ -147,28 +121,8 @@ export class PipelineApiService {
           const { status } = request.query;
           const jobs = await this.pipeline.getJobs(status);
 
-          // Serialize jobs for JSON response (remove non-serializable fields)
-          const serializedJobs = jobs.map((job: PipelineJob) => ({
-            id: job.id,
-            library: job.library,
-            version: job.version,
-            status: job.status,
-            progress: job.progress,
-            error: job.error ? { message: job.error.message } : null,
-            createdAt: job.createdAt,
-            startedAt: job.startedAt,
-            finishedAt: job.finishedAt,
-            versionId: job.versionId,
-            versionStatus: job.versionStatus,
-            progressPages: job.progressPages,
-            progressMaxPages: job.progressMaxPages,
-            errorMessage: job.errorMessage,
-            updatedAt: job.updatedAt,
-            sourceUrl: job.sourceUrl,
-            scraperOptions: job.scraperOptions,
-          }));
-
-          return reply.send({ jobs: serializedJobs });
+          // Jobs are already in public format, no serialization needed
+          return reply.send({ jobs });
         } catch (error) {
           logger.error(`API: Failed to get jobs: ${error}`);
           return reply.status(500).send({
@@ -193,28 +147,8 @@ export class PipelineApiService {
             return reply.status(404).send({ error: "Job not found" });
           }
 
-          // Serialize job for JSON response
-          const serializedJob = {
-            id: job.id,
-            library: job.library,
-            version: job.version,
-            status: job.status,
-            progress: job.progress,
-            error: job.error ? { message: job.error.message } : null,
-            createdAt: job.createdAt,
-            startedAt: job.startedAt,
-            finishedAt: job.finishedAt,
-            versionId: job.versionId,
-            versionStatus: job.versionStatus,
-            progressPages: job.progressPages,
-            progressMaxPages: job.progressMaxPages,
-            errorMessage: job.errorMessage,
-            updatedAt: job.updatedAt,
-            sourceUrl: job.sourceUrl,
-            scraperOptions: job.scraperOptions,
-          };
-
-          return reply.send(serializedJob);
+          // Job is already in public format, no serialization needed
+          return reply.send(job);
         } catch (error) {
           logger.error(`API: Failed to get job ${request.params.id}: ${error}`);
           return reply.status(500).send({

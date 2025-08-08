@@ -46,6 +46,9 @@ services:
       - "6280:6280"
     env_file:
       - .env
+    volumes:
+      # For now we use the same volume for all services
+      - docs-mcp-data:/data
     depends_on:
       - worker
     deploy:
@@ -67,6 +70,8 @@ services:
       - "6281:6281"
     env_file:
       - .env
+    volumes:
+      - docs-mcp-data:/data
     depends_on:
       - worker
     deploy:

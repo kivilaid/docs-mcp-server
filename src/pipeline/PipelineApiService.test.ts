@@ -127,9 +127,15 @@ describe("PipelineApiService", () => {
         const mockJob = {
           id: "job-123",
           library: "react",
+          version: "18.0.0",
           status: "completed",
+          progress: null,
           error: null,
-          abortController: new AbortController(), // Non-serializable
+          createdAt: new Date("2023-01-01"),
+          startedAt: new Date("2023-01-01"),
+          finishedAt: new Date("2023-01-01"),
+          sourceUrl: "https://react.dev",
+          scraperOptions: null,
         };
 
         mockRequest = { params: { id: "job-123" } };

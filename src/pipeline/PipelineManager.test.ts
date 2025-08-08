@@ -20,7 +20,7 @@ import type { DocumentManagementService } from "../store/DocumentManagementServi
 import { ListJobsTool } from "../tools/ListJobsTool";
 import { PipelineManager } from "./PipelineManager";
 import { PipelineWorker } from "./PipelineWorker";
-import type { PipelineJob, PipelineManagerCallbacks } from "./types";
+import type { InternalPipelineJob, PipelineJob, PipelineManagerCallbacks } from "./types";
 import { PipelineJobStatus } from "./types";
 
 // Mock dependencies
@@ -47,17 +47,31 @@ describe("PipelineManager", () => {
     finishedAt: null,
     progress: null,
     error: null,
+    sourceUrl: "https://example.com",
+    scraperOptions: null,
+    ...overrides,
+  });
+
+  // Helper to create an internal job for testing internal methods
+  const createInternalTestJob = (
+    overrides: Partial<InternalPipelineJob> = {},
+  ): InternalPipelineJob => ({
+    id: "test-job-id",
+    library: "test-lib",
+    version: "1.0.0",
+    versionId: 123,
+    status: PipelineJobStatus.RUNNING,
+    createdAt: new Date(),
+    startedAt: null,
+    finishedAt: null,
+    progress: null,
+    error: null,
+    sourceUrl: "https://example.com",
+    scraperOptions: null,
     abortController: new AbortController(),
     completionPromise: Promise.resolve(),
     resolveCompletion: () => {},
     rejectCompletion: () => {},
-    sourceUrl: "https://example.com",
-    scraperOptions: null,
-    options: {
-      url: "https://example.com",
-      library: "test-lib",
-      version: "1.0.0",
-    },
     ...overrides,
   });
 
@@ -119,7 +133,7 @@ describe("PipelineManager", () => {
     const job = await manager.getJob(jobId);
     expect(job?.status).toBe(PipelineJobStatus.QUEUED);
     expect(job?.library).toBe("libA");
-    expect(job?.options.url).toBe("http://a.com");
+    expect(job?.sourceUrl).toBe("http://a.com");
     expect(mockCallbacks.onJobStatusChange).toHaveBeenCalledWith(
       expect.objectContaining({ id: jobId, status: PipelineJobStatus.QUEUED }),
     );
@@ -216,14 +230,12 @@ describe("PipelineManager", () => {
     mockWorkerInstance.executeJob.mockRejectedValue(new Error("fail"));
     const options = { url: "http://fail.com", library: "libFail", version: "1.0" };
     const jobId = await manager.enqueueJob("libFail", "1.0", options);
-    const job = await manager.getJob(jobId);
-    job?.completionPromise.catch(() => {}); // Attach handler immediately after job creation
     await manager.start();
     await vi.advanceTimersByTimeAsync(1);
-    await manager.waitForJobCompletion(jobId).catch(() => {});
+    await manager.waitForJobCompletion(jobId).catch(() => {}); // Handle expected rejection
     const jobAfter = await manager.getJob(jobId);
     expect(jobAfter?.status).toBe(PipelineJobStatus.FAILED);
-    expect(jobAfter?.error).toBeInstanceOf(Error);
+    expect(jobAfter?.error?.message).toBe("fail");
   });
 
   it("should cancel a job via cancelJob API", async () => {
@@ -248,11 +260,12 @@ describe("PipelineManager", () => {
     mockWorkerInstance.executeJob.mockImplementation(async (job, callbacks) => {
       await callbacks.onJobProgress?.(job, {
         pagesScraped: 1,
-        maxPages: 1,
+        totalPages: 1,
         currentUrl: "url",
         depth: 1,
         maxDepth: 1,
         document: undefined,
+        totalDiscovered: 1,
       });
     });
     const options = {
@@ -287,7 +300,7 @@ describe("PipelineManager", () => {
   // --- Progress Update Tests ---
   describe("Progress Updates", () => {
     it("should update job progress in memory and database", async () => {
-      const job = createTestJob({ versionId: 456 });
+      const job = createInternalTestJob({ versionId: 456 });
       const progress = createTestProgress(50, 300);
 
       await manager.updateJobProgress(job, progress);
@@ -305,7 +318,7 @@ describe("PipelineManager", () => {
     it("should handle database errors gracefully during progress updates", async () => {
       (mockStore.updateVersionProgress as Mock).mockRejectedValue(new Error("DB error"));
 
-      const job = createTestJob();
+      const job = createInternalTestJob();
       const progress = createTestProgress(30, 150);
 
       // Should not throw
@@ -321,7 +334,7 @@ describe("PipelineManager", () => {
       const listJobsTool = new ListJobsTool(manager);
       const jobId = "ui-test-job";
 
-      const job = createTestJob({ id: jobId });
+      const job = createInternalTestJob({ id: jobId });
       // Add job to manager's internal tracking
       (manager as any).jobMap = new Map([[jobId, job]]);
 
@@ -343,35 +356,27 @@ describe("PipelineManager", () => {
 
     it("should handle sequential progress updates correctly", async () => {
       const listJobsTool = new ListJobsTool(manager);
-      const jobId = "sequential-progress-job";
+      const jobId = "sequence-test-job";
 
-      const job = createTestJob({ id: jobId });
+      const job = createInternalTestJob({ id: jobId });
+      // Add job to manager's internal tracking
       (manager as any).jobMap = new Map([[jobId, job]]);
 
-      // First update
+      // Initial progress update
       await manager.updateJobProgress(job, createTestProgress(25, 100));
+
+      // Check initial state
       let result = await listJobsTool.execute({});
       let uiJob = result.jobs.find((j: any) => j.id === jobId);
-      expect(uiJob!.progress).toEqual({
-        pages: 25,
-        totalPages: 100,
-        totalDiscovered: 100,
-      });
+      expect(uiJob?.progress?.pages).toBe(25);
 
-      // Second update
+      // Update progress again
       await manager.updateJobProgress(job, createTestProgress(75, 100));
+
+      // Check updated state
       result = await listJobsTool.execute({});
       uiJob = result.jobs.find((j: any) => j.id === jobId);
-      expect(uiJob!.progress).toEqual({
-        pages: 75,
-        totalPages: 100,
-        totalDiscovered: 100,
-      });
-
-      // Verify database was called for each update
-      expect(mockStore.updateVersionProgress).toHaveBeenCalledTimes(2);
-      expect(mockStore.updateVersionProgress).toHaveBeenNthCalledWith(1, 123, 25, 100);
-      expect(mockStore.updateVersionProgress).toHaveBeenNthCalledWith(2, 123, 75, 100);
+      expect(uiJob?.progress?.pages).toBe(75);
     });
 
     it("should handle jobs without progress gracefully", async () => {

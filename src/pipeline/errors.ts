@@ -11,16 +11,6 @@ export class PipelineError extends Error {
   }
 }
 
-export class DocumentProcessingError extends PipelineError {
-  constructor(
-    message: string,
-    public readonly documentId: string,
-    cause?: Error,
-  ) {
-    super(`Failed to process document ${documentId}: ${message}`, cause);
-  }
-}
-
 export class PipelineStateError extends PipelineError {}
 
 /**

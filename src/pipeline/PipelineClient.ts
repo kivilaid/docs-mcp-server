@@ -6,14 +6,38 @@
 import type { ScraperOptions, ScraperProgress } from "../scraper/types";
 import { logger } from "../utils/logger";
 import type { IPipeline } from "./interfaces";
-import type { PipelineJob, PipelineJobStatus, PipelineManagerCallbacks } from "./types";
+import type {
+  InternalPipelineJob,
+  PipelineJob,
+  PipelineJobStatus,
+  PipelineManagerCallbacks,
+} from "./types";
+
+/**
+ * Deserializes a job object from JSON, converting date strings back to Date objects.
+ * Only includes public fields - no internal job management fields.
+ */
+function deserializeJob(serializedJob: Record<string, unknown>): PipelineJob {
+  return {
+    ...serializedJob,
+    createdAt: new Date(serializedJob.createdAt as string),
+    startedAt: serializedJob.startedAt
+      ? new Date(serializedJob.startedAt as string)
+      : null,
+    finishedAt: serializedJob.finishedAt
+      ? new Date(serializedJob.finishedAt as string)
+      : null,
+    updatedAt: serializedJob.updatedAt
+      ? new Date(serializedJob.updatedAt as string)
+      : undefined,
+  } as PipelineJob;
+}
 
 /**
  * HTTP client that implements the IPipeline interface by delegating to external worker.
  */
 export class PipelineClient implements IPipeline {
   private readonly baseUrl: string;
-  private callbacks: PipelineManagerCallbacks = {};
   private pollingInterval: number = 1000; // 1 second
   private activePolling = new Set<string>(); // Track jobs being polled for completion
 
@@ -91,8 +115,8 @@ export class PipelineClient implements IPipeline {
         throw new Error(`Failed to get job: ${response.status} ${response.statusText}`);
       }
 
-      const job = await response.json();
-      return job;
+      const serializedJob = await response.json();
+      return deserializeJob(serializedJob);
     } catch (error) {
       throw new Error(
         `Failed to get job ${jobId}: ${error instanceof Error ? error.message : String(error)}`,
@@ -115,7 +139,8 @@ export class PipelineClient implements IPipeline {
       }
 
       const result = await response.json();
-      return result.jobs || [];
+      const serializedJobs = result.jobs || [];
+      return serializedJobs.map(deserializeJob);
     } catch (error) {
       logger.error(`Failed to get jobs from external worker: ${error}`);
       throw error;
@@ -183,7 +208,8 @@ export class PipelineClient implements IPipeline {
           job.status === "cancelled"
         ) {
           if (job.status === "failed" && job.error) {
-            throw job.error;
+            // Normalize to real Error instance
+            throw new Error(job.error.message);
           }
           return;
         }
@@ -196,14 +222,16 @@ export class PipelineClient implements IPipeline {
     }
   }
 
-  setCallbacks(callbacks: PipelineManagerCallbacks): void {
-    this.callbacks = callbacks;
+  setCallbacks(_callbacks: PipelineManagerCallbacks): void {
+    // For external pipeline, callbacks are not used since all updates come via polling
+    logger.debug("PipelineClient.setCallbacks called - no-op for external worker");
   }
 
-  async updateJobProgress(job: PipelineJob, progress: ScraperProgress): Promise<void> {
-    // This method is called by the manager when it receives progress updates
-    // For external pipeline, this is typically a no-op since progress comes from external worker
-    // But we can trigger our callback if set
-    await this.callbacks.onJobProgress?.(job, progress);
+  async updateJobProgress(
+    _job: InternalPipelineJob,
+    _progress: ScraperProgress,
+  ): Promise<void> {
+    // Optional IPipeline method: clients do not persist local progress; no-op here.
+    logger.debug("PipelineClient.updateJobProgress called - no-op for external worker");
   }
 }

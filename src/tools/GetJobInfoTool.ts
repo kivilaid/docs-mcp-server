@@ -16,7 +16,7 @@ export interface GetJobInfoInput {
 export interface JobInfo {
   id: string;
   library: string;
-  version: string;
+  version: string | null;
   status: PipelineJobStatus; // Pipeline status (for compatibility)
   dbStatus?: VersionStatus; // Database status (enhanced)
   createdAt: string;

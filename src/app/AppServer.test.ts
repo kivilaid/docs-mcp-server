@@ -85,7 +85,7 @@ describe("AppServer Behavior Tests", () => {
   });
 
   describe("Configuration Validation", () => {
-    it("should reject web interface without worker or external worker URL", () => {
+    it("should reject web interface without worker or external worker URL", async () => {
       const config: AppServerConfig = {
         enableWebInterface: true,
         enableMcpServer: false,
@@ -101,12 +101,12 @@ describe("AppServer Behavior Tests", () => {
         config,
       );
 
-      expect(() => server.start()).rejects.toThrow(
+      await expect(server.start()).rejects.toThrow(
         "Web interface requires either embedded worker (enableWorker: true) or external worker (externalWorkerUrl)",
       );
     });
 
-    it("should reject MCP server without worker or external worker URL", () => {
+    it("should reject MCP server without worker or external worker URL", async () => {
       const config: AppServerConfig = {
         enableWebInterface: false,
         enableMcpServer: true,
@@ -122,7 +122,7 @@ describe("AppServer Behavior Tests", () => {
         config,
       );
 
-      expect(() => server.start()).rejects.toThrow(
+      await expect(server.start()).rejects.toThrow(
         "MCP server requires either embedded worker (enableWorker: true) or external worker (externalWorkerUrl)",
       );
     });

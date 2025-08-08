@@ -17,7 +17,7 @@ export async function registerWorkerService(pipeline: IPipeline): Promise<void> 
       logger.debug(
         `📊 Job ${job.id} progress: ${progress.pagesScraped}/${progress.totalPages} pages`,
       );
-      await pipeline.updateJobProgress(job, progress);
+      await pipeline.updateJobProgress?.(job, progress);
     },
     onJobStatusChange: async (job) => {
       logger.debug(`🔄 Job ${job.id} status changed to: ${job.status}`);

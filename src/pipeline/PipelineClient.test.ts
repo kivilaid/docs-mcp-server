@@ -156,14 +156,30 @@ describe("PipelineClient", () => {
     });
 
     it("should return job data for existing job", async () => {
-      const mockJob = { id: "job-123", status: "completed" };
+      const mockJob = {
+        id: "job-123",
+        status: "completed",
+        createdAt: "2023-01-01T00:00:00.000Z",
+        startedAt: null,
+        finishedAt: null,
+        updatedAt: undefined,
+      };
+      const expectedJob = {
+        id: "job-123",
+        status: "completed",
+        createdAt: new Date("2023-01-01T00:00:00.000Z"),
+        startedAt: null,
+        finishedAt: null,
+        updatedAt: undefined,
+      };
+
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: async () => mockJob,
       });
 
       const result = await client.getJob("job-123");
-      expect(result).toEqual(mockJob);
+      expect(result).toEqual(expectedJob);
     });
   });
 });
