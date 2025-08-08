@@ -3,15 +3,10 @@
  * Delegates all pipeline operations to an external worker via HTTP API.
  */
 
-import type { ScraperOptions, ScraperProgress } from "../scraper/types";
+import type { ScraperOptions } from "../scraper/types";
 import { logger } from "../utils/logger";
 import type { IPipeline } from "./interfaces";
-import type {
-  InternalPipelineJob,
-  PipelineJob,
-  PipelineJobStatus,
-  PipelineManagerCallbacks,
-} from "./types";
+import type { PipelineJob, PipelineJobStatus, PipelineManagerCallbacks } from "./types";
 
 /**
  * Deserializes a job object from JSON, converting date strings back to Date objects.
@@ -225,13 +220,5 @@ export class PipelineClient implements IPipeline {
   setCallbacks(_callbacks: PipelineManagerCallbacks): void {
     // For external pipeline, callbacks are not used since all updates come via polling
     logger.debug("PipelineClient.setCallbacks called - no-op for external worker");
-  }
-
-  async updateJobProgress(
-    _job: InternalPipelineJob,
-    _progress: ScraperProgress,
-  ): Promise<void> {
-    // Optional IPipeline method: clients do not persist local progress; no-op here.
-    logger.debug("PipelineClient.updateJobProgress called - no-op for external worker");
   }
 }

@@ -1,10 +1,5 @@
-import type { ScraperOptions, ScraperProgress } from "../scraper/types";
-import type {
-  InternalPipelineJob,
-  PipelineJob,
-  PipelineJobStatus,
-  PipelineManagerCallbacks,
-} from "./types";
+import type { ScraperOptions } from "../scraper/types";
+import type { PipelineJob, PipelineJobStatus, PipelineManagerCallbacks } from "./types";
 
 /**
  * Options for configuring pipeline behavior.
@@ -36,9 +31,4 @@ export interface IPipeline {
   clearCompletedJobs(): Promise<number>;
   waitForJobCompletion(jobId: string): Promise<void>;
   setCallbacks(callbacks: PipelineManagerCallbacks): void;
-  /**
-   * Optional method used by managers to persist progress to the store.
-   * Clients typically do not implement this.
-   */
-  updateJobProgress?(job: InternalPipelineJob, progress: ScraperProgress): Promise<void>;
 }

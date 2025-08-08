@@ -30,6 +30,7 @@ export class PipelineManager implements IPipeline {
   private isRunning = false;
   private concurrency: number;
   private callbacks: PipelineManagerCallbacks = {};
+  private composedCallbacks: PipelineManagerCallbacks = {};
   private store: DocumentManagementService;
   private scraperService: ScraperService;
   private shouldRecoverJobs: boolean;
@@ -45,13 +46,34 @@ export class PipelineManager implements IPipeline {
     // ScraperService needs a registry. We create one internally for the manager.
     const registry = new ScraperRegistry();
     this.scraperService = new ScraperService(registry);
+
+    // Initialize composed callbacks to ensure progress persistence even before setCallbacks is called
+    this.rebuildComposedCallbacks();
   }
 
   /**
    * Registers callback handlers for pipeline manager events.
    */
   setCallbacks(callbacks: PipelineManagerCallbacks): void {
-    this.callbacks = callbacks;
+    this.callbacks = callbacks || {};
+    this.rebuildComposedCallbacks();
+  }
+
+  /** Build composed callbacks that ensure persistence then delegate to user callbacks */
+  private rebuildComposedCallbacks(): void {
+    const user = this.callbacks;
+    this.composedCallbacks = {
+      onJobProgress: async (job, progress) => {
+        await this.updateJobProgress(job, progress);
+        await user.onJobProgress?.(job, progress);
+      },
+      onJobStatusChange: async (job) => {
+        await user.onJobStatusChange?.(job);
+      },
+      onJobError: async (job, error, document) => {
+        await user.onJobError?.(job, error, document);
+      },
+    };
   }
 
   /**
@@ -520,8 +542,8 @@ export class PipelineManager implements IPipeline {
     const worker = new PipelineWorker(this.store, this.scraperService);
 
     try {
-      // Delegate the actual work to the worker
-      await worker.executeJob(job, this.callbacks);
+      // Delegate the actual work to the worker using composed callbacks
+      await worker.executeJob(job, this.composedCallbacks);
 
       // If executeJob completes without throwing, and we weren't cancelled meanwhile...
       if (signal.aborted) {

@@ -38,7 +38,6 @@ vi.mock("./pipeline/PipelineFactory", () => ({
       getJob: vi.fn().mockResolvedValue(undefined),
       getJobs: vi.fn().mockResolvedValue([]),
       cancelJob: vi.fn().mockResolvedValue(undefined),
-      updateJobProgress: vi.fn().mockResolvedValue(undefined),
       clearCompletedJobs: vi.fn().mockResolvedValue(undefined),
       waitForJobCompletion: vi.fn().mockResolvedValue(undefined),
     }),

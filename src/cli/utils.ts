@@ -148,8 +148,6 @@ export async function initializePipeline(
       logger.debug(
         `📊 Job ${job.id} progress: ${progress.pagesScraped}/${progress.totalPages} pages`,
       );
-      // Use manager as single source of truth for progress updates
-      await manager.updateJobProgress?.(job, progress);
     },
     onJobStatusChange: async (job) => {
       logger.debug(`🔄 Job ${job.id} status changed to: ${job.status}`);
