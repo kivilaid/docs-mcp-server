@@ -39,7 +39,7 @@ services:
         "--port",
         "6280",
         "--server-url",
-        "http://worker:8080/api",
+        "http://worker:8080/trpc",
       ]
     container_name: docs-mcp-server
     ports:
@@ -64,7 +64,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    command: ["web", "--port", "6281", "--server-url", "http://worker:8080/api"]
+    command:
+      ["web", "--port", "6281", "--server-url", "http://worker:8080/trpc"]
     container_name: docs-mcp-web
     ports:
       - "6281:6281"

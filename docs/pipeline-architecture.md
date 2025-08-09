@@ -44,14 +44,14 @@ Manages job queue and worker coordination for embedded processing:
 
 ### PipelineClient
 
-HTTP client providing identical interface to PipelineManager for external worker communication:
+Type-safe tRPC client providing identical interface to PipelineManager for external worker communication:
 
 **Features:**
 
-- RESTful API client for remote job operations
+- tRPC client for remote job operations over HTTP
 - Identical method signatures to PipelineManager
 - Error handling and connection management
-- Health check monitoring
+- Connectivity check via ping
 
 ### PipelineWorker
 
@@ -138,23 +138,24 @@ Jobs are distributed to available workers using:
 - Load balancing across workers
 - Graceful worker shutdown handling
 
-## External Worker API
+## External Worker RPC
 
-### Endpoints
+### Procedures (tRPC)
 
-- `POST /api/jobs` - Create new job
-- `GET /api/jobs` - List jobs with filtering
-- `GET /api/jobs/:id` - Get job details
-- `DELETE /api/jobs/:id` - Cancel job
-- `GET /api/health` - Health check
+- `ping` - Connectivity check
+- `enqueueJob` - Create new job
+- `getJobs` - List jobs with optional filtering
+- `getJob` - Get job details
+- `cancelJob` - Cancel a job
+- `clearCompletedJobs` - Remove completed/cancelled/failed jobs
 
-### Request/Response Format
+### Data Contracts
 
-Jobs use consistent JSON schema across API endpoints with embedded progress and configuration data.
+Requests and responses use shared TypeScript types through tRPC, ensuring end-to-end type safety.
 
 ### Error Handling
 
-API provides structured error responses with status codes and detailed error messages.
+Errors propagate as structured tRPC errors with messages suitable for user feedback and logs.
 
 ## Configuration Persistence
 

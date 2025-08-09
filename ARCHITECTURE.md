@@ -45,9 +45,9 @@ src/
 ├── pipeline/                        # Asynchronous job processing
 │   ├── PipelineFactory.ts           # Smart pipeline selection
 │   ├── PipelineManager.ts           # Job queue and worker coordination
-│   ├── PipelineClient.ts            # External worker HTTP client
+│   ├── PipelineClient.ts            # External worker RPC client (tRPC)
 │   ├── PipelineWorker.ts            # Individual job execution
-│   └── PipelineApiService.ts        # HTTP API for external workers
+│   └── trpc/                        # tRPC router for Pipeline RPC
 ├── scraper/                         # Content acquisition and processing
 │   ├── fetcher/                     # HTTP and file content fetching
 │   ├── middleware/                  # Content transformation pipeline
@@ -58,7 +58,7 @@ src/
 │   ├── mcpService.ts                # MCP service registration
 │   ├── webService.ts                # Web interface service
 │   ├── workerService.ts             # Worker service registration
-│   └── pipelineApiService.ts        # Pipeline API service
+│   └── trpcService.ts               # tRPC service registration
 ├── splitter/                        # Document chunking and segmentation
 │   ├── GreedySplitter.ts            # Size-based splitting
 │   ├── SemanticMarkdownSplitter.ts  # Structure-aware splitting
@@ -172,7 +172,7 @@ The pipeline system manages asynchronous job processing with persistent state:
 
 **PipelineWorker**: Executes individual jobs, orchestrating content fetching, processing, and storage. Reports progress through callbacks to the manager.
 
-**PipelineClient**: HTTP client that provides identical interface to PipelineManager for external worker communication.
+**PipelineClient**: tRPC client that provides identical interface to PipelineManager for external worker communication.
 
 Job states progress through: QUEUED → RUNNING → COMPLETED/FAILED/CANCELLED. All state transitions persist to database, enabling recovery after restart.
 

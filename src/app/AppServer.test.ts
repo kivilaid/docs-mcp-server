@@ -22,8 +22,8 @@ const mockMcpService = vi.hoisted(() => ({
   cleanupMcpService: vi.fn(),
 }));
 
-const mockPipelineApiService = vi.hoisted(() => ({
-  registerPipelineApiService: vi.fn(),
+const mockTrpcService = vi.hoisted(() => ({
+  registerTrpcService: vi.fn(),
 }));
 
 const mockWebService = vi.hoisted(() => ({
@@ -48,7 +48,7 @@ vi.mock("fastify", () => ({
 }));
 
 vi.mock("../services/mcpService", () => mockMcpService);
-vi.mock("../services/pipelineApiService", () => mockPipelineApiService);
+vi.mock("../services/trpcService", () => mockTrpcService);
 vi.mock("../services/webService", () => mockWebService);
 vi.mock("../services/workerService", () => mockWorkerService);
 vi.mock("../utils/logger", () => ({ logger: mockLogger }));
@@ -78,7 +78,7 @@ describe("AppServer Behavior Tests", () => {
     mockFastify.close.mockResolvedValue(undefined);
     mockMcpService.registerMcpService.mockResolvedValue(mockMcpServer as McpServer);
     mockMcpService.cleanupMcpService.mockResolvedValue(undefined);
-    mockPipelineApiService.registerPipelineApiService.mockResolvedValue(undefined);
+    mockTrpcService.registerTrpcService.mockResolvedValue(undefined);
     mockWebService.registerWebService.mockResolvedValue(undefined);
     mockWorkerService.registerWorkerService.mockResolvedValue(undefined);
     mockWorkerService.stopWorkerService.mockResolvedValue(undefined);
@@ -182,7 +182,7 @@ describe("AppServer Behavior Tests", () => {
       await server.start();
 
       expect(mockLogger.warn).toHaveBeenCalledWith(
-        expect.stringContaining("Worker is enabled but Pipeline API is disabled"),
+        expect.stringContaining("Worker is enabled but Pipeline RPC is disabled"),
       );
     });
 
@@ -227,7 +227,7 @@ describe("AppServer Behavior Tests", () => {
       expect(mockFastify.register).toHaveBeenCalledTimes(1); // Just formbody
       expect(mockWebService.registerWebService).not.toHaveBeenCalled();
       expect(mockMcpService.registerMcpService).not.toHaveBeenCalled();
-      expect(mockPipelineApiService.registerPipelineApiService).not.toHaveBeenCalled();
+      expect(mockTrpcService.registerTrpcService).not.toHaveBeenCalled();
       expect(mockWorkerService.registerWorkerService).not.toHaveBeenCalled();
     });
 
@@ -255,7 +255,7 @@ describe("AppServer Behavior Tests", () => {
       );
       expect(mockWorkerService.registerWorkerService).toHaveBeenCalledWith(mockPipeline);
       expect(mockMcpService.registerMcpService).not.toHaveBeenCalled();
-      expect(mockPipelineApiService.registerPipelineApiService).not.toHaveBeenCalled();
+      expect(mockTrpcService.registerTrpcService).not.toHaveBeenCalled();
     });
 
     it("should register only MCP server when enabled", async () => {
@@ -282,7 +282,8 @@ describe("AppServer Behavior Tests", () => {
       );
       expect(mockWorkerService.registerWorkerService).toHaveBeenCalledWith(mockPipeline);
       expect(mockWebService.registerWebService).not.toHaveBeenCalled();
-      expect(mockPipelineApiService.registerPipelineApiService).not.toHaveBeenCalled();
+      // tRPC service should not be registered in this mode
+      expect(mockTrpcService.registerTrpcService).not.toHaveBeenCalled();
     });
 
     it("should register only Pipeline API when enabled", async () => {
@@ -302,7 +303,7 @@ describe("AppServer Behavior Tests", () => {
 
       await server.start();
 
-      expect(mockPipelineApiService.registerPipelineApiService).toHaveBeenCalledWith(
+      expect(mockTrpcService.registerTrpcService).toHaveBeenCalledWith(
         mockFastify,
         mockPipeline,
       );
@@ -338,7 +339,7 @@ describe("AppServer Behavior Tests", () => {
         mockDocService,
         mockPipeline,
       );
-      expect(mockPipelineApiService.registerPipelineApiService).toHaveBeenCalledWith(
+      expect(mockTrpcService.registerTrpcService).toHaveBeenCalledWith(
         mockFastify,
         mockPipeline,
       );
@@ -428,7 +429,7 @@ describe("AppServer Behavior Tests", () => {
         expect.stringContaining("MCP endpoint:"),
       );
       expect(mockLogger.info).toHaveBeenCalledWith(
-        expect.stringContaining("Pipeline API:"),
+        expect.stringContaining("Pipeline RPC:"),
       );
       expect(mockLogger.info).toHaveBeenCalledWith(
         expect.stringContaining("Embedded worker:"),
@@ -583,12 +584,12 @@ describe("AppServer Behavior Tests", () => {
       const fastifyInstance = await server.start();
 
       expect(fastifyInstance).toBe(mockFastify);
-      expect(mockPipelineApiService.registerPipelineApiService).toHaveBeenCalledWith(
+      expect(mockTrpcService.registerTrpcService).toHaveBeenCalledWith(
         mockFastify,
         mockPipeline,
       );
       expect(mockLogger.info).toHaveBeenCalledWith(
-        expect.stringContaining("Pipeline API:"),
+        expect.stringContaining("Pipeline RPC:"),
       );
     });
 

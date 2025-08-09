@@ -94,12 +94,12 @@ describe("CLI Flag Validation", () => {
         }
       };
 
-      expect(() => validateResumeFlag(true, "http://localhost:8080/api")).toThrow(
+      expect(() => validateResumeFlag(true, "http://localhost:8080")).toThrow(
         "--resume flag is incompatible with --server-url",
       );
 
       // These should NOT throw
-      expect(() => validateResumeFlag(false, "http://localhost:8080/api")).not.toThrow();
+      expect(() => validateResumeFlag(false, "http://localhost:8080")).not.toThrow();
       expect(() => validateResumeFlag(true, undefined)).not.toThrow();
       expect(() => validateResumeFlag(false, undefined)).not.toThrow();
     });
@@ -208,7 +208,7 @@ describe("Double Initialization Prevention", () => {
     // External worker mode configuration
     await PipelineFactory.createPipeline({} as any, {
       recoverJobs: false,
-      serverUrl: "http://localhost:8080/api",
+      serverUrl: "http://localhost:8080/trpc",
     });
 
     expect(vi.mocked(PipelineFactory.createPipeline)).toHaveBeenCalledTimes(3);
@@ -219,7 +219,7 @@ describe("Double Initialization Prevention", () => {
     expect(calls[1][1]).toEqual({ recoverJobs: false, concurrency: 1 });
     expect(calls[2][1]).toEqual({
       recoverJobs: false,
-      serverUrl: "http://localhost:8080/api",
+      serverUrl: "http://localhost:8080/trpc",
     });
   });
 });

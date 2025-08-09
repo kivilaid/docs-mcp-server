@@ -34,7 +34,7 @@ export function createMcpCommand(program: Command): Command {
     )
     .option(
       "--server-url <url>",
-      "URL of external pipeline worker API (e.g., http://localhost:6280/api)",
+      "URL of external pipeline worker RPC (e.g., http://localhost:6280/trpc)",
     )
     .action(
       async (
@@ -81,7 +81,7 @@ export function createMcpCommand(program: Command): Command {
             const config = createAppServerConfig({
               enableWebInterface: false, // Never enable web interface in mcp command
               enableMcpServer: true,
-              enablePipelineApi: false, // Never enable pipeline API in mcp command
+              enablePipelineApi: false, // Never enable Pipeline RPC in mcp command
               enableWorker: !serverUrl,
               port,
               externalWorkerUrl: serverUrl,
