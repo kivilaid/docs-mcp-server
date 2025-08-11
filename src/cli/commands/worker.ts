@@ -22,6 +22,7 @@ export function createWorkerCommand(program: Command): Command {
     .description("Start external pipeline worker (HTTP API)")
     .option("--port <number>", "Port for worker API", "8080")
     .option("--resume", "Resume interrupted jobs on startup", true)
+    .option("--no-resume", "Do not resume jobs on startup")
     .action(async (cmdOptions: { port: string; resume: boolean }, command) => {
       const globalOptions = command.parent?.opts() || {};
       const port = validatePort(cmdOptions.port);

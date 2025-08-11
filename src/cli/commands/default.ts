@@ -28,6 +28,7 @@ export function createDefaultAction(program: Command): Command {
     )
     .option("--port <number>", "Port for the server", CLI_DEFAULTS.HTTP_PORT.toString())
     .option("--resume", "Resume interrupted jobs on startup", false)
+    .option("--no-resume", "Do not resume jobs on startup")
     .action(
       async (
         options: {
