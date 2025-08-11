@@ -1,3 +1,5 @@
+import type { IDocumentManagement } from "./trpc/interfaces";
+
 export * from "./DocumentManagementClient";
 export * from "./DocumentManagementService";
 export * from "./DocumentStore";
@@ -10,11 +12,11 @@ export async function createDocumentManagement(options: { serverUrl?: string } =
     const { DocumentManagementClient } = await import("./DocumentManagementClient");
     const client = new DocumentManagementClient(options.serverUrl);
     await client.initialize();
-    return client;
+    return client as IDocumentManagement;
   }
   const service = new (
     await import("./DocumentManagementService")
   ).DocumentManagementService();
   await service.initialize();
-  return service;
+  return service as IDocumentManagement;
 }

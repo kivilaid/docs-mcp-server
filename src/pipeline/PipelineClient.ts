@@ -40,9 +40,7 @@ export class PipelineClient implements IPipeline {
   private activePolling = new Set<string>(); // Track jobs being polled for completion
 
   constructor(serverUrl: string) {
-    // Ensure no trailing slash; expect serverUrl to point to /trpc or base host (we append /trpc)
-    const clean = serverUrl.replace(/\/$/, "");
-    this.baseUrl = clean.endsWith("/trpc") ? clean : `${clean}/trpc`;
+    this.baseUrl = serverUrl.replace(/\/$/, "");
     this.client = createTRPCProxyClient<PipelineRouter>({
       links: [httpBatchLink({ url: this.baseUrl })],
     });

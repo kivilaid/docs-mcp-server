@@ -96,7 +96,7 @@ export function createScrapeCommand(program: Command): Command {
     )
     .option(
       "--server-url <url>",
-      "URL of external pipeline worker RPC (e.g., http://localhost:6280/trpc)",
+      "URL of external pipeline worker RPC (e.g., http://localhost:6280/api)",
     )
     .action(
       async (

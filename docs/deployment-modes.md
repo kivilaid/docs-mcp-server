@@ -27,7 +27,7 @@ Services can be selectively enabled via AppServerConfig:
 - `enableMcpServer`: MCP protocol endpoint
 - `enableWebInterface`: Web UI and management API
 - `enableWorker`: Embedded job processing
-- `enableApiServer`: HTTP API for pipeline and data operations (served at `/trpc`)
+- `enableApiServer`: HTTP API for pipeline and data operations (served at `/api`)
 
 ## Distributed Mode
 
@@ -75,7 +75,7 @@ if (!process.stdin.isTTY && !process.stdout.isTTY) {
 
 - Server-Sent Events transport for MCP
 - Full web interface available
-- API accessible at `/trpc`
+- API accessible at `/api`
 - Suitable for browser access
 
 ### Manual Override
@@ -134,7 +134,7 @@ services:
   coordinator:
     image: ghcr.io/arabold/docs-mcp-server:latest
     ports: ["6280:6280"]
-  command: ["mcp", "--server-url", "http://worker:8080/trpc"]
+  command: ["mcp", "--server-url", "http://worker:8080/api"]
 
   worker:
     image: ghcr.io/arabold/docs-mcp-server:latest

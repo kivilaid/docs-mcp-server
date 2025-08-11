@@ -428,7 +428,7 @@ describe("AppServer Behavior Tests", () => {
         expect.stringContaining("Web interface:"),
       );
       expect(mockLogger.info).toHaveBeenCalledWith(
-        expect.stringContaining("MCP endpoint:"),
+        expect.stringContaining("MCP endpoints:"),
       );
       expect(mockLogger.info).toHaveBeenCalledWith(expect.stringContaining("API:"));
       expect(mockLogger.info).toHaveBeenCalledWith(

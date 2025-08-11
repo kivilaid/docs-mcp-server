@@ -203,11 +203,11 @@ export class AppServer {
     }
 
     if (this.config.enableMcpServer) {
-      enabledServices.push(`MCP endpoint: ${address}/mcp, ${address}/sse`);
+      enabledServices.push(`MCP endpoints: ${address}/mcp, ${address}/sse`);
     }
 
     if (this.config.enableApiServer) {
-      enabledServices.push(`API: ${address}/trpc`);
+      enabledServices.push(`API: ${address}/api`);
     }
 
     if (this.config.enableWorker) {

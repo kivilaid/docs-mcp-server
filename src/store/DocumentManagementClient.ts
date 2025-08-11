@@ -1,6 +1,6 @@
 /**
  * tRPC client for the document management API.
- * Implements IDocumentManagement and delegates to /trpc data router.
+ * Implements IDocumentManagement and delegates to /api data router.
  */
 import { createTRPCProxyClient, httpBatchLink } from "@trpc/client";
 import type { ScraperOptions } from "../scraper/types";
@@ -22,8 +22,7 @@ export class DocumentManagementClient implements IDocumentManagement {
   private readonly client: ReturnType<typeof createTRPCProxyClient<DataRouter>>;
 
   constructor(serverUrl: string) {
-    const clean = serverUrl.replace(/\/$/, "");
-    this.baseUrl = clean.endsWith("/trpc") ? clean : `${clean}/trpc`;
+    this.baseUrl = serverUrl.replace(/\/$/, "");
     this.client = createTRPCProxyClient<DataRouter>({
       links: [httpBatchLink({ url: this.baseUrl })],
     });

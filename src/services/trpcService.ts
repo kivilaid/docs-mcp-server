@@ -1,5 +1,5 @@
 /**
- * Fastify service to register unified tRPC API at /trpc.
+ * Fastify service to register unified tRPC API at /api.
  * Merges pipeline and data store routers under a single endpoint.
  */
 
@@ -32,7 +32,7 @@ export async function registerTrpcService(
   );
 
   await server.register(fastifyTRPCPlugin, {
-    prefix: "/trpc",
+    prefix: "/api",
     trpcOptions: {
       router,
       createContext: async (): Promise<UnifiedContext> => ({ pipeline, docService }),

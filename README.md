@@ -122,7 +122,7 @@ OPENAI_API_KEY="your-key" npx @arabold/docs-mcp-server@latest list
 OPENAI_API_KEY="your-key" npx @arabold/docs-mcp-server@latest search react "useState hook"
 
 # Scrape new documentation (connects to running server's worker)
-OPENAI_API_KEY="your-key" npx @arabold/docs-mcp-server@latest scrape react https://react.dev/reference/react --server-url http://localhost:6280/trpc
+OPENAI_API_KEY="your-key" npx @arabold/docs-mcp-server@latest scrape react https://react.dev/reference/react --server-url http://localhost:6280/api
 ```
 
 ### Adding Library Documentation

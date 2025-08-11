@@ -3,7 +3,7 @@
  * Provides a minimal RPC surface to replace legacy REST endpoints.
  *
  * This module now exports a factory to build the router from a provided t instance,
- * allowing us to compose multiple routers under a single /trpc endpoint.
+ * allowing us to compose multiple routers under a single /api endpoint.
  */
 
 import { initTRPC } from "@trpc/server";

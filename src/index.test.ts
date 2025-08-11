@@ -208,7 +208,7 @@ describe("Double Initialization Prevention", () => {
     // External worker mode configuration
     await PipelineFactory.createPipeline({} as any, {
       recoverJobs: false,
-      serverUrl: "http://localhost:8080/trpc",
+      serverUrl: "http://localhost:8080/api",
     });
 
     expect(vi.mocked(PipelineFactory.createPipeline)).toHaveBeenCalledTimes(3);
@@ -219,7 +219,7 @@ describe("Double Initialization Prevention", () => {
     expect(calls[1][1]).toEqual({ recoverJobs: false, concurrency: 1 });
     expect(calls[2][1]).toEqual({
       recoverJobs: false,
-      serverUrl: "http://localhost:8080/trpc",
+      serverUrl: "http://localhost:8080/api",
     });
   });
 });
