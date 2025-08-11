@@ -123,8 +123,11 @@ export class ScrapeTool {
     // const reportProgress = ...
     // pipeline.setCallbacks(...)
 
+    // Normalize pipeline version argument: use null for unversioned to be explicit cross-platform
+    const enqueueVersion: string | null = internalVersion === "" ? null : internalVersion;
+
     // Enqueue the job using the injected pipeline
-    const jobId = await pipeline.enqueueJob(library, internalVersion, {
+    const jobId = await pipeline.enqueueJob(library, enqueueVersion, {
       url: url,
       library: library,
       version: internalVersion,

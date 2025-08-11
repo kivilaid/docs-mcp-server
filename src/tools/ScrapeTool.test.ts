@@ -56,8 +56,8 @@ describe("ScrapeTool", () => {
     { input: "1.2.3-beta.1", expectedInternal: "1.2.3-beta.1" },
     { input: "1", expectedInternal: "1.0.0" }, // Coerced
     { input: "1.2", expectedInternal: "1.2.0" }, // Coerced
-    { input: null, expectedInternal: "" }, // Null -> Unversioned
-    { input: undefined, expectedInternal: "" }, // Undefined -> Unversioned
+    { input: null, expectedInternal: null }, // Null -> Unversioned (normalize to null for pipeline)
+    { input: undefined, expectedInternal: null }, // Undefined -> Unversioned (normalize to null for pipeline)
   ])(
     "should handle valid version input '$input' correctly",
     async ({ input, expectedInternal }) => {
@@ -65,9 +65,14 @@ describe("ScrapeTool", () => {
       await scrapeTool.execute(options);
 
       // Check enqueueJob call (implies constructor was called)
+      const expectedVersionArg =
+        typeof expectedInternal === "string"
+          ? expectedInternal.toLowerCase()
+          : expectedInternal; // null stays null
+
       expect(mockManagerInstance.enqueueJob).toHaveBeenCalledWith(
         "test-lib",
-        expectedInternal.toLowerCase(),
+        expectedVersionArg,
         expect.objectContaining({ url: options.url }), // Check basic options passed
       );
       expect(mockManagerInstance.waitForJobCompletion).toHaveBeenCalledWith(MOCK_JOB_ID);

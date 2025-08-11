@@ -74,9 +74,13 @@ export class PipelineClient implements IPipeline {
     options: ScraperOptions,
   ): Promise<string> {
     try {
+      const normalizedVersion =
+        typeof version === "string" && version.trim().length === 0
+          ? null
+          : (version ?? null);
       const result = await this.client.enqueueJob.mutate({
         library,
-        version: version ?? null,
+        version: normalizedVersion,
         options,
       });
       logger.debug(`Job ${result.jobId} enqueued successfully`);
