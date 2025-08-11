@@ -52,7 +52,6 @@ export function createWorkerCommand(program: Command): Command {
           port,
         });
 
-        logger.info(`🚀 Starting external pipeline worker with HTTP API`);
         await startAppServer(docService, pipeline, config);
 
         await new Promise(() => {}); // Keep running forever
