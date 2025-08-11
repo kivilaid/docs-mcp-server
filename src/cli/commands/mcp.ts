@@ -54,7 +54,7 @@ export function createMcpCommand(program: Command): Command {
         setupLogging(globalOptions, resolvedProtocol);
 
         try {
-          const docService = await initializeDocumentService();
+          const docService = await initializeDocumentService(serverUrl);
           const pipelineOptions: PipelineOptions = {
             recoverJobs: false, // MCP command doesn't support job recovery
             serverUrl,
@@ -81,7 +81,7 @@ export function createMcpCommand(program: Command): Command {
             const config = createAppServerConfig({
               enableWebInterface: false, // Never enable web interface in mcp command
               enableMcpServer: true,
-              enablePipelineApi: false, // Never enable Pipeline RPC in mcp command
+              enableApiServer: false, // Never enable API in mcp command
               enableWorker: !serverUrl,
               port,
               externalWorkerUrl: serverUrl,

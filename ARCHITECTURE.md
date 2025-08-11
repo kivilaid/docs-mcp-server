@@ -47,7 +47,7 @@ src/
 │   ├── PipelineManager.ts           # Job queue and worker coordination
 │   ├── PipelineClient.ts            # External worker RPC client (tRPC)
 │   ├── PipelineWorker.ts            # Individual job execution
-│   └── trpc/                        # tRPC router for Pipeline RPC
+│   └── trpc/                        # tRPC router for pipeline procedures
 ├── scraper/                         # Content acquisition and processing
 │   ├── fetcher/                     # HTTP and file content fetching
 │   ├── middleware/                  # Content transformation pipeline

@@ -1,6 +1,6 @@
-import type { IPipeline } from "../pipeline/interfaces";
+import type { IPipeline } from "../pipeline/trpc/interfaces";
 import { FileFetcher, HttpFetcher } from "../scraper/fetcher";
-import type { DocumentManagementService } from "../store/DocumentManagementService";
+import type { IDocumentManagement } from "../store/trpc/interfaces";
 import {
   CancelJobTool,
   FetchUrlTool,
@@ -36,7 +36,7 @@ export interface McpServerTools {
  * @returns An object containing all instantiated tool instances.
  */
 export async function initializeTools(
-  docService: DocumentManagementService,
+  docService: IDocumentManagement,
   pipeline: IPipeline,
 ): Promise<McpServerTools> {
   const tools: McpServerTools = {

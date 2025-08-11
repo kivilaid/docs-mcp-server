@@ -234,7 +234,7 @@ describe("Service Configuration Validation", () => {
     const expectedWorkerConfig = {
       enableWebInterface: false,
       enableMcpServer: false,
-      enablePipelineApi: true,
+      enableApiServer: true,
       enableWorker: true,
       port: 8080,
     };

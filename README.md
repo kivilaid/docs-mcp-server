@@ -250,8 +250,6 @@ See the tooltips in the Web UI and CLI help for more details.
 
 For production deployments or when you need to scale processing, use Docker Compose to run separate services.
 
-> **Note:** This feature is work in progress and will still be improved in future releases. Currently, it still requires all services to share the same database volume, defeating its original purpose.
-
 **Start the services:**
 
 ```bash

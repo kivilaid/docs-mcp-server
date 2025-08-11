@@ -9,8 +9,8 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { createMcpServerInstance } from "../mcp/mcpServer";
 import { initializeTools } from "../mcp/tools";
-import type { IPipeline } from "../pipeline/interfaces";
-import type { DocumentManagementService } from "../store/DocumentManagementService";
+import type { IPipeline } from "../pipeline/trpc/interfaces";
+import type { IDocumentManagement } from "../store/trpc/interfaces";
 import { logger } from "../utils/logger";
 
 /**
@@ -21,7 +21,7 @@ import { logger } from "../utils/logger";
  */
 export async function registerMcpService(
   server: FastifyInstance,
-  docService: DocumentManagementService,
+  docService: IDocumentManagement,
   pipeline: IPipeline,
 ): Promise<McpServer> {
   // Initialize MCP server and tools

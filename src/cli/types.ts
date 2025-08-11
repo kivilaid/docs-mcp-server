@@ -4,7 +4,7 @@
 
 import type { Command } from "commander";
 import type { IPipeline } from "../pipeline";
-import type { DocumentManagementService } from "../store/DocumentManagementService";
+import type { IDocumentManagement } from "../store/trpc/interfaces";
 
 /**
  * Global options available to all commands
@@ -19,7 +19,7 @@ export interface GlobalOptions {
  */
 export interface CommandContext {
   globalOptions: GlobalOptions;
-  docService?: DocumentManagementService;
+  docService?: IDocumentManagement;
   pipeline?: IPipeline;
 }
 

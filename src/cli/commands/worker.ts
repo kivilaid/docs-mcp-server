@@ -46,7 +46,7 @@ export function createWorkerCommand(program: Command): Command {
         const config = createAppServerConfig({
           enableWebInterface: false,
           enableMcpServer: false,
-          enablePipelineApi: true,
+          enableApiServer: true,
           enableWorker: true,
           port,
         });

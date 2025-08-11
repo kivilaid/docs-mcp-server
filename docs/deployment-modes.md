@@ -11,7 +11,7 @@ Single process containing all services on one port (default: 6280). This mode co
 - MCP server accessible via `/mcp` and `/sse` endpoints
 - Web interface for job management
 - Embedded worker for document processing
-- Pipeline RPC (tRPC over HTTP) for programmatic access
+- API (tRPC over HTTP) for programmatic access
 
 ### Use Cases
 
@@ -27,7 +27,7 @@ Services can be selectively enabled via AppServerConfig:
 - `enableMcpServer`: MCP protocol endpoint
 - `enableWebInterface`: Web UI and management API
 - `enableWorker`: Embedded job processing
-- `enablePipelineApi`: HTTP API for job operations
+- `enableApiServer`: HTTP API for pipeline and data operations (served at `/trpc`)
 
 ## Distributed Mode
 
@@ -35,9 +35,9 @@ Separate coordinator and worker processes for scaling. The coordinator handles i
 
 ### Architecture
 
-- **Coordinator**: Runs MCP server, web interface, and Pipeline RPC
+- **Coordinator**: Runs MCP server, web interface, and API
 - **Workers**: Execute document processing jobs
-- **Communication**: Coordinator uses Pipeline RPC (tRPC over HTTP) to talk to workers
+- **Communication**: Coordinator uses the API (tRPC over HTTP) to talk to workers
 
 ### Use Cases
 
@@ -75,7 +75,7 @@ if (!process.stdin.isTTY && !process.stdout.isTTY) {
 
 - Server-Sent Events transport for MCP
 - Full web interface available
-- Pipeline RPC accessible at `/trpc`
+- API accessible at `/trpc`
 - Suitable for browser access
 
 ### Manual Override
@@ -146,7 +146,7 @@ services:
 
 ### Multiple Workers
 
-Coordinators can balance load across multiple workers by configuring multiple server URLs or using a load balancer.
+Use a load balancer (or DNS) in front of multiple worker instances. The coordinator is configured with a single `--server-url` that points to the balancer.
 
 ### Health Checks
 

@@ -1,4 +1,4 @@
-import type { DocumentManagementService } from "../store/DocumentManagementService";
+import type { IDocumentManagement } from "../store/trpc/interfaces";
 import type { LibraryVersionDetails } from "../store/types";
 
 // Define the structure for the tool's output, using the detailed version info
@@ -15,9 +15,9 @@ export interface ListLibrariesResult {
  * Tool for listing all available libraries and their indexed versions in the store.
  */
 export class ListLibrariesTool {
-  private docService: DocumentManagementService;
+  private docService: IDocumentManagement;
 
-  constructor(docService: DocumentManagementService) {
+  constructor(docService: IDocumentManagement) {
     this.docService = docService;
   }
 

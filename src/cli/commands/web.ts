@@ -43,7 +43,7 @@ export function createWebCommand(program: Command): Command {
         setupLogging(globalOptions);
 
         try {
-          const docService = await initializeDocumentService();
+          const docService = await initializeDocumentService(serverUrl);
           const pipelineOptions: PipelineOptions = {
             recoverJobs: false, // Web command doesn't support job recovery
             serverUrl,
@@ -55,7 +55,7 @@ export function createWebCommand(program: Command): Command {
           const config = createAppServerConfig({
             enableWebInterface: true,
             enableMcpServer: false,
-            enablePipelineApi: false,
+            enableApiServer: false,
             enableWorker: !serverUrl,
             port,
             externalWorkerUrl: serverUrl,

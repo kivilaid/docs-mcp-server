@@ -1,9 +1,9 @@
 import type { DocumentManagementService } from "../store";
 import { DEFAULT_MAX_CONCURRENCY } from "../utils/config";
 import { logger } from "../utils/logger";
-import type { IPipeline, PipelineOptions } from "./interfaces";
 import { PipelineClient } from "./PipelineClient";
 import { PipelineManager } from "./PipelineManager";
+import type { IPipeline, PipelineOptions } from "./trpc/interfaces";
 
 /**
  * Factory for creating pipeline interfaces based on functionality requirements.

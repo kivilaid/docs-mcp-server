@@ -15,8 +15,8 @@ import { VersionStatus } from "../store/types";
 import { DEFAULT_MAX_CONCURRENCY } from "../utils/config";
 import { logger } from "../utils/logger";
 import { CancellationError, PipelineStateError } from "./errors";
-import type { IPipeline } from "./interfaces";
 import { PipelineWorker } from "./PipelineWorker"; // Import the worker
+import type { IPipeline } from "./trpc/interfaces";
 import type { InternalPipelineJob, PipelineJob, PipelineManagerCallbacks } from "./types";
 import { PipelineJobStatus } from "./types";
 

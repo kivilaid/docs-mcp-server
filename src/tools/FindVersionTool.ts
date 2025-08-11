@@ -1,4 +1,4 @@
-import type { DocumentManagementService } from "../store";
+import type { IDocumentManagement } from "../store/trpc/interfaces";
 import { logger } from "../utils/logger";
 import { VersionNotFoundError } from "./errors";
 
@@ -12,9 +12,9 @@ export interface FindVersionToolOptions {
  * Supports exact version matches and X-Range patterns (e.g., '5.x', '5.2.x').
  */
 export class FindVersionTool {
-  private docService: DocumentManagementService;
+  private docService: IDocumentManagement;
 
-  constructor(docService: DocumentManagementService) {
+  constructor(docService: IDocumentManagement) {
     this.docService = docService;
   }
 

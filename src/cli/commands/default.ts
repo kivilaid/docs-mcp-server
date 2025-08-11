@@ -74,7 +74,7 @@ export function createDefaultAction(program: Command): Command {
           const config = createAppServerConfig({
             enableWebInterface: true, // Enable web interface in http mode
             enableMcpServer: true, // Always enable MCP server
-            enablePipelineApi: true, // Enable Pipeline RPC (tRPC) in http mode
+            enableApiServer: true, // Enable API (tRPC) in http mode
             enableWorker: true, // Always enable in-process worker for unified server
             port,
           });

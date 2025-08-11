@@ -1,4 +1,4 @@
-import type { DocumentManagementService } from "../store";
+import type { IDocumentManagement } from "../store/trpc/interfaces";
 import type { LibraryVersionDetails, StoreSearchResult } from "../store/types"; // Import LibraryVersionDetails
 import { logger } from "../utils/logger";
 import { VersionNotFoundError } from "./errors";
@@ -27,9 +27,9 @@ export interface SearchToolResult {
  * Returns available versions when requested version is not found.
  */
 export class SearchTool {
-  private docService: DocumentManagementService;
+  private docService: IDocumentManagement;
 
-  constructor(docService: DocumentManagementService) {
+  constructor(docService: IDocumentManagement) {
     this.docService = docService;
   }
 

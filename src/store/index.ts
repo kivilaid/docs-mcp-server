@@ -1,3 +1,20 @@
+export * from "./DocumentManagementClient";
 export * from "./DocumentManagementService";
 export * from "./DocumentStore";
 export * from "./errors";
+export * from "./trpc/interfaces";
+
+/** Factory to create a document management implementation */
+export async function createDocumentManagement(options: { serverUrl?: string } = {}) {
+  if (options.serverUrl) {
+    const { DocumentManagementClient } = await import("./DocumentManagementClient");
+    const client = new DocumentManagementClient(options.serverUrl);
+    await client.initialize();
+    return client;
+  }
+  const service = new (
+    await import("./DocumentManagementService")
+  ).DocumentManagementService();
+  await service.initialize();
+  return service;
+}

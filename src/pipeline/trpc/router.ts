@@ -1,13 +1,16 @@
 /**
  * tRPC router exposing pipeline procedures for external workers.
  * Provides a minimal RPC surface to replace legacy REST endpoints.
+ *
+ * This module now exports a factory to build the router from a provided t instance,
+ * allowing us to compose multiple routers under a single /trpc endpoint.
  */
 
 import { initTRPC } from "@trpc/server";
 import { z } from "zod";
 import type { ScraperOptions } from "../../scraper/types";
-import type { IPipeline } from "../interfaces";
 import { PipelineJobStatus } from "../types";
+import type { IPipeline } from "./interfaces";
 
 // Context carries the pipeline instance
 export interface PipelineTrpcContext {
@@ -39,36 +42,83 @@ const getJobsInput = z.object({
   status: z.nativeEnum(PipelineJobStatus).optional(),
 });
 
-export const pipelineRouter = t.router({
-  ping: t.procedure.query(async () => ({ status: "ok", ts: Date.now() })),
+// Factory to create a pipeline router from any t instance whose context contains `pipeline`
+export function createPipelineRouter(trpc: unknown) {
+  const tt = trpc as typeof t;
+  return tt.router({
+    enqueueJob: tt.procedure
+      .input(enqueueInput)
+      .mutation(
+        async ({
+          ctx,
+          input,
+        }: {
+          ctx: PipelineTrpcContext;
+          input: z.infer<typeof enqueueInput>;
+        }) => {
+          const jobId = await ctx.pipeline.enqueueJob(
+            input.library,
+            input.version ?? null,
+            input.options,
+          );
+          return { jobId };
+        },
+      ),
 
-  enqueueJob: t.procedure.input(enqueueInput).mutation(async ({ ctx, input }) => {
-    const jobId = await ctx.pipeline.enqueueJob(
-      input.library,
-      input.version ?? null,
-      input.options,
-    );
-    return { jobId };
-  }),
+    getJob: tt.procedure
+      .input(jobIdInput)
+      .query(
+        async ({
+          ctx,
+          input,
+        }: {
+          ctx: PipelineTrpcContext;
+          input: z.infer<typeof jobIdInput>;
+        }) => {
+          return ctx.pipeline.getJob(input.id);
+        },
+      ),
 
-  getJob: t.procedure.input(jobIdInput).query(async ({ ctx, input }) => {
-    return ctx.pipeline.getJob(input.id);
-  }),
+    getJobs: tt.procedure
+      .input(getJobsInput.optional())
+      .query(
+        async ({
+          ctx,
+          input,
+        }: {
+          ctx: PipelineTrpcContext;
+          input: z.infer<typeof getJobsInput> | undefined;
+        }) => {
+          const jobs = await ctx.pipeline.getJobs(input?.status);
+          return { jobs };
+        },
+      ),
 
-  getJobs: t.procedure.input(getJobsInput.optional()).query(async ({ ctx, input }) => {
-    const jobs = await ctx.pipeline.getJobs(input?.status);
-    return { jobs };
-  }),
+    cancelJob: tt.procedure
+      .input(jobIdInput)
+      .mutation(
+        async ({
+          ctx,
+          input,
+        }: {
+          ctx: PipelineTrpcContext;
+          input: z.infer<typeof jobIdInput>;
+        }) => {
+          await ctx.pipeline.cancelJob(input.id);
+          return { success: true } as const;
+        },
+      ),
 
-  cancelJob: t.procedure.input(jobIdInput).mutation(async ({ ctx, input }) => {
-    await ctx.pipeline.cancelJob(input.id);
-    return { success: true } as const;
-  }),
+    clearCompletedJobs: tt.procedure.mutation(
+      async ({ ctx }: { ctx: PipelineTrpcContext }) => {
+        const count = await ctx.pipeline.clearCompletedJobs();
+        return { count };
+      },
+    ),
+  });
+}
 
-  clearCompletedJobs: t.procedure.mutation(async ({ ctx }) => {
-    const count = await ctx.pipeline.clearCompletedJobs();
-    return { count };
-  }),
-});
+// Default router for standalone usage (keeps existing imports working)
+export const pipelineRouter = createPipelineRouter(t);
 
 export type PipelineRouter = typeof pipelineRouter;

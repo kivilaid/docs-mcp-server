@@ -1,5 +1,5 @@
 import * as semver from "semver";
-import type { IPipeline } from "../pipeline/interfaces";
+import type { IPipeline } from "../pipeline/trpc/interfaces";
 import { ScrapeMode } from "../scraper/types";
 import {
   DEFAULT_MAX_CONCURRENCY,

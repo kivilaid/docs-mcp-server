@@ -8,7 +8,7 @@ import { chromium } from "playwright";
 import type { AppServerConfig } from "../app";
 import type { IPipeline, PipelineOptions } from "../pipeline";
 import { PipelineFactory } from "../pipeline";
-import { DocumentManagementService } from "../store/DocumentManagementService";
+import { createDocumentManagement, DocumentManagementService } from "../store";
 import {
   DEFAULT_HTTP_PORT,
   DEFAULT_MAX_CONCURRENCY,
@@ -126,7 +126,16 @@ export function validatePort(portString: string): number {
 /**
  * Initializes DocumentManagementService for CLI commands
  */
-export async function initializeDocumentService(): Promise<DocumentManagementService> {
+export async function initializeDocumentService(
+  serverUrl?: string,
+): Promise<DocumentManagementService> {
+  if (serverUrl) {
+    // Use remote client via factory but keep return type loose for legacy callers
+    // Cast is safe for consumers using only IDocumentManagement methods
+    return (await createDocumentManagement({
+      serverUrl,
+    })) as unknown as DocumentManagementService;
+  }
   const docService = new DocumentManagementService();
   await docService.initialize();
   return docService;
@@ -168,7 +177,7 @@ export async function initializePipeline(
 export function createAppServerConfig(options: {
   enableWebInterface?: boolean;
   enableMcpServer?: boolean;
-  enablePipelineApi?: boolean;
+  enableApiServer?: boolean;
   enableWorker?: boolean;
   port: number;
   externalWorkerUrl?: string;
@@ -176,7 +185,7 @@ export function createAppServerConfig(options: {
   return {
     enableWebInterface: options.enableWebInterface ?? false,
     enableMcpServer: options.enableMcpServer ?? true,
-    enablePipelineApi: options.enablePipelineApi ?? false,
+    enableApiServer: options.enableApiServer ?? false,
     enableWorker: options.enableWorker ?? true,
     port: options.port,
     externalWorkerUrl: options.externalWorkerUrl,

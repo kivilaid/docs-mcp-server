@@ -6,7 +6,7 @@
 import { createTRPCProxyClient, httpBatchLink } from "@trpc/client";
 import type { ScraperOptions } from "../scraper/types";
 import { logger } from "../utils/logger";
-import type { IPipeline } from "./interfaces";
+import type { IPipeline } from "./trpc/interfaces";
 import type { PipelineRouter } from "./trpc/router";
 import type { PipelineJob, PipelineJobStatus, PipelineManagerCallbacks } from "./types";
 
@@ -52,7 +52,10 @@ export class PipelineClient implements IPipeline {
   async start(): Promise<void> {
     // Check connectivity via ping
     try {
-      await this.client.ping.query();
+      // Root-level ping exists on the unified router; cast for this health check only
+      await (
+        this.client as unknown as { ping: { query: () => Promise<unknown> } }
+      ).ping.query();
       logger.debug("PipelineClient connected to external worker via tRPC");
     } catch (error) {
       throw new Error(

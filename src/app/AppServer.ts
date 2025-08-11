@@ -8,12 +8,12 @@ import formBody from "@fastify/formbody";
 import fastifyStatic from "@fastify/static";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import Fastify, { type FastifyInstance } from "fastify";
-import type { IPipeline } from "../pipeline/interfaces";
+import type { IPipeline } from "../pipeline/trpc/interfaces";
 import { cleanupMcpService, registerMcpService } from "../services/mcpService";
 import { registerTrpcService } from "../services/trpcService";
 import { registerWebService } from "../services/webService";
 import { registerWorkerService, stopWorkerService } from "../services/workerService";
-import type { DocumentManagementService } from "../store/DocumentManagementService";
+import type { IDocumentManagement } from "../store/trpc/interfaces";
 import { logger } from "../utils/logger";
 import { getProjectRoot } from "../utils/paths";
 import type { AppServerConfig } from "./AppServerConfig";
@@ -27,7 +27,7 @@ export class AppServer {
   private config: AppServerConfig;
 
   constructor(
-    private docService: DocumentManagementService,
+    private docService: IDocumentManagement,
     private pipeline: IPipeline,
     config: AppServerConfig,
   ) {
@@ -60,9 +60,9 @@ export class AppServer {
     }
 
     // Pipeline RPC should be enabled if we have a worker
-    if (this.config.enableWorker && !this.config.enablePipelineApi) {
+    if (this.config.enableWorker && !this.config.enableApiServer) {
       logger.warn(
-        "Warning: Worker is enabled but Pipeline RPC is disabled. Consider enabling Pipeline RPC for better observability.",
+        "Warning: Worker is enabled but API server is disabled. Consider enabling the API for better observability.",
       );
     }
   }
@@ -129,7 +129,7 @@ export class AppServer {
       await this.enableMcpServer();
     }
 
-    if (this.config.enablePipelineApi) {
+    if (this.config.enableApiServer) {
       await this.enableTrpcApi();
     }
 
@@ -167,8 +167,8 @@ export class AppServer {
    * Enable Pipeline RPC (tRPC) service.
    */
   private async enableTrpcApi(): Promise<void> {
-    await registerTrpcService(this.server, this.pipeline);
-    logger.debug("Pipeline tRPC service enabled");
+    await registerTrpcService(this.server, this.pipeline, this.docService);
+    logger.debug("API server (tRPC) enabled");
   }
 
   /**
@@ -206,8 +206,8 @@ export class AppServer {
       enabledServices.push(`MCP endpoint: ${address}/mcp, ${address}/sse`);
     }
 
-    if (this.config.enablePipelineApi) {
-      enabledServices.push(`Pipeline RPC: ${address}/trpc`);
+    if (this.config.enableApiServer) {
+      enabledServices.push(`API: ${address}/trpc`);
     }
 
     if (this.config.enableWorker) {

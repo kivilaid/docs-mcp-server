@@ -1,5 +1,5 @@
-import type { ScraperOptions } from "../scraper/types";
-import type { PipelineJob, PipelineJobStatus, PipelineManagerCallbacks } from "./types";
+import type { ScraperOptions } from "../../scraper/types";
+import type { PipelineJob, PipelineJobStatus, PipelineManagerCallbacks } from "../types";
 
 /**
  * Options for configuring pipeline behavior.

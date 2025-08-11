@@ -4,8 +4,8 @@
  */
 
 import type { FastifyInstance } from "fastify";
-import type { IPipeline } from "../pipeline/interfaces";
-import type { DocumentManagementService } from "../store/DocumentManagementService";
+import type { IPipeline } from "../pipeline/trpc/interfaces";
+import type { IDocumentManagement } from "../store/trpc/interfaces";
 import { SearchTool } from "../tools";
 import { CancelJobTool } from "../tools/CancelJobTool";
 import { ClearCompletedJobsTool } from "../tools/ClearCompletedJobsTool";
@@ -28,7 +28,7 @@ import { registerLibrariesRoutes } from "../web/routes/libraries/list";
  */
 export async function registerWebService(
   server: FastifyInstance,
-  docService: DocumentManagementService,
+  docService: IDocumentManagement,
   pipeline: IPipeline,
 ): Promise<void> {
   // Instantiate tools for web routes
