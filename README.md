@@ -248,7 +248,7 @@ See the tooltips in the Web UI and CLI help for more details.
 
 ## Advanced: Docker Compose (Scaling)
 
-For production deployments or when you need to scale processing, use Docker Compose to run separate services.
+For production deployments or when you need to scale processing, use Docker Compose to run separate services. The system selects a local in-process worker or a remote worker client based on configuration, keeping behavior consistent across modes.
 
 **Start the services:**
 

@@ -3,7 +3,8 @@
  */
 
 import type { Command } from "commander";
-import { initializeDocumentService, setupLogging } from "../utils";
+import { createDocumentManagement } from "../../store";
+import { setupLogging } from "../utils";
 
 export function createRemoveCommand(program: Command): Command {
   return program
@@ -17,7 +18,7 @@ export function createRemoveCommand(program: Command): Command {
       const globalOptions = command.parent?.opts() || {};
       setupLogging(globalOptions);
 
-      const docService = await initializeDocumentService();
+      const docService = await createDocumentManagement();
       const { version } = options;
       try {
         await docService.removeAllDocuments(library, version);

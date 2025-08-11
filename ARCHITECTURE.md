@@ -146,6 +146,8 @@ The entry point resolves protocol based on TTY status:
 
 The PipelineFactory chooses implementation based on configuration:
 
+Naming clarifies the mode: PipelineManager runs an in-process worker; PipelineClient connects to an out-of-process worker via tRPC.
+
 - `serverUrl` specified: PipelineClient for external worker communication
 - `recoverJobs: true`: PipelineManager with job recovery from database
 - `recoverJobs: false`: PipelineManager without recovery (CLI commands)

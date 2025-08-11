@@ -3,17 +3,18 @@
  */
 
 import type { Command } from "commander";
-import type { IPipeline, PipelineOptions } from "../../pipeline";
-import { PipelineFactory } from "../../pipeline";
+import type { PipelineOptions } from "../../pipeline";
+import type { IPipeline } from "../../pipeline/trpc/interfaces";
 import { ScrapeMode } from "../../scraper/types";
-import { DocumentManagementService } from "../../store/DocumentManagementService";
+import { createDocumentManagement } from "../../store";
+import type { IDocumentManagement } from "../../store/trpc/interfaces";
 import { ScrapeTool } from "../../tools";
 import {
   DEFAULT_MAX_CONCURRENCY,
   DEFAULT_MAX_DEPTH,
   DEFAULT_MAX_PAGES,
 } from "../../utils/config";
-import { parseHeaders, setupLogging } from "../utils";
+import { createPipelineWithCallbacks, parseHeaders, setupLogging } from "../utils";
 
 export function createScrapeCommand(program: Command): Command {
   return program
@@ -121,20 +122,24 @@ export function createScrapeCommand(program: Command): Command {
         const globalOptions = command.parent?.opts() || {};
         setupLogging(globalOptions);
 
-        const docService = new DocumentManagementService();
+        const serverUrl = options.serverUrl;
+        const docService: IDocumentManagement = await createDocumentManagement({
+          serverUrl,
+        });
         let pipeline: IPipeline | null = null;
 
         try {
-          await docService.initialize();
-
           // Use server-url if provided, otherwise run locally
           const pipelineOptions: PipelineOptions = {
             recoverJobs: false, // CLI: no job recovery (immediate execution)
             concurrency: 1, // CLI: single job at a time
-            serverUrl: options.serverUrl, // Use external worker if specified
+            serverUrl, // Use external worker if specified
           };
 
-          pipeline = await PipelineFactory.createPipeline(docService, pipelineOptions);
+          pipeline = await createPipelineWithCallbacks(
+            serverUrl ? undefined : (docService as unknown as never),
+            pipelineOptions,
+          );
           await pipeline.start();
           const scrapeTool = new ScrapeTool(pipeline);
 

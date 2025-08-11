@@ -3,8 +3,9 @@
  */
 
 import type { Command } from "commander";
+import { createDocumentManagement } from "../../store";
 import { FindVersionTool } from "../../tools";
-import { initializeDocumentService, setupLogging } from "../utils";
+import { setupLogging } from "../utils";
 
 export function createFindVersionCommand(program: Command): Command {
   return program
@@ -15,7 +16,7 @@ export function createFindVersionCommand(program: Command): Command {
       const globalOptions = command.parent?.opts() || {};
       setupLogging(globalOptions);
 
-      const docService = await initializeDocumentService();
+      const docService = await createDocumentManagement();
       try {
         const findVersionTool = new FindVersionTool(docService);
         const versionInfo = await findVersionTool.execute({

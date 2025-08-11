@@ -5,12 +5,13 @@
 import type { Command } from "commander";
 import { startAppServer } from "../../app";
 import type { PipelineOptions } from "../../pipeline";
+import { createDocumentManagement } from "../../store";
+import type { IDocumentManagement } from "../../store/trpc/interfaces";
 import { logger } from "../../utils/logger";
 import {
   CLI_DEFAULTS,
   createAppServerConfig,
-  initializeDocumentService,
-  initializePipeline,
+  createPipelineWithCallbacks,
   setupLogging,
   validatePort,
 } from "../utils";
@@ -43,13 +44,18 @@ export function createWebCommand(program: Command): Command {
         setupLogging(globalOptions);
 
         try {
-          const docService = await initializeDocumentService(serverUrl);
+          const docService: IDocumentManagement = await createDocumentManagement({
+            serverUrl,
+          });
           const pipelineOptions: PipelineOptions = {
             recoverJobs: false, // Web command doesn't support job recovery
             serverUrl,
             concurrency: 3,
           };
-          const pipeline = await initializePipeline(docService, pipelineOptions);
+          const pipeline = await createPipelineWithCallbacks(
+            serverUrl ? undefined : (docService as unknown as never),
+            pipelineOptions,
+          );
 
           // Configure web-only server
           const config = createAppServerConfig({

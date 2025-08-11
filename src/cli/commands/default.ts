@@ -7,13 +7,13 @@ import { startAppServer } from "../../app";
 import { startStdioServer } from "../../mcp/startStdioServer";
 import { initializeTools } from "../../mcp/tools";
 import type { PipelineOptions } from "../../pipeline";
+import { createLocalDocumentManagement } from "../../store";
 import { logger } from "../../utils/logger";
 import {
   CLI_DEFAULTS,
   createAppServerConfig,
+  createPipelineWithCallbacks,
   ensurePlaywrightBrowsersInstalled,
-  initializeDocumentService,
-  initializePipeline,
   resolveProtocol,
   setupLogging,
   validatePort,
@@ -50,12 +50,12 @@ export function createDefaultAction(program: Command): Command {
         // Ensure browsers are installed
         ensurePlaywrightBrowsersInstalled();
 
-        const docService = await initializeDocumentService();
+        const docService = await createLocalDocumentManagement();
         const pipelineOptions: PipelineOptions = {
           recoverJobs: options.resume || false, // Use --resume flag for job recovery
           concurrency: 3,
         };
-        const pipeline = await initializePipeline(docService, pipelineOptions);
+        const pipeline = await createPipelineWithCallbacks(docService, pipelineOptions);
 
         if (resolvedProtocol === "stdio") {
           // Direct stdio mode - bypass AppServer entirely

@@ -7,12 +7,13 @@ import { startAppServer } from "../../app";
 import { startStdioServer } from "../../mcp/startStdioServer";
 import { initializeTools } from "../../mcp/tools";
 import type { PipelineOptions } from "../../pipeline";
+import { createDocumentManagement } from "../../store";
+import type { IDocumentManagement } from "../../store/trpc/interfaces";
 import { logger } from "../../utils/logger";
 import {
   CLI_DEFAULTS,
   createAppServerConfig,
-  initializeDocumentService,
-  initializePipeline,
+  createPipelineWithCallbacks,
   resolveProtocol,
   setupLogging,
   validatePort,
@@ -54,13 +55,18 @@ export function createMcpCommand(program: Command): Command {
         setupLogging(globalOptions, resolvedProtocol);
 
         try {
-          const docService = await initializeDocumentService(serverUrl);
+          const docService: IDocumentManagement = await createDocumentManagement({
+            serverUrl,
+          });
           const pipelineOptions: PipelineOptions = {
             recoverJobs: false, // MCP command doesn't support job recovery
             serverUrl,
             concurrency: 3,
           };
-          const pipeline = await initializePipeline(docService, pipelineOptions);
+          const pipeline = await createPipelineWithCallbacks(
+            serverUrl ? undefined : (docService as unknown as never),
+            pipelineOptions,
+          );
 
           if (resolvedProtocol === "stdio") {
             // Direct stdio mode - bypass AppServer entirely

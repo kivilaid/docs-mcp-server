@@ -3,8 +3,9 @@
  */
 
 import type { Command } from "commander";
+import { createDocumentManagement } from "../../store";
 import { SearchTool } from "../../tools";
-import { formatOutput, initializeDocumentService, setupLogging } from "../utils";
+import { formatOutput, setupLogging } from "../utils";
 
 export function createSearchCommand(program: Command): Command {
   return program
@@ -36,7 +37,7 @@ export function createSearchCommand(program: Command): Command {
         const globalOptions = command.parent?.opts() || {};
         setupLogging(globalOptions);
 
-        const docService = await initializeDocumentService();
+        const docService = await createDocumentManagement();
         try {
           const searchTool = new SearchTool(docService);
           const result = await searchTool.execute({

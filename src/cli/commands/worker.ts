@@ -5,13 +5,13 @@
 import type { Command } from "commander";
 import { startAppServer } from "../../app";
 import type { PipelineOptions } from "../../pipeline";
+import { createLocalDocumentManagement } from "../../store";
 import { logger } from "../../utils/logger";
 import {
   CLI_DEFAULTS,
   createAppServerConfig,
+  createPipelineWithCallbacks,
   ensurePlaywrightBrowsersInstalled,
-  initializeDocumentService,
-  initializePipeline,
   setupLogging,
   validatePort,
 } from "../utils";
@@ -35,12 +35,12 @@ export function createWorkerCommand(program: Command): Command {
         ensurePlaywrightBrowsersInstalled();
 
         // Initialize services
-        const docService = await initializeDocumentService();
+        const docService = await createLocalDocumentManagement();
         const pipelineOptions: PipelineOptions = {
           recoverJobs: cmdOptions.resume, // Use the resume option
           concurrency: CLI_DEFAULTS.MAX_CONCURRENCY,
         };
-        const pipeline = await initializePipeline(docService, pipelineOptions);
+        const pipeline = await createPipelineWithCallbacks(docService, pipelineOptions);
 
         // Configure worker-only server
         const config = createAppServerConfig({

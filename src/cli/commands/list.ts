@@ -3,8 +3,9 @@
  */
 
 import type { Command } from "commander";
+import { createDocumentManagement } from "../../store";
 import { ListLibrariesTool } from "../../tools";
-import { formatOutput, initializeDocumentService, setupLogging } from "../utils";
+import { formatOutput, setupLogging } from "../utils";
 
 export function createListCommand(program: Command): Command {
   return program
@@ -14,7 +15,7 @@ export function createListCommand(program: Command): Command {
       const globalOptions = command.opts() || {};
       setupLogging(globalOptions);
 
-      const docService = await initializeDocumentService();
+      const docService = await createDocumentManagement();
       try {
         const listLibrariesTool = new ListLibrariesTool(docService);
         const result = await listLibrariesTool.execute();

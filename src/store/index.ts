@@ -20,3 +20,15 @@ export async function createDocumentManagement(options: { serverUrl?: string } =
   await service.initialize();
   return service as IDocumentManagement;
 }
+
+/**
+ * Creates and initializes a local DocumentManagementService instance.
+ * Use this only when constructing an in-process PipelineManager (worker path).
+ */
+export async function createLocalDocumentManagement() {
+  const service = new (
+    await import("./DocumentManagementService")
+  ).DocumentManagementService();
+  await service.initialize();
+  return service;
+}

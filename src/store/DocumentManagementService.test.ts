@@ -74,6 +74,16 @@ vi.mock("./DocumentRetrieverService", () => ({
   DocumentRetrieverService: vi.fn().mockImplementation(() => mockRetriever),
 }));
 
+// Mock DocumentManagementClient for factory tests
+const mockClientInitialize = vi.fn().mockResolvedValue(undefined);
+const MockDocumentManagementClient = vi
+  .fn()
+  .mockImplementation((_url: string) => ({ initialize: mockClientInitialize }));
+
+vi.mock("./DocumentManagementClient", () => ({
+  DocumentManagementClient: MockDocumentManagementClient,
+}));
+
 // --- END MOCKS ---
 
 describe("DocumentManagementService", () => {
@@ -179,6 +189,49 @@ describe("DocumentManagementService", () => {
         // Restore original env var value
         process.env.DOCS_MCP_STORE_PATH = originalEnvValue;
       }
+    });
+  });
+
+  // --- Factory function behavior tests ---
+  describe("DocumentManagement factory functions", () => {
+    beforeEach(() => {
+      vi.clearAllMocks();
+    });
+
+    it("createDocumentManagement() returns initialized local service by default", async () => {
+      const initSpy = vi.spyOn(DocumentManagementService.prototype, "initialize");
+      const { createDocumentManagement } = await import("./index");
+
+      const dm = await createDocumentManagement();
+
+      expect(initSpy).toHaveBeenCalledTimes(1);
+      expect(dm).toBeInstanceOf(DocumentManagementService);
+      // Should not construct remote client when no serverUrl is provided
+      expect(MockDocumentManagementClient).not.toHaveBeenCalled();
+    });
+
+    it("createDocumentManagement({serverUrl}) returns initialized remote client", async () => {
+      const { createDocumentManagement } = await import("./index");
+      const url = "http://localhost:8080";
+
+      const dm = await createDocumentManagement({ serverUrl: url });
+
+      expect(MockDocumentManagementClient).toHaveBeenCalledWith(url);
+      expect(mockClientInitialize).toHaveBeenCalledTimes(1);
+      // Not a local service instance
+      expect(dm).not.toBeInstanceOf(DocumentManagementService);
+    });
+
+    it("createLocalDocumentManagement() returns initialized local service", async () => {
+      const initSpy = vi.spyOn(DocumentManagementService.prototype, "initialize");
+      const { createLocalDocumentManagement } = await import("./index");
+
+      const dm = await createLocalDocumentManagement();
+
+      expect(initSpy).toHaveBeenCalledTimes(1);
+      expect(dm).toBeInstanceOf(DocumentManagementService);
+      // Should never touch remote client in local helper
+      expect(MockDocumentManagementClient).not.toHaveBeenCalled();
     });
   });
   // --- END: Constructor Path Logic Tests ---

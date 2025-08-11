@@ -7,6 +7,23 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { createCliProgram } from "./index";
 import { resolveProtocol, validatePort, validateResumeFlag } from "./utils";
 
+// --- Additional mocks for createPipelineWithCallbacks behavior tests ---
+vi.mock("../pipeline/PipelineFactory", () => ({
+  PipelineFactory: {
+    createPipeline: vi.fn(),
+  },
+}));
+vi.mock("../utils/logger", () => ({
+  logger: {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  },
+  setLogLevel: vi.fn(),
+  LogLevel: { ERROR: 0, WARN: 1, INFO: 2, DEBUG: 3 },
+}));
+
 describe("CLI Command Arguments Matrix", () => {
   const program = createCliProgram();
 
@@ -153,6 +170,73 @@ describe("CLI Command Arguments Matrix", () => {
       "remove",
       "fetch-url",
     ]);
+  });
+});
+
+describe("createPipelineWithCallbacks behavior", () => {
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("attaches callbacks for local pipeline and throws when docService missing", async () => {
+    const { createPipelineWithCallbacks } = await import("./utils");
+    const { PipelineFactory } = await import("../pipeline/PipelineFactory");
+    const mockSetCallbacks = vi.fn();
+
+    // Local path requires a DocumentManagementService instance
+    await expect(createPipelineWithCallbacks(undefined as any, {})).rejects.toThrow(
+      "Local pipeline requires a DocumentManagementService instance",
+    );
+
+    // Provide a fake docService and ensure callbacks are wired
+    vi.mocked(PipelineFactory.createPipeline).mockResolvedValueOnce({
+      setCallbacks: mockSetCallbacks,
+    } as any);
+
+    const fakeDocService = {} as any;
+    const pipeline = await createPipelineWithCallbacks(fakeDocService, {
+      concurrency: 2,
+    });
+
+    expect(PipelineFactory.createPipeline).toHaveBeenCalledWith(fakeDocService, {
+      concurrency: 2,
+    });
+    expect(mockSetCallbacks).toHaveBeenCalledWith(
+      expect.objectContaining({
+        onJobProgress: expect.any(Function),
+        onJobStatusChange: expect.any(Function),
+        onJobError: expect.any(Function),
+      }),
+    );
+    expect(pipeline).toBeDefined();
+  });
+
+  it("creates remote pipeline when serverUrl is provided and attaches callbacks", async () => {
+    const { createPipelineWithCallbacks } = await import("./utils");
+    const { PipelineFactory } = await import("../pipeline/PipelineFactory");
+    const mockSetCallbacks = vi.fn();
+
+    vi.mocked(PipelineFactory.createPipeline).mockResolvedValueOnce({
+      setCallbacks: mockSetCallbacks,
+    } as any);
+
+    const pipeline = await createPipelineWithCallbacks(undefined, {
+      serverUrl: "http://localhost:8080",
+      concurrency: 1,
+    });
+
+    expect(PipelineFactory.createPipeline).toHaveBeenCalledWith(undefined, {
+      serverUrl: "http://localhost:8080",
+      concurrency: 1,
+    });
+    expect(mockSetCallbacks).toHaveBeenCalledWith(
+      expect.objectContaining({
+        onJobProgress: expect.any(Function),
+        onJobStatusChange: expect.any(Function),
+        onJobError: expect.any(Function),
+      }),
+    );
+    expect(pipeline).toBeDefined();
   });
 });
 
