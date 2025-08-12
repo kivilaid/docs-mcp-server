@@ -82,6 +82,60 @@ export interface VersionScraperOptions {
 }
 
 /**
+ * Unified return type for retrieving stored scraping configuration for a version.
+ * Includes the original source URL and the parsed scraper options used during indexing.
+ */
+export interface StoredScraperOptions {
+  sourceUrl: string;
+  options: VersionScraperOptions;
+}
+
+/**
+ * Alias for the unified scraping configuration returned by the service.
+ * Prefer ScraperConfig in new code; StoredScraperOptions remains for backward-compat.
+ */
+export type ScraperConfig = StoredScraperOptions;
+
+/**
+ * Canonical reference to a library version in the domain layer.
+ * Version uses empty string for unversioned content.
+ */
+export interface VersionRef {
+  library: string;
+  version: string; // empty string for unversioned
+}
+
+/** Normalize a VersionRef (lowercase, trim; empty string for unversioned). */
+export function normalizeVersionRef(ref: VersionRef): VersionRef {
+  return {
+    library: ref.library.trim().toLowerCase(),
+    version: (ref.version ?? "").trim().toLowerCase(),
+  };
+}
+
+/**
+ * Summary of a specific version for API/UI consumption.
+ * Aggregates status, progress and document statistics.
+ */
+export interface VersionSummary {
+  id: number;
+  ref: VersionRef;
+  status: VersionStatus;
+  progress: { pages: number; maxPages: number };
+  counts: { documents: number; uniqueUrls: number };
+  indexedAt: string | null; // ISO 8601
+  sourceUrl?: string | null;
+}
+
+/**
+ * Summary of a library and its versions for API/UI consumption.
+ */
+export interface LibrarySummary {
+  library: string;
+  versions: VersionSummary[];
+}
+
+/**
  * Database version record type matching the versions table schema.
  * Uses snake_case naming to match database column names.
  */

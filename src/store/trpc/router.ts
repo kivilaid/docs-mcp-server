@@ -5,12 +5,10 @@
 import { initTRPC } from "@trpc/server";
 import { z } from "zod";
 import type {
-  DbVersion,
   DbVersionWithLibrary,
   FindVersionResult,
   LibraryVersionDetails,
   StoreSearchResult,
-  VersionScraperOptions,
   VersionStatus,
 } from "../types";
 import type { IDocumentManagement } from "./interfaces";
@@ -40,6 +38,13 @@ export function createDataRouter(trpc: unknown) {
       const libs = await ctx.docService.listLibraries();
       return libs as Array<{ library: string; versions: LibraryVersionDetails[] }>;
     }),
+
+    listLibrarySummaries: tt.procedure.query(
+      async ({ ctx }: { ctx: DataTrpcContext }) => {
+        const summaries = await ctx.docService.listLibrarySummaries();
+        return summaries; // LibrarySummary[]
+      },
+    ),
 
     findBestVersion: tt.procedure
       .input(z.object({ library: nonEmpty, targetVersion: z.string().optional() }))
@@ -150,7 +155,7 @@ export function createDataRouter(trpc: unknown) {
         )) as DbVersionWithLibrary[];
       }),
 
-    getVersionScraperOptions: tt.procedure
+    getScraperOptions: tt.procedure
       .input(z.object({ versionId: z.number().int().positive() }))
       .query(
         async ({
@@ -160,25 +165,7 @@ export function createDataRouter(trpc: unknown) {
           ctx: DataTrpcContext;
           input: { versionId: number };
         }) => {
-          return (await ctx.docService.getVersionScraperOptions(
-            input.versionId,
-          )) as VersionScraperOptions | null;
-        },
-      ),
-
-    getVersionWithStoredOptions: tt.procedure
-      .input(z.object({ versionId: z.number().int().positive() }))
-      .query(
-        async ({
-          ctx,
-          input,
-        }: {
-          ctx: DataTrpcContext;
-          input: { versionId: number };
-        }) => {
-          return (await ctx.docService.getVersionWithStoredOptions(
-            input.versionId,
-          )) as DbVersion | null;
+          return await ctx.docService.getScraperOptions(input.versionId);
         },
       ),
 

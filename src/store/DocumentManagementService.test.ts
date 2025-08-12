@@ -47,8 +47,7 @@ const mockStore = {
   getActiveVersions: vi.fn(),
   // Scraper options methods
   storeScraperOptions: vi.fn(),
-  getVersionScraperOptions: vi.fn(),
-  getVersionWithStoredOptions: vi.fn(),
+  getScraperOptions: vi.fn(),
   findVersionsBySourceUrl: vi.fn(),
   resolveLibraryAndVersionIds: vi.fn(),
 };
@@ -189,6 +188,46 @@ describe("DocumentManagementService", () => {
         // Restore original env var value
         process.env.DOCS_MCP_STORE_PATH = originalEnvValue;
       }
+    });
+  });
+
+  // --- ensureVersion tests ---
+  describe("ensureVersion", () => {
+    it("creates library and version when both absent", async () => {
+      mockStore.resolveLibraryAndVersionIds.mockResolvedValue({
+        libraryId: 1,
+        versionId: 10,
+      });
+      const id = await docService.ensureVersion({ library: "React", version: "18.2.0" });
+      expect(id).toBe(10);
+      // ensure normalize to lowercase
+      expect(mockStore.resolveLibraryAndVersionIds).toHaveBeenCalledWith(
+        "react",
+        "18.2.0",
+      );
+    });
+
+    it("handles unversioned refs (empty version string)", async () => {
+      mockStore.resolveLibraryAndVersionIds.mockResolvedValue({
+        libraryId: 2,
+        versionId: 20,
+      });
+      const id = await docService.ensureVersion({ library: "Lodash", version: "" });
+      expect(id).toBe(20);
+      expect(mockStore.resolveLibraryAndVersionIds).toHaveBeenCalledWith("lodash", "");
+    });
+
+    it("trims whitespace and normalizes version", async () => {
+      mockStore.resolveLibraryAndVersionIds.mockResolvedValue({
+        libraryId: 3,
+        versionId: 30,
+      });
+      const id = await docService.ensureVersion({
+        library: "  Express  ",
+        version: "  ",
+      });
+      expect(id).toBe(30);
+      expect(mockStore.resolveLibraryAndVersionIds).toHaveBeenCalledWith("express", "");
     });
   });
 
@@ -891,15 +930,10 @@ describe("DocumentManagementService", () => {
           scraperOptions,
         );
 
-        // Test getVersionScraperOptions
-        mockStore.getVersionScraperOptions.mockResolvedValue(null);
-        await docService.getVersionScraperOptions(versionId);
-        expect(mockStore.getVersionScraperOptions).toHaveBeenCalledWith(versionId);
-
-        // Test getVersionWithStoredOptions
-        mockStore.getVersionWithStoredOptions.mockResolvedValue(null);
-        await docService.getVersionWithStoredOptions(versionId);
-        expect(mockStore.getVersionWithStoredOptions).toHaveBeenCalledWith(versionId);
+        // Test getScraperOptions
+        mockStore.getScraperOptions.mockResolvedValue(null);
+        await docService.getScraperOptions(versionId);
+        expect(mockStore.getScraperOptions).toHaveBeenCalledWith(versionId);
 
         // Test findVersionsBySourceUrl
         const sourceUrl = "https://docs.example.com";
@@ -931,20 +965,117 @@ describe("DocumentManagementService", () => {
 
       it("should handle version normalization in scraper methods", async () => {
         const versionId = 999;
-        const versionWithNullName = { id: versionId, name: null, library_id: 1 };
-        const versionWithEmptyName = { id: versionId, name: "", library_id: 1 };
+        mockStore.getScraperOptions
+          .mockResolvedValueOnce({ sourceUrl: "https://a", options: {} as any })
+          .mockResolvedValueOnce({ sourceUrl: "https://b", options: {} as any });
 
-        mockStore.getVersionWithStoredOptions
-          .mockResolvedValueOnce(versionWithNullName as any)
-          .mockResolvedValueOnce(versionWithEmptyName as any);
+        const result1 = await docService.getScraperOptions(versionId);
+        const result2 = await docService.getScraperOptions(versionId);
 
-        // Test that both null and empty version names are handled
-        const result1 = await docService.getVersionWithStoredOptions(versionId);
-        const result2 = await docService.getVersionWithStoredOptions(versionId);
+        expect(result1?.sourceUrl).toEqual("https://a");
+        expect(result2?.sourceUrl).toEqual("https://b");
+        expect(mockStore.getScraperOptions).toHaveBeenCalledTimes(2);
+      });
+    });
 
-        expect(result1).toEqual(versionWithNullName);
-        expect(result2).toEqual(versionWithEmptyName);
-        expect(mockStore.getVersionWithStoredOptions).toHaveBeenCalledTimes(2);
+    describe("getScraperOptions (service wrapper)", () => {
+      it("should return stored object then null on subsequent call (combined happy/null path)", async () => {
+        const versionId = 42;
+        const stored = {
+          sourceUrl: "https://docs.example.com",
+          options: { maxDepth: 5 },
+        };
+        mockStore.getScraperOptions
+          .mockResolvedValueOnce(stored)
+          .mockResolvedValueOnce(null);
+
+        const first = await docService.getScraperOptions(versionId);
+        const second = await docService.getScraperOptions(versionId);
+        expect(first).toEqual(stored);
+        expect(second).toBeNull();
+        expect(mockStore.getScraperOptions).toHaveBeenNthCalledWith(1, versionId);
+        expect(mockStore.getScraperOptions).toHaveBeenNthCalledWith(2, versionId);
+      });
+    });
+
+    describe("listLibrarySummaries", () => {
+      it("returns empty array when no libraries", async () => {
+        mockStore.queryLibraryVersions.mockResolvedValue(new Map());
+        mockStore.getActiveVersions.mockResolvedValue([]);
+        const result = await docService.listLibrarySummaries();
+        expect(result).toEqual([]);
+      });
+
+      it("maps versions and overlays active status", async () => {
+        const libraryMap = new Map<string, LibraryVersionDetails[]>([
+          [
+            "libA",
+            [
+              {
+                version: "1.0.0",
+                documentCount: 10,
+                uniqueUrlCount: 5,
+                indexedAt: "2024-01-01T00:00:00.000Z",
+              },
+              {
+                version: "",
+                documentCount: 2,
+                uniqueUrlCount: 2,
+                indexedAt: "2024-01-02T00:00:00.000Z",
+              },
+            ],
+          ],
+          [
+            "libB",
+            [{ version: "2.0.0", documentCount: 3, uniqueUrlCount: 3, indexedAt: null }],
+          ],
+        ]);
+        mockStore.queryLibraryVersions.mockResolvedValue(libraryMap);
+        // Active version only for libA 1.0.0
+        mockStore.getActiveVersions.mockResolvedValue([
+          {
+            id: 77,
+            library_id: 1,
+            library_name: "libA",
+            name: "1.0.0",
+            created_at: "2024-01-01T00:00:00.000Z",
+            status: "running",
+            progress_pages: 4,
+            progress_max_pages: 10,
+            error_message: null,
+            started_at: "2024-01-01T00:00:00.000Z",
+            updated_at: "2024-01-01T00:05:00.000Z",
+            source_url: "https://docs.example.com/libA/1.0.0",
+            scraper_options: null,
+          },
+        ]);
+
+        const result = await docService.listLibrarySummaries();
+
+        // Find libA 1.0.0 summary
+        const libA = result.find((r) => r.library === "libA");
+        expect(libA).toBeTruthy();
+        const v100 = libA?.versions.find((v) => v.ref.version === "1.0.0");
+        const vunver = libA?.versions.find((v) => v.ref.version === "");
+        expect(v100).toMatchObject({
+          id: 77,
+          status: "running",
+          progress: { pages: 4, maxPages: 10 },
+          sourceUrl: "https://docs.example.com/libA/1.0.0",
+        });
+        // Unversioned entry should have NOT_INDEXED default and maxPages 1 due to indexedAt present
+        expect(vunver).toMatchObject({
+          id: -1,
+          status: "not_indexed",
+          progress: { pages: 0, maxPages: 1 },
+        });
+        // libB 2.0.0 should have NOT_INDEXED and maxPages 0 since indexedAt null
+        const libB = result.find((r) => r.library === "libB");
+        const v200 = libB?.versions[0];
+        expect(v200).toMatchObject({
+          status: "not_indexed",
+          progress: { pages: 0, maxPages: 0 },
+        });
       });
     });
   }); // Closing brace for describe("Core Functionality", ...)

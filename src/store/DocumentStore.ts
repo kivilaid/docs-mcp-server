@@ -9,6 +9,7 @@ import { EMBEDDING_BATCH_SIZE } from "../utils/config";
 import { logger } from "../utils/logger";
 import { applyMigrations } from "./applyMigrations";
 import { ConnectionError, DimensionError, StoreError } from "./errors";
+import type { StoredScraperOptions } from "./types";
 import {
   type DbDocument,
   type DbQueryResult,
@@ -557,42 +558,35 @@ export class DocumentStore {
     } catch (error) {
       throw new StoreError(`Failed to store scraper options: ${error}`);
     }
-  } /**
-   * Retrieves stored scraper options for a version.
-   * @param versionId The version ID to query
-   * @returns Stored scraper options or null if none stored
-   */
-  async getVersionScraperOptions(
-    versionId: number,
-  ): Promise<VersionScraperOptions | null> {
-    try {
-      const row = this.statements.getVersionWithOptions.get(versionId) as
-        | DbVersion
-        | undefined;
-
-      if (!row?.scraper_options) {
-        return null;
-      }
-
-      return JSON.parse(row.scraper_options) as VersionScraperOptions;
-    } catch (error) {
-      throw new StoreError(`Failed to get version scraper options: ${error}`);
-    }
   }
 
   /**
-   * Retrieves a version record with all stored options.
-   * @param versionId The version ID to query
-   * @returns Complete version record or null if not found
+   * Retrieves stored scraping configuration (source URL and options) for a version.
+   * Returns null when no source URL is recorded (not re-indexable).
    */
-  async getVersionWithStoredOptions(versionId: number): Promise<DbVersion | null> {
+  async getScraperOptions(versionId: number): Promise<StoredScraperOptions | null> {
     try {
       const row = this.statements.getVersionWithOptions.get(versionId) as
         | DbVersion
         | undefined;
-      return row || null;
+
+      if (!row?.source_url) {
+        return null;
+      }
+
+      let parsed: VersionScraperOptions = {} as VersionScraperOptions;
+      if (row.scraper_options) {
+        try {
+          parsed = JSON.parse(row.scraper_options) as VersionScraperOptions;
+        } catch (e) {
+          logger.warn(`⚠️ Invalid scraper_options JSON for version ${versionId}: ${e}`);
+          parsed = {} as VersionScraperOptions;
+        }
+      }
+
+      return { sourceUrl: row.source_url, options: parsed };
     } catch (error) {
-      throw new StoreError(`Failed to get version with stored options: ${error}`);
+      throw new StoreError(`Failed to get scraper options: ${error}`);
     }
   }
 

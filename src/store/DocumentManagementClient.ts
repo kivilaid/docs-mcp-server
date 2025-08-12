@@ -8,12 +8,12 @@ import { logger } from "../utils/logger";
 import type { IDocumentManagement } from "./trpc/interfaces";
 import type { DataRouter } from "./trpc/router";
 import type {
-  DbVersion,
   DbVersionWithLibrary,
   FindVersionResult,
+  LibrarySummary,
   LibraryVersionDetails,
+  StoredScraperOptions,
   StoreSearchResult,
-  VersionScraperOptions,
   VersionStatus,
 } from "./types";
 
@@ -44,6 +44,10 @@ export class DocumentManagementClient implements IDocumentManagement {
     Array<{ library: string; versions: LibraryVersionDetails[] }>
   > {
     return this.client.listLibraries.query();
+  }
+
+  async listLibrarySummaries(): Promise<LibrarySummary[]> {
+    return this.client.listLibrarySummaries.query();
   }
 
   async validateLibraryExists(library: string): Promise<void> {
@@ -88,14 +92,8 @@ export class DocumentManagementClient implements IDocumentManagement {
     return this.client.findVersionsBySourceUrl.query({ url });
   }
 
-  async getVersionScraperOptions(
-    versionId: number,
-  ): Promise<VersionScraperOptions | null> {
-    return this.client.getVersionScraperOptions.query({ versionId });
-  }
-
-  async getVersionWithStoredOptions(versionId: number): Promise<DbVersion | null> {
-    return this.client.getVersionWithStoredOptions.query({ versionId });
+  async getScraperOptions(versionId: number): Promise<StoredScraperOptions | null> {
+    return this.client.getScraperOptions.query({ versionId });
   }
 
   async updateVersionStatus(

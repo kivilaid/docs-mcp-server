@@ -578,16 +578,16 @@ describe("DocumentStore - Integration Tests", () => {
       await store.storeScraperOptions(versionId, scraperOptions);
 
       // Retrieve options
-      const retrievedOptions = await store.getVersionScraperOptions(versionId);
+      const retrieved = await store.getScraperOptions(versionId);
 
-      expect(retrievedOptions).not.toBeNull();
-      expect(retrievedOptions?.maxDepth).toBe(3);
-      expect(retrievedOptions?.maxPages).toBe(100);
-      expect(retrievedOptions?.scope).toBe("subpages");
-      expect(retrievedOptions?.followRedirects).toBe(true);
+      expect(retrieved).not.toBeNull();
+      expect(retrieved?.options.maxDepth).toBe(3);
+      expect(retrieved?.options.maxPages).toBe(100);
+      expect(retrieved?.options.scope).toBe("subpages");
+      expect(retrieved?.options.followRedirects).toBe(true);
 
       // Verify signal was filtered out (it's not storable)
-      expect(retrievedOptions).not.toHaveProperty("signal");
+      expect(retrieved?.options).not.toHaveProperty("signal");
     });
 
     it("should store source URL correctly", async () => {
@@ -604,9 +604,9 @@ describe("DocumentStore - Integration Tests", () => {
       await store.storeScraperOptions(versionId, scraperOptions);
 
       // Retrieve version with stored options
-      const versionWithOptions = await store.getVersionWithStoredOptions(versionId);
-      expect(versionWithOptions).not.toBeNull();
-      expect(versionWithOptions?.source_url).toBe(sourceUrl);
+      const stored = await store.getScraperOptions(versionId);
+      expect(stored).not.toBeNull();
+      expect(stored?.sourceUrl).toBe(sourceUrl);
     });
 
     it("should find versions by source URL", async () => {
@@ -654,13 +654,8 @@ describe("DocumentStore - Integration Tests", () => {
       );
 
       // Version without stored options should return null
-      const retrievedOptions = await store.getVersionScraperOptions(versionId);
-      expect(retrievedOptions).toBeNull();
-
-      const versionWithOptions = await store.getVersionWithStoredOptions(versionId);
-      expect(versionWithOptions).not.toBeNull();
-      expect(versionWithOptions?.source_url).toBeNull();
-      expect(versionWithOptions?.scraper_options).toBeNull();
+      const retrieved = await store.getScraperOptions(versionId);
+      expect(retrieved).toBeNull();
     });
   });
 

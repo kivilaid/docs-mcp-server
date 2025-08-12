@@ -4,12 +4,12 @@
  */
 import type { ScraperOptions } from "../../scraper/types";
 import type {
-  DbVersion,
   DbVersionWithLibrary,
   FindVersionResult,
+  LibrarySummary,
   LibraryVersionDetails,
+  StoredScraperOptions,
   StoreSearchResult,
-  VersionScraperOptions,
   VersionStatus,
 } from "../types";
 
@@ -20,6 +20,7 @@ export interface IDocumentManagement {
 
   // Library/version introspection used by tools/UI
   listLibraries(): Promise<Array<{ library: string; versions: LibraryVersionDetails[] }>>;
+  listLibrarySummaries(): Promise<LibrarySummary[]>;
   validateLibraryExists(library: string): Promise<void>;
   findBestVersion(library: string, targetVersion?: string): Promise<FindVersionResult>;
 
@@ -37,8 +38,7 @@ export interface IDocumentManagement {
   getRunningVersions(): Promise<DbVersionWithLibrary[]>;
   getVersionsByStatus(statuses: VersionStatus[]): Promise<DbVersionWithLibrary[]>;
   findVersionsBySourceUrl(url: string): Promise<DbVersionWithLibrary[]>;
-  getVersionScraperOptions(versionId: number): Promise<VersionScraperOptions | null>;
-  getVersionWithStoredOptions(versionId: number): Promise<DbVersion | null>;
+  getScraperOptions(versionId: number): Promise<StoredScraperOptions | null>;
   updateVersionStatus(
     versionId: number,
     status: VersionStatus,

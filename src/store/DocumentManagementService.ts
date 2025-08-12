@@ -19,13 +19,16 @@ import { DocumentRetrieverService } from "./DocumentRetrieverService";
 import { DocumentStore } from "./DocumentStore";
 import { StoreError } from "./errors";
 import type {
-  DbVersion,
   DbVersionWithLibrary,
   FindVersionResult,
+  LibrarySummary,
   LibraryVersionDetails,
+  ScraperConfig,
   StoreSearchResult,
-  VersionScraperOptions,
+  VersionRef,
+  VersionSummary,
 } from "./types";
+import { VersionStatus } from "./types";
 
 /**
  * Provides semantic search capabilities across different versions of library documentation.
@@ -119,16 +122,14 @@ export class DocumentManagementService {
   /**
    * Gets versions by their current status.
    */
-  async getVersionsByStatus(
-    statuses: import("./types").VersionStatus[],
-  ): Promise<import("./types").DbVersionWithLibrary[]> {
+  async getVersionsByStatus(statuses: VersionStatus[]): Promise<DbVersionWithLibrary[]> {
     return this.store.getVersionsByStatus(statuses);
   }
 
   /**
    * Gets all versions currently in RUNNING status.
    */
-  async getRunningVersions(): Promise<import("./types").DbVersionWithLibrary[]> {
+  async getRunningVersions(): Promise<DbVersionWithLibrary[]> {
     return this.store.getRunningVersions();
   }
 
@@ -137,7 +138,7 @@ export class DocumentManagementService {
    */
   async updateVersionStatus(
     versionId: number,
-    status: import("./types").VersionStatus,
+    status: VersionStatus,
     errorMessage?: string,
   ): Promise<void> {
     return this.store.updateVersionStatus(versionId, status, errorMessage);
@@ -164,17 +165,62 @@ export class DocumentManagementService {
   /**
    * Retrieves stored scraper options for a version.
    */
-  async getVersionScraperOptions(
-    versionId: number,
-  ): Promise<VersionScraperOptions | null> {
-    return this.store.getVersionScraperOptions(versionId);
+  /**
+   * Retrieves stored scraping configuration for a version.
+   */
+  async getScraperOptions(versionId: number): Promise<ScraperConfig | null> {
+    return this.store.getScraperOptions(versionId);
   }
 
   /**
-   * Retrieves a version record with all stored options.
+   * Ensures a library/version exists using a VersionRef and returns version ID.
+   * Delegates to existing ensureLibraryAndVersion for storage.
    */
-  async getVersionWithStoredOptions(versionId: number): Promise<DbVersion | null> {
-    return this.store.getVersionWithStoredOptions(versionId);
+  async ensureVersion(ref: VersionRef): Promise<number> {
+    const normalized = {
+      library: ref.library.trim().toLowerCase(),
+      version: (ref.version ?? "").trim().toLowerCase(),
+    };
+    return this.ensureLibraryAndVersion(normalized.library, normalized.version);
+  }
+
+  /**
+   * Returns enriched library summaries including version status/progress and counts.
+   * Uses existing store APIs; keeps DB details encapsulated.
+   */
+  async listLibrarySummaries(): Promise<LibrarySummary[]> {
+    const libMap = await this.store.queryLibraryVersions();
+    const active = await this.getActiveVersions();
+
+    // Index active versions by (library, version) for lookup
+    const activeIndex = new Map<string, DbVersionWithLibrary>();
+    for (const v of active) {
+      const key = `${v.library_name}|${v.name ?? ""}`;
+      activeIndex.set(key, v);
+    }
+
+    const summaries: LibrarySummary[] = [];
+    for (const [library, versions] of libMap) {
+      const vs = versions.map((v) => {
+        const key = `${library}|${v.version}`;
+        const activeVersion = activeIndex.get(key);
+        const base: VersionSummary = {
+          id: activeVersion?.id ?? -1,
+          ref: { library, version: v.version },
+          status: activeVersion?.status ?? VersionStatus.NOT_INDEXED,
+          progress: {
+            pages: activeVersion?.progress_pages ?? 0,
+            maxPages: activeVersion?.progress_max_pages ?? (v.indexedAt ? 1 : 0),
+          },
+          counts: { documents: v.documentCount, uniqueUrls: v.uniqueUrlCount },
+          indexedAt: v.indexedAt,
+          sourceUrl: activeVersion?.source_url ?? undefined,
+        };
+        return base;
+      });
+      summaries.push({ library, versions: vs });
+    }
+    return summaries;
   }
 
   /**
@@ -407,7 +453,7 @@ export class DocumentManagementService {
   /**
    * Gets all versions in active states (queued, running, updating).
    */
-  async getActiveVersions(): Promise<import("./types").DbVersionWithLibrary[]> {
+  async getActiveVersions(): Promise<DbVersionWithLibrary[]> {
     return this.store.getActiveVersions();
   }
 
