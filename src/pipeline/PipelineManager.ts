@@ -134,7 +134,9 @@ export class PipelineManager implements IPipeline {
   async recoverPendingJobs(): Promise<void> {
     try {
       // Reset RUNNING jobs to QUEUED (they were interrupted by server restart)
-      const runningVersions = await this.store.getRunningVersions();
+      const runningVersions = await this.store.getVersionsByStatus([
+        VersionStatus.RUNNING,
+      ]);
       for (const version of runningVersions) {
         await this.store.updateVersionStatus(version.id, VersionStatus.QUEUED);
         logger.info(

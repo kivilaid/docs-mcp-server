@@ -34,8 +34,6 @@ export interface IDocumentManagement {
   removeAllDocuments(library: string, version?: string | null): Promise<void>;
 
   // Minimal set used indirectly by pipeline/UI where needed
-  getActiveVersions(): Promise<DbVersionWithLibrary[]>;
-  getRunningVersions(): Promise<DbVersionWithLibrary[]>;
   getVersionsByStatus(statuses: VersionStatus[]): Promise<DbVersionWithLibrary[]>;
   findVersionsBySourceUrl(url: string): Promise<DbVersionWithLibrary[]>;
   getScraperOptions(versionId: number): Promise<StoredScraperOptions | null>;

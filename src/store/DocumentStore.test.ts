@@ -528,30 +528,6 @@ describe("DocumentStore - Integration Tests", () => {
       expect(activeVersions.some((v) => v.name === "1.0.0")).toBe(true);
       expect(activeVersions.some((v) => v.name === "2.0.0")).toBe(true);
     });
-
-    it("should get running and active versions", async () => {
-      // Create versions with specific statuses
-      const { versionId: runningId } = await store.resolveLibraryAndVersionIds(
-        "runninglib",
-        "1.0.0",
-      );
-      const { versionId: queuedId } = await store.resolveLibraryAndVersionIds(
-        "queuedlib",
-        "1.0.0",
-      );
-
-      await store.updateVersionStatus(runningId, VersionStatus.RUNNING);
-      await store.updateVersionStatus(queuedId, VersionStatus.QUEUED);
-
-      // Test getRunningVersions
-      const runningVersions = await store.getRunningVersions();
-      expect(runningVersions.some((v) => v.library_name === "runninglib")).toBe(true);
-
-      // Test getActiveVersions (should include both QUEUED and RUNNING)
-      const activeVersions = await store.getActiveVersions();
-      expect(activeVersions.some((v) => v.library_name === "runninglib")).toBe(true);
-      expect(activeVersions.some((v) => v.library_name === "queuedlib")).toBe(true);
-    });
   });
 
   describe("Scraper Options Storage", () => {

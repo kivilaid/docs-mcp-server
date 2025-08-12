@@ -167,15 +167,6 @@ export interface DbVersionWithLibrary extends DbVersion {
 }
 
 /**
- * Enhanced version record with computed statistics.
- * Used when we need both database fields and aggregated document stats.
- */
-export interface VersionWithStats extends DbVersion {
-  document_count: number;
-  unique_url_count: number;
-}
-
-/**
  * API-friendly version details for external consumption.
  * Uses camelCase naming for API compatibility.
  */

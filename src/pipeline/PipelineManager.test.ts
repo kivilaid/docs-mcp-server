@@ -98,7 +98,6 @@ describe("PipelineManager", () => {
       updateVersionStatus: vi.fn().mockResolvedValue(undefined),
       updateVersionProgress: vi.fn().mockResolvedValue(undefined), // For progress tests
       getVersionsByStatus: vi.fn().mockResolvedValue([]),
-      getRunningVersions: vi.fn().mockResolvedValue([]),
     };
 
     // Mock the worker's executeJob method
@@ -446,8 +445,11 @@ describe("PipelineManager", () => {
       const recoveryMockStore = {
         ensureLibraryAndVersion: vi.fn().mockResolvedValue(1),
         updateVersionStatus: vi.fn().mockResolvedValue(undefined),
-        getVersionsByStatus: vi.fn().mockResolvedValue(mockQueuedVersions), // After reset, both should be QUEUED
-        getRunningVersions: vi.fn().mockResolvedValue(mockRunningVersions),
+        getVersionsByStatus: vi.fn().mockImplementation((statuses: string[]) => {
+          if (statuses.includes("running")) return Promise.resolve(mockRunningVersions);
+          if (statuses.includes("queued")) return Promise.resolve(mockQueuedVersions);
+          return Promise.resolve([]);
+        }),
       };
 
       const recoveryManager = new PipelineManager(recoveryMockStore as any, 1);

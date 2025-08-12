@@ -43,8 +43,6 @@ const mockStore = {
   updateVersionStatus: vi.fn(),
   updateVersionProgress: vi.fn(),
   getVersionsByStatus: vi.fn(),
-  getRunningVersions: vi.fn(),
-  getActiveVersions: vi.fn(),
   // Scraper options methods
   storeScraperOptions: vi.fn(),
   getScraperOptions: vi.fn(),
@@ -902,15 +900,19 @@ describe("DocumentManagementService", () => {
         await docService.getVersionsByStatus(["queued"] as any);
         expect(mockStore.getVersionsByStatus).toHaveBeenCalledWith(["queued"]);
 
-        // Test getRunningVersions
-        mockStore.getRunningVersions.mockResolvedValue([]);
-        await docService.getRunningVersions();
-        expect(mockStore.getRunningVersions).toHaveBeenCalled();
+        // Test getVersionsByStatus (legacy running replacement)
+        mockStore.getVersionsByStatus.mockResolvedValue([]);
+        await docService.getVersionsByStatus(["running"] as any);
+        expect(mockStore.getVersionsByStatus).toHaveBeenCalledWith(["running"]);
 
-        // Test getActiveVersions
-        mockStore.getActiveVersions.mockResolvedValue([]);
-        await docService.getActiveVersions();
-        expect(mockStore.getActiveVersions).toHaveBeenCalled();
+        // Test getVersionsByStatus (legacy active replacement)
+        mockStore.getVersionsByStatus.mockResolvedValue([]);
+        await docService.getVersionsByStatus(["queued", "running", "updating"] as any);
+        expect(mockStore.getVersionsByStatus).toHaveBeenCalledWith([
+          "queued",
+          "running",
+          "updating",
+        ]);
       });
 
       it("should delegate scraper options storage to store", async () => {
@@ -1001,7 +1003,7 @@ describe("DocumentManagementService", () => {
     describe("listLibrarySummaries", () => {
       it("returns empty array when no libraries", async () => {
         mockStore.queryLibraryVersions.mockResolvedValue(new Map());
-        mockStore.getActiveVersions.mockResolvedValue([]);
+        mockStore.getVersionsByStatus.mockResolvedValue([]);
         const result = await docService.listLibrarySummaries();
         expect(result).toEqual([]);
       });
@@ -1032,7 +1034,7 @@ describe("DocumentManagementService", () => {
         ]);
         mockStore.queryLibraryVersions.mockResolvedValue(libraryMap);
         // Active version only for libA 1.0.0
-        mockStore.getActiveVersions.mockResolvedValue([
+        mockStore.getVersionsByStatus.mockResolvedValue([
           {
             id: 77,
             library_id: 1,

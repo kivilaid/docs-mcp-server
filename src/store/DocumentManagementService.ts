@@ -127,13 +127,6 @@ export class DocumentManagementService {
   }
 
   /**
-   * Gets all versions currently in RUNNING status.
-   */
-  async getRunningVersions(): Promise<DbVersionWithLibrary[]> {
-    return this.store.getRunningVersions();
-  }
-
-  /**
    * Updates the status of a version.
    */
   async updateVersionStatus(
@@ -190,7 +183,12 @@ export class DocumentManagementService {
    */
   async listLibrarySummaries(): Promise<LibrarySummary[]> {
     const libMap = await this.store.queryLibraryVersions();
-    const active = await this.getActiveVersions();
+    // Active = queued, running, updating
+    const active = await this.getVersionsByStatus([
+      VersionStatus.QUEUED,
+      VersionStatus.RUNNING,
+      VersionStatus.UPDATING,
+    ]);
 
     // Index active versions by (library, version) for lookup
     const activeIndex = new Map<string, DbVersionWithLibrary>();
@@ -448,13 +446,6 @@ export class DocumentManagementService {
       library,
       versions, // The versions array already contains LibraryVersionDetails
     }));
-  }
-
-  /**
-   * Gets all versions in active states (queued, running, updating).
-   */
-  async getActiveVersions(): Promise<DbVersionWithLibrary[]> {
-    return this.store.getActiveVersions();
   }
 
   /**

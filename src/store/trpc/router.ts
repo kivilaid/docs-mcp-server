@@ -121,13 +121,6 @@ export function createDataRouter(trpc: unknown) {
       ),
 
     // Status and version helpers
-    getActiveVersions: tt.procedure.query(async ({ ctx }: { ctx: DataTrpcContext }) => {
-      return (await ctx.docService.getActiveVersions()) as DbVersionWithLibrary[];
-    }),
-
-    getRunningVersions: tt.procedure.query(async ({ ctx }: { ctx: DataTrpcContext }) => {
-      return (await ctx.docService.getRunningVersions()) as DbVersionWithLibrary[];
-    }),
 
     getVersionsByStatus: tt.procedure
       .input(z.object({ statuses: z.array(z.string()) }))

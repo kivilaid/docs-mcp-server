@@ -78,8 +78,6 @@ export class DocumentStore {
     updateVersionStatus: Database.Statement<[string, string | null, number]>;
     updateVersionProgress: Database.Statement<[number, number, number]>;
     getVersionsByStatus: Database.Statement<string[]>;
-    getRunningVersions: Database.Statement<[]>;
-    getActiveVersions: Database.Statement<[]>;
     // Scraper options statements
     updateVersionScraperOptions: Database.Statement<[string, string, number]>;
     getVersionWithOptions: Database.Statement<[number]>;
@@ -306,12 +304,6 @@ export class DocumentStore {
       getVersionsByStatus: this.db.prepare<[string]>(
         "SELECT v.*, l.name as library_name FROM versions v JOIN libraries l ON v.library_id = l.id WHERE v.status IN (SELECT value FROM json_each(?))",
       ),
-      getRunningVersions: this.db.prepare<[]>(
-        "SELECT v.*, l.name as library_name FROM versions v JOIN libraries l ON v.library_id = l.id WHERE v.status = 'running' ORDER BY v.started_at",
-      ),
-      getActiveVersions: this.db.prepare<[]>(
-        "SELECT v.*, l.name as library_name FROM versions v JOIN libraries l ON v.library_id = l.id WHERE v.status IN ('queued', 'running', 'updating') ORDER BY v.created_at",
-      ),
       // Scraper options statements
       updateVersionScraperOptions: this.db.prepare<[string, string, number]>(
         "UPDATE versions SET source_url = ?, scraper_options = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
@@ -514,32 +506,6 @@ export class DocumentStore {
       return rows;
     } catch (error) {
       throw new StoreError(`Failed to get versions by status: ${error}`);
-    }
-  }
-
-  /**
-   * Retrieves all versions currently in RUNNING status.
-   * @returns Array of running version records with library names
-   */
-  async getRunningVersions(): Promise<DbVersionWithLibrary[]> {
-    try {
-      const rows = this.statements.getRunningVersions.all() as DbVersionWithLibrary[];
-      return rows;
-    } catch (error) {
-      throw new StoreError(`Failed to get running versions: ${error}`);
-    }
-  }
-
-  /**
-   * Retrieves all versions in active states (queued, running, updating).
-   * @returns Array of active version records with library names
-   */
-  async getActiveVersions(): Promise<DbVersionWithLibrary[]> {
-    try {
-      const rows = this.statements.getActiveVersions.all() as DbVersionWithLibrary[];
-      return rows;
-    } catch (error) {
-      throw new StoreError(`Failed to get active versions: ${error}`);
     }
   }
 
