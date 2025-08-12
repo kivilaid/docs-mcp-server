@@ -11,7 +11,6 @@ import type {
   DbVersionWithLibrary,
   FindVersionResult,
   LibrarySummary,
-  LibraryVersionDetails,
   StoredScraperOptions,
   StoreSearchResult,
   VersionStatus,
@@ -40,14 +39,8 @@ export class DocumentManagementClient implements IDocumentManagement {
     // no-op for HTTP client
   }
 
-  async listLibraries(): Promise<
-    Array<{ library: string; versions: LibraryVersionDetails[] }>
-  > {
+  async listLibraries(): Promise<LibrarySummary[]> {
     return this.client.listLibraries.query();
-  }
-
-  async listLibrarySummaries(): Promise<LibrarySummary[]> {
-    return this.client.listLibrarySummaries.query();
   }
 
   async validateLibraryExists(library: string): Promise<void> {

@@ -7,7 +7,6 @@ import type {
   DbVersionWithLibrary,
   FindVersionResult,
   LibrarySummary,
-  LibraryVersionDetails,
   StoredScraperOptions,
   StoreSearchResult,
   VersionStatus,
@@ -19,8 +18,7 @@ export interface IDocumentManagement {
   shutdown(): Promise<void>;
 
   // Library/version introspection used by tools/UI
-  listLibraries(): Promise<Array<{ library: string; versions: LibraryVersionDetails[] }>>;
-  listLibrarySummaries(): Promise<LibrarySummary[]>;
+  listLibraries(): Promise<LibrarySummary[]>;
   validateLibraryExists(library: string): Promise<void>;
   findBestVersion(library: string, targetVersion?: string): Promise<FindVersionResult>;
 

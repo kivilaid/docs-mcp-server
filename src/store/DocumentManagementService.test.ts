@@ -4,7 +4,6 @@ import { createFsFromVolume, vol } from "memfs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LibraryNotFoundError, VersionNotFoundError } from "../tools/errors";
 import { StoreError } from "./errors";
-import type { LibraryVersionDetails } from "./types";
 
 vi.mock("node:fs", () => ({
   default: createFsFromVolume(vol),
@@ -34,9 +33,7 @@ const mockStore = {
   shutdown: vi.fn(),
   queryUniqueVersions: vi.fn(),
   checkDocumentExists: vi.fn(),
-  queryLibraryVersions: vi
-    .fn()
-    .mockResolvedValue(new Map<string, LibraryVersionDetails[]>()), // Add mock implementation
+  queryLibraryVersions: vi.fn().mockResolvedValue(new Map<string, any[]>()),
   addDocuments: vi.fn(),
   deleteDocuments: vi.fn(),
   // Status tracking methods
@@ -550,7 +547,15 @@ describe("DocumentManagementService", () => {
     describe("listLibraries", () => {
       it("should list libraries and their detailed versions, including unversioned", async () => {
         // Mock data now includes LibraryVersionDetails and unversioned cases
-        const mockLibraryMap = new Map<string, LibraryVersionDetails[]>([
+        const mockLibraryMap = new Map<
+          string,
+          Array<{
+            version: string;
+            documentCount: number;
+            uniqueUrlCount: number;
+            indexedAt: string | null;
+          }>
+        >([
           [
             "lib1", // Standard case
             [
@@ -613,63 +618,71 @@ describe("DocumentManagementService", () => {
         const result = await docService.listLibraries();
 
         // Assert the structure matches the new detailed format
+        const shape = (
+          lib: string,
+          ver: {
+            version: string;
+            documentCount: number;
+            uniqueUrlCount: number;
+            indexedAt: string | null;
+          }[],
+        ) => ({
+          library: lib,
+          versions: ver.map((v) => ({
+            id: -1,
+            ref: { library: lib, version: v.version },
+            status: "not_indexed",
+            progress: { pages: 0, maxPages: v.indexedAt ? 1 : 0 },
+            counts: { documents: v.documentCount, uniqueUrls: v.uniqueUrlCount },
+            indexedAt: v.indexedAt,
+            sourceUrl: undefined,
+          })),
+        });
         expect(result).toEqual([
-          {
-            library: "lib1",
-            versions: [
-              {
-                version: "1.0.0",
-                documentCount: 10,
-                uniqueUrlCount: 5,
-                indexedAt: "2024-01-01T00:00:00.000Z",
-              },
-              {
-                version: "1.1.0",
-                documentCount: 15,
-                uniqueUrlCount: 7,
-                indexedAt: "2024-02-01T00:00:00.000Z",
-              },
-            ],
-          },
-          {
-            library: "lib2",
-            versions: [
-              {
-                version: "2.0.0",
-                documentCount: 20,
-                uniqueUrlCount: 10,
-                indexedAt: "2024-03-01T00:00:00.000Z",
-              },
-            ],
-          },
-          {
-            library: "unversioned-only",
-            versions: [
-              {
-                version: "",
-                documentCount: 1,
-                uniqueUrlCount: 1,
-                indexedAt: "2024-04-01T00:00:00.000Z",
-              },
-            ],
-          },
-          {
-            library: "mixed-versions",
-            versions: [
-              {
-                version: "",
-                documentCount: 2,
-                uniqueUrlCount: 1,
-                indexedAt: "2024-04-03T00:00:00.000Z",
-              },
-              {
-                version: "1.0.0",
-                documentCount: 5,
-                uniqueUrlCount: 2,
-                indexedAt: "2024-04-02T00:00:00.000Z",
-              },
-            ],
-          },
+          shape("lib1", [
+            {
+              version: "1.0.0",
+              documentCount: 10,
+              uniqueUrlCount: 5,
+              indexedAt: "2024-01-01T00:00:00.000Z",
+            },
+            {
+              version: "1.1.0",
+              documentCount: 15,
+              uniqueUrlCount: 7,
+              indexedAt: "2024-02-01T00:00:00.000Z",
+            },
+          ]),
+          shape("lib2", [
+            {
+              version: "2.0.0",
+              documentCount: 20,
+              uniqueUrlCount: 10,
+              indexedAt: "2024-03-01T00:00:00.000Z",
+            },
+          ]),
+          shape("unversioned-only", [
+            {
+              version: "",
+              documentCount: 1,
+              uniqueUrlCount: 1,
+              indexedAt: "2024-04-01T00:00:00.000Z",
+            },
+          ]),
+          shape("mixed-versions", [
+            {
+              version: "",
+              documentCount: 2,
+              uniqueUrlCount: 1,
+              indexedAt: "2024-04-03T00:00:00.000Z",
+            },
+            {
+              version: "1.0.0",
+              documentCount: 5,
+              uniqueUrlCount: 2,
+              indexedAt: "2024-04-02T00:00:00.000Z",
+            },
+          ]),
         ]);
         expect(mockStore.queryLibraryVersions).toHaveBeenCalledTimes(1);
       });
@@ -677,7 +690,15 @@ describe("DocumentManagementService", () => {
       it("should return an empty array if there are no libraries", async () => {
         // Mock returns an empty map of the correct type
         mockStore.queryLibraryVersions.mockResolvedValue(
-          new Map<string, LibraryVersionDetails[]>(),
+          new Map<
+            string,
+            Array<{
+              version: string;
+              documentCount: number;
+              uniqueUrlCount: number;
+              indexedAt: string | null;
+            }>
+          >(),
         );
         const result = await docService.listLibraries();
         expect(result).toEqual([]);
@@ -687,7 +708,15 @@ describe("DocumentManagementService", () => {
       // Test case where store returns a library that only had an unversioned entry
       // (which is now included, not filtered by the store)
       it("should correctly handle libraries with only unversioned entries", async () => {
-        const mockLibraryMap = new Map<string, LibraryVersionDetails[]>([
+        const mockLibraryMap = new Map<
+          string,
+          Array<{
+            version: string;
+            documentCount: number;
+            uniqueUrlCount: number;
+            indexedAt: string | null;
+          }>
+        >([
           [
             "lib-unversioned",
             [
@@ -708,10 +737,13 @@ describe("DocumentManagementService", () => {
             library: "lib-unversioned",
             versions: [
               {
-                version: "",
-                documentCount: 3,
-                uniqueUrlCount: 2,
+                id: -1,
+                ref: { library: "lib-unversioned", version: "" },
+                status: "not_indexed",
+                progress: { pages: 0, maxPages: 1 },
+                counts: { documents: 3, uniqueUrls: 2 },
                 indexedAt: "2024-04-04T00:00:00.000Z",
+                sourceUrl: undefined,
               },
             ],
           },
@@ -832,13 +864,26 @@ describe("DocumentManagementService", () => {
         mockStore.queryUniqueVersions.mockResolvedValue([]); // Fix: Use mockStoreInstance
         mockStore.checkDocumentExists.mockResolvedValue(false); // Fix: Use mockStoreInstance
         // Mock listLibraries to return existing libraries
-        const mockLibraryMap = new Map(
+        const mockLibraryMap = new Map<
+          string,
+          Array<{
+            version: string;
+            documentCount: number;
+            uniqueUrlCount: number;
+            indexedAt: string | null;
+          }>
+        >(
           existingLibraries.map((l) => [
             l.library,
-            new Set(l.versions.map((v) => v.version)),
+            l.versions.map((v) => ({
+              version: v.version,
+              documentCount: 0,
+              uniqueUrlCount: 0,
+              indexedAt: null,
+            })),
           ]),
         );
-        mockStore.queryLibraryVersions.mockResolvedValue(mockLibraryMap); // Fix: Use mockStoreInstance
+        mockStore.queryLibraryVersions.mockResolvedValue(mockLibraryMap);
 
         await expect(docService.validateLibraryExists(misspelledLibrary)).rejects.toThrow(
           LibraryNotFoundError,
@@ -1000,16 +1045,24 @@ describe("DocumentManagementService", () => {
       });
     });
 
-    describe("listLibrarySummaries", () => {
+    describe("listLibraries (enriched summaries)", () => {
       it("returns empty array when no libraries", async () => {
         mockStore.queryLibraryVersions.mockResolvedValue(new Map());
         mockStore.getVersionsByStatus.mockResolvedValue([]);
-        const result = await docService.listLibrarySummaries();
+        const result = await docService.listLibraries();
         expect(result).toEqual([]);
       });
 
       it("maps versions and overlays active status", async () => {
-        const libraryMap = new Map<string, LibraryVersionDetails[]>([
+        const libraryMap = new Map<
+          string,
+          Array<{
+            version: string;
+            documentCount: number;
+            uniqueUrlCount: number;
+            indexedAt: string | null;
+          }>
+        >([
           [
             "libA",
             [
@@ -1052,7 +1105,7 @@ describe("DocumentManagementService", () => {
           },
         ]);
 
-        const result = await docService.listLibrarySummaries();
+        const result = await docService.listLibraries();
 
         // Find libA 1.0.0 summary
         const libA = result.find((r) => r.library === "libA");

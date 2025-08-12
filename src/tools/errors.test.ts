@@ -1,5 +1,4 @@
 import { describe, expect, it, vi } from "vitest";
-import type { LibraryVersionDetails } from "../store/types"; // Use LibraryVersionDetails
 import { ToolError, VersionNotFoundError } from "./errors";
 
 vi.mock("../utils/logger");
@@ -20,7 +19,7 @@ describe("Tool Errors", () => {
     const library = "test-lib";
     const requestedVersion = "1.2.3";
     // Update test data to match LibraryVersionDetails
-    const availableVersions: LibraryVersionDetails[] = [
+    const availableVersions = [
       {
         version: "1.0.0",
         documentCount: 10,
@@ -46,7 +45,12 @@ describe("Tool Errors", () => {
         indexedAt: "2024-01-04T00:00:00Z",
       },
     ];
-    const emptyAvailable: LibraryVersionDetails[] = [];
+    const emptyAvailable: Array<{
+      version: string;
+      documentCount: number;
+      uniqueUrlCount: number;
+      indexedAt: string | null;
+    }> = [];
 
     it("should create an instance with correct properties", () => {
       const error = new VersionNotFoundError(
@@ -89,7 +93,7 @@ describe("Tool Errors", () => {
 
     it("should handle pre-release versions correctly in getLatestVersion", () => {
       // Update test data to match LibraryVersionDetails
-      const versionsWithPrerelease: LibraryVersionDetails[] = [
+      const versionsWithPrerelease = [
         {
           version: "1.0.0",
           documentCount: 10,
@@ -132,7 +136,7 @@ describe("Tool Errors", () => {
 
     it("should handle only pre-release versions in getLatestVersion", () => {
       // Update test data to match LibraryVersionDetails
-      const onlyPrerelease: LibraryVersionDetails[] = [
+      const onlyPrerelease = [
         {
           version: "1.0.0-rc.1",
           documentCount: 5,

@@ -27,72 +27,43 @@ describe("ListLibrariesTool", () => {
 
   it("should return a list of libraries with their detailed versions, including unversioned", async () => {
     // Mock data now uses LibraryVersionDetails structure and includes unversioned cases
+    const mk = (
+      lib: string,
+      version: string,
+      docs: number,
+      urls: number,
+      indexedAt: string | null,
+    ) => ({
+      id: 1,
+      ref: { library: lib, version },
+      status: "NOT_INDEXED",
+      progress: { pages: 0, maxPages: indexedAt ? 1 : 0 },
+      counts: { documents: docs, uniqueUrls: urls },
+      indexedAt,
+      sourceUrl: null,
+    });
     const mockRawLibraries = [
       {
-        library: "react", // Standard case
+        library: "react",
         versions: [
-          {
-            version: "18.2.0",
-            documentCount: 150,
-            uniqueUrlCount: 50,
-            indexedAt: "2024-01-10T10:00:00.000Z",
-          },
-          {
-            version: "17.0.1",
-            documentCount: 120,
-            uniqueUrlCount: 45,
-            indexedAt: "2023-05-15T12:30:00.000Z",
-          },
+          mk("react", "18.2.0", 150, 50, "2024-01-10T10:00:00.000Z"),
+          mk("react", "17.0.1", 120, 45, "2023-05-15T12:30:00.000Z"),
         ],
       },
       {
-        library: "vue", // Standard case
-        versions: [
-          {
-            version: "3.2.0",
-            documentCount: 200,
-            uniqueUrlCount: 70,
-            indexedAt: "2024-02-20T08:00:00.000Z",
-          },
-        ],
+        library: "vue",
+        versions: [mk("vue", "3.2.0", 200, 70, "2024-02-20T08:00:00.000Z")],
+      },
+      { library: "old-lib", versions: [mk("old-lib", "1.0.0", 10, 5, null)] },
+      {
+        library: "unversioned-only",
+        versions: [mk("unversioned-only", "", 1, 1, "2024-04-01T00:00:00.000Z")],
       },
       {
-        library: "old-lib", // Example with null indexedAt and semver
+        library: "mixed-versions",
         versions: [
-          {
-            version: "1.0.0",
-            documentCount: 10,
-            uniqueUrlCount: 5,
-            indexedAt: null,
-          },
-        ],
-      },
-      {
-        library: "unversioned-only", // Only unversioned
-        versions: [
-          {
-            version: "",
-            documentCount: 1,
-            uniqueUrlCount: 1,
-            indexedAt: "2024-04-01T00:00:00.000Z",
-          },
-        ],
-      },
-      {
-        library: "mixed-versions", // Semver and unversioned
-        versions: [
-          {
-            version: "", // Unversioned
-            documentCount: 2,
-            uniqueUrlCount: 1,
-            indexedAt: "2024-04-03T00:00:00.000Z",
-          },
-          {
-            version: "1.0.0", // Semver
-            documentCount: 5,
-            uniqueUrlCount: 2,
-            indexedAt: "2024-04-02T00:00:00.000Z",
-          },
+          mk("mixed-versions", "", 2, 1, "2024-04-03T00:00:00.000Z"),
+          mk("mixed-versions", "1.0.0", 5, 2, "2024-04-02T00:00:00.000Z"),
         ],
       },
     ];
@@ -112,12 +83,18 @@ describe("ListLibrariesTool", () => {
               documentCount: 150,
               uniqueUrlCount: 50,
               indexedAt: "2024-01-10T10:00:00.000Z",
+              status: "NOT_INDEXED",
+              progress: { pages: 0, maxPages: 1 },
+              sourceUrl: null,
             },
             {
               version: "17.0.1",
               documentCount: 120,
               uniqueUrlCount: 45,
               indexedAt: "2023-05-15T12:30:00.000Z",
+              status: "NOT_INDEXED",
+              progress: { pages: 0, maxPages: 1 },
+              sourceUrl: null,
             },
           ],
         },
@@ -129,6 +106,9 @@ describe("ListLibrariesTool", () => {
               documentCount: 200,
               uniqueUrlCount: 70,
               indexedAt: "2024-02-20T08:00:00.000Z",
+              status: "NOT_INDEXED",
+              progress: { pages: 0, maxPages: 1 },
+              sourceUrl: null,
             },
           ],
         },
@@ -140,6 +120,9 @@ describe("ListLibrariesTool", () => {
               documentCount: 10,
               uniqueUrlCount: 5,
               indexedAt: null,
+              status: "NOT_INDEXED",
+              progress: { pages: 0, maxPages: 0 },
+              sourceUrl: null,
             },
           ],
         },
@@ -151,6 +134,9 @@ describe("ListLibrariesTool", () => {
               documentCount: 1,
               uniqueUrlCount: 1,
               indexedAt: "2024-04-01T00:00:00.000Z",
+              status: "NOT_INDEXED",
+              progress: { pages: 0, maxPages: 1 },
+              sourceUrl: null,
             },
           ],
         },
@@ -162,12 +148,18 @@ describe("ListLibrariesTool", () => {
               documentCount: 2,
               uniqueUrlCount: 1,
               indexedAt: "2024-04-03T00:00:00.000Z",
+              status: "NOT_INDEXED",
+              progress: { pages: 0, maxPages: 1 },
+              sourceUrl: null,
             },
             {
               version: "1.0.0",
               documentCount: 5,
               uniqueUrlCount: 2,
               indexedAt: "2024-04-02T00:00:00.000Z",
+              status: "NOT_INDEXED",
+              progress: { pages: 0, maxPages: 1 },
+              sourceUrl: null,
             },
           ],
         },
@@ -185,6 +177,8 @@ describe("ListLibrariesTool", () => {
         expect(v).toHaveProperty("documentCount");
         expect(v).toHaveProperty("uniqueUrlCount");
         expect(v).toHaveProperty("indexedAt"); // Can be string or null
+        expect(v).toHaveProperty("status");
+        expect(v).toHaveProperty("progress");
       }
     }
   });

@@ -167,17 +167,6 @@ export interface DbVersionWithLibrary extends DbVersion {
 }
 
 /**
- * API-friendly version details for external consumption.
- * Uses camelCase naming for API compatibility.
- */
-export interface LibraryVersionDetails {
-  version: string; // Normalized to empty string for unversioned
-  documentCount: number;
-  uniqueUrlCount: number;
-  indexedAt: string | null; // ISO 8601 format
-}
-
-/**
  * Helper function to convert NULL version name to empty string for API compatibility.
  * Database stores NULL for unversioned content, but APIs expect empty string.
  */

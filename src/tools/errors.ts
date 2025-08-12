@@ -1,5 +1,6 @@
 import semver from "semver";
-import type { LibraryVersionDetails } from "../store/types"; // Import LibraryVersionDetails
+
+// LibraryVersionDetails removed; use minimal inline shape for available versions metadata
 
 class ToolError extends Error {
   constructor(
@@ -15,7 +16,12 @@ class VersionNotFoundError extends ToolError {
   constructor(
     public readonly library: string,
     public readonly requestedVersion: string,
-    public readonly availableVersions: LibraryVersionDetails[], // Use LibraryVersionDetails
+    public readonly availableVersions: Array<{
+      version: string;
+      documentCount: number;
+      uniqueUrlCount: number;
+      indexedAt: string | null;
+    }>,
   ) {
     super(
       `Version ${requestedVersion} not found for ${library}. Available versions: ${availableVersions.map((v) => v.version).join(", ")}`,

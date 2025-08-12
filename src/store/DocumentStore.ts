@@ -16,7 +16,6 @@ import {
   type DbVersion,
   type DbVersionWithLibrary,
   denormalizeVersionName,
-  type LibraryVersionDetails,
   mapDbDocumentToDocument,
   normalizeVersionName,
   VECTOR_DIMENSION,
@@ -592,7 +591,17 @@ export class DocumentStore {
   /**
    * Retrieves a mapping of all libraries to their available versions with details.
    */
-  async queryLibraryVersions(): Promise<Map<string, LibraryVersionDetails[]>> {
+  async queryLibraryVersions(): Promise<
+    Map<
+      string,
+      Array<{
+        version: string;
+        documentCount: number;
+        uniqueUrlCount: number;
+        indexedAt: string | null;
+      }>
+    >
+  > {
     try {
       // Define the expected row structure from the GROUP BY query
       interface LibraryVersionRow {
@@ -604,7 +613,15 @@ export class DocumentStore {
       }
 
       const rows = this.statements.queryLibraryVersions.all() as LibraryVersionRow[];
-      const libraryMap = new Map<string, LibraryVersionDetails[]>();
+      const libraryMap = new Map<
+        string,
+        Array<{
+          version: string;
+          documentCount: number;
+          uniqueUrlCount: number;
+          indexedAt: string | null;
+        }>
+      >();
 
       for (const row of rows) {
         // Process all rows, including those where version is "" (unversioned)

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, type Mock, vi } from "vitest";
 import type { DocumentManagementService } from "../store";
-import type { LibraryVersionDetails, StoreSearchResult } from "../store/types";
+import type { StoreSearchResult } from "../store/types";
 import { LibraryNotFoundError, VersionNotFoundError } from "./errors";
 import { SearchTool, type SearchToolOptions } from "./SearchTool";
 
@@ -77,10 +77,13 @@ describe("SearchTool", () => {
         library: "test-lib",
         versions: [
           {
-            version: "1.0.0",
-            documentCount: 1,
-            uniqueUrlCount: 1,
+            id: 1,
+            ref: { library: "test-lib", version: "1.0.0" },
+            status: "NOT_INDEXED",
+            progress: { pages: 0, maxPages: 1 },
+            counts: { documents: 1, uniqueUrls: 1 },
             indexedAt: "2024-01-01T00:00:00Z",
+            sourceUrl: null,
           },
         ],
       },
@@ -107,10 +110,13 @@ describe("SearchTool", () => {
         library: "test-lib",
         versions: [
           {
-            version: "1.0.0",
-            documentCount: 1,
-            uniqueUrlCount: 1,
+            id: 1,
+            ref: { library: "test-lib", version: "1.0.0" },
+            status: "NOT_INDEXED",
+            progress: { pages: 0, maxPages: 1 },
+            counts: { documents: 1, uniqueUrls: 1 },
             indexedAt: "2024-01-01T00:00:00Z",
+            sourceUrl: null,
           },
         ],
       },
@@ -206,7 +212,7 @@ describe("SearchTool", () => {
   it("should throw VersionNotFoundError and include available versions", async () => {
     const options: SearchToolOptions = { ...baseOptions, version: "nonexistent" };
     // Update test data to match LibraryVersionDetails
-    const available: LibraryVersionDetails[] = [
+    const available = [
       {
         version: "1.0.0",
         documentCount: 5,

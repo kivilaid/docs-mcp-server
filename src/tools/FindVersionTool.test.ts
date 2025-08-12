@@ -1,6 +1,5 @@
 import { beforeEach, describe, expect, it, type Mock, vi } from "vitest";
 import type { DocumentManagementService } from "../store";
-import type { LibraryVersionDetails } from "../store/types"; // Use import type
 import { logger } from "../utils/logger";
 import { VersionNotFoundError } from "./errors";
 import { FindVersionTool, type FindVersionToolOptions } from "./FindVersionTool";
@@ -68,7 +67,12 @@ describe("FindVersionTool", () => {
       targetVersion: "1.0.0",
     };
     // Update test data to match LibraryVersionDetails
-    const available: LibraryVersionDetails[] = [
+    const available: Array<{
+      version: string;
+      documentCount: number;
+      uniqueUrlCount: number;
+      indexedAt: string | null;
+    }> = [
       {
         version: "15.0.0",
         documentCount: 10,
@@ -91,7 +95,7 @@ describe("FindVersionTool", () => {
 
   it("should return message indicating no match when VersionNotFoundError is thrown with no available versions", async () => {
     const options: FindVersionToolOptions = { library: "unknown-lib" };
-    // Pass empty LibraryVersionDetails array
+    // Pass empty available versions array
     const error = new VersionNotFoundError("unknown-lib", "latest", []);
     (mockDocService.findBestVersion as Mock).mockRejectedValue(error);
 

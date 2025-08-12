@@ -22,7 +22,6 @@ import type {
   DbVersionWithLibrary,
   FindVersionResult,
   LibrarySummary,
-  LibraryVersionDetails,
   ScraperConfig,
   StoreSearchResult,
   VersionRef,
@@ -181,14 +180,15 @@ export class DocumentManagementService {
    * Returns enriched library summaries including version status/progress and counts.
    * Uses existing store APIs; keeps DB details encapsulated.
    */
-  async listLibrarySummaries(): Promise<LibrarySummary[]> {
+  async listLibraries(): Promise<LibrarySummary[]> {
     const libMap = await this.store.queryLibraryVersions();
     // Active = queued, running, updating
-    const active = await this.getVersionsByStatus([
-      VersionStatus.QUEUED,
-      VersionStatus.RUNNING,
-      VersionStatus.UPDATING,
-    ]);
+    const active =
+      (await this.getVersionsByStatus([
+        VersionStatus.QUEUED,
+        VersionStatus.RUNNING,
+        VersionStatus.UPDATING,
+      ])) || [];
 
     // Index active versions by (library, version) for lookup
     const activeIndex = new Map<string, DbVersionWithLibrary>();
@@ -435,18 +435,7 @@ export class DocumentManagementService {
     return this.documentRetriever.search(library, normalizedVersion, query, limit);
   }
 
-  async listLibraries(): Promise<
-    Array<{ library: string; versions: LibraryVersionDetails[] }>
-  > {
-    // queryLibraryVersions now returns the detailed map directly
-    const libraryMap = await this.store.queryLibraryVersions();
-
-    // Transform the map into the desired array structure
-    return Array.from(libraryMap.entries()).map(([library, versions]) => ({
-      library,
-      versions, // The versions array already contains LibraryVersionDetails
-    }));
-  }
+  // Deprecated simple listing removed: enriched listLibraries() is canonical
 
   /**
    * Ensures a library and version exist in the database and returns the version ID.
