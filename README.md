@@ -334,7 +334,7 @@ See [examples above](#alternative-using-docker) for usage.
 Set `DOCS_MCP_EMBEDDING_MODEL` to one of:
 
 - `text-embedding-3-small` (default, OpenAI)
-- `openai:llama2` (OpenAI-compatible, Ollama)
+- `openai:snowflake-arctic-embed2` (OpenAI-compatible, Ollama)
 - `vertex:text-embedding-004` (Google Vertex AI)
 - `gemini:embedding-001` (Google Gemini)
 - `aws:amazon.titan-embed-text-v1` (AWS Bedrock)
