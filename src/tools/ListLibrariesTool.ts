@@ -10,7 +10,8 @@ export interface LibraryInfo {
     uniqueUrlCount: number;
     indexedAt: string | null;
     status: VersionStatus;
-    progress: { pages: number; maxPages: number };
+    // Progress is omitted for COMPLETED versions to reduce noise
+    progress?: { pages: number; maxPages: number };
     sourceUrl?: string | null;
   }>;
 }
@@ -43,7 +44,7 @@ export class ListLibrariesTool {
         uniqueUrlCount: v.counts.uniqueUrls,
         indexedAt: v.indexedAt,
         status: v.status,
-        progress: v.progress,
+        ...(v.progress ? { progress: v.progress } : undefined),
         sourceUrl: v.sourceUrl,
       })),
     }));

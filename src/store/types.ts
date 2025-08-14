@@ -121,7 +121,11 @@ export interface VersionSummary {
   id: number;
   ref: VersionRef;
   status: VersionStatus;
-  progress: { pages: number; maxPages: number };
+  /**
+   * Progress information while a version is being indexed.
+   * Omitted once status is COMPLETED to reduce noise.
+   */
+  progress?: { pages: number; maxPages: number };
   counts: { documents: number; uniqueUrls: number };
   indexedAt: string | null; // ISO 8601
   sourceUrl?: string | null;

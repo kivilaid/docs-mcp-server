@@ -190,7 +190,11 @@ export class DocumentManagementService {
             id: v.versionId,
             ref: { library, version: v.version },
             status: v.status as VersionStatus,
-            progress: { pages: v.progressPages, maxPages: v.progressMaxPages },
+            // Include progress only while indexing is active; set undefined for COMPLETED
+            progress:
+              v.status === "completed"
+                ? undefined
+                : { pages: v.progressPages, maxPages: v.progressMaxPages },
             counts: { documents: v.documentCount, uniqueUrls: v.uniqueUrlCount },
             indexedAt: v.indexedAt,
             sourceUrl: v.sourceUrl ?? undefined,

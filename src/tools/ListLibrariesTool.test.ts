@@ -40,7 +40,7 @@ describe("ListLibrariesTool", () => {
       id: Math.floor(Math.random() * 1000) + 1,
       ref: { library: lib, version },
       status,
-      progress: { pages, maxPages },
+      ...(status === "completed" ? null : { progress: { pages, maxPages } }),
       counts: { documents: docs, uniqueUrls: urls },
       indexedAt,
       sourceUrl: null,
@@ -87,7 +87,6 @@ describe("ListLibrariesTool", () => {
               uniqueUrlCount: 50,
               indexedAt: "2024-01-10T10:00:00.000Z",
               status: "completed",
-              progress: { pages: 150, maxPages: 150 },
               sourceUrl: null,
             },
             {
@@ -96,7 +95,6 @@ describe("ListLibrariesTool", () => {
               uniqueUrlCount: 45,
               indexedAt: "2023-05-15T12:30:00.000Z",
               status: "completed",
-              progress: { pages: 120, maxPages: 120 },
               sourceUrl: null,
             },
           ],
@@ -110,7 +108,6 @@ describe("ListLibrariesTool", () => {
               uniqueUrlCount: 70,
               indexedAt: "2024-02-20T08:00:00.000Z",
               status: "completed",
-              progress: { pages: 200, maxPages: 200 },
               sourceUrl: null,
             },
           ],
@@ -124,7 +121,6 @@ describe("ListLibrariesTool", () => {
               uniqueUrlCount: 5,
               indexedAt: null,
               status: "completed",
-              progress: { pages: 10, maxPages: 10 },
               sourceUrl: null,
             },
           ],
@@ -138,7 +134,6 @@ describe("ListLibrariesTool", () => {
               uniqueUrlCount: 1,
               indexedAt: "2024-04-01T00:00:00.000Z",
               status: "completed",
-              progress: { pages: 1, maxPages: 1 },
               sourceUrl: null,
             },
           ],
@@ -152,7 +147,6 @@ describe("ListLibrariesTool", () => {
               uniqueUrlCount: 1,
               indexedAt: "2024-04-03T00:00:00.000Z",
               status: "completed",
-              progress: { pages: 2, maxPages: 2 },
               sourceUrl: null,
             },
             {
@@ -161,7 +155,6 @@ describe("ListLibrariesTool", () => {
               uniqueUrlCount: 2,
               indexedAt: "2024-04-02T00:00:00.000Z",
               status: "completed",
-              progress: { pages: 5, maxPages: 5 },
               sourceUrl: null,
             },
           ],
@@ -181,7 +174,9 @@ describe("ListLibrariesTool", () => {
         expect(v).toHaveProperty("uniqueUrlCount");
         expect(v).toHaveProperty("indexedAt"); // Can be string or null
         expect(v).toHaveProperty("status");
-        expect(v).toHaveProperty("progress");
+        if (v.status !== "completed") {
+          expect(v).toHaveProperty("progress");
+        }
       }
     }
   });

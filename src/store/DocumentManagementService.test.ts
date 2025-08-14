@@ -773,7 +773,6 @@ describe("DocumentManagementService", () => {
                 id: 999,
                 ref: { library: "lib-unversioned", version: "" },
                 status: "completed",
-                progress: { pages: 0, maxPages: 0 },
                 counts: { documents: 3, uniqueUrls: 2 },
                 indexedAt: "2024-04-04T00:00:00.000Z",
                 sourceUrl: undefined,
@@ -781,6 +780,7 @@ describe("DocumentManagementService", () => {
             ],
           },
         ]);
+        expect(result[0].versions[0].progress).toBeUndefined();
         expect(mockStore.queryLibraryVersions).toHaveBeenCalledTimes(1);
       });
     });
@@ -1148,7 +1148,7 @@ describe("DocumentManagementService", () => {
         );
         expect(byVer["1.0.0"]).toMatchObject({
           status: "completed",
-          progress: { pages: 10, maxPages: 10 },
+          // progress omitted for completed
         });
         expect(byVer["1.1.0"]).toMatchObject({
           status: "failed",
@@ -1162,6 +1162,59 @@ describe("DocumentManagementService", () => {
           status: "not_indexed",
           progress: { pages: 0, maxPages: 0 },
         });
+        // Explicitly ensure progress is undefined for completed version
+        expect(byVer["1.0.0"].progress).toBeUndefined();
+      });
+
+      it("omits progress for completed versions but includes for active ones", async () => {
+        const enrichedMap = new Map<string, any[]>([
+          [
+            "libActive",
+            [
+              {
+                version: "1.0.0",
+                versionId: 21,
+                status: "completed",
+                progressPages: 5,
+                progressMaxPages: 5,
+                sourceUrl: null,
+                documentCount: 10,
+                uniqueUrlCount: 9,
+                indexedAt: "2024-05-01T00:00:00.000Z",
+              },
+              {
+                version: "1.1.0",
+                versionId: 22,
+                status: "running",
+                progressPages: 2,
+                progressMaxPages: 10,
+                sourceUrl: null,
+                documentCount: 4,
+                uniqueUrlCount: 4,
+                indexedAt: null,
+              },
+              {
+                version: "1.2.0",
+                versionId: 23,
+                status: "queued",
+                progressPages: 0,
+                progressMaxPages: 10,
+                sourceUrl: null,
+                documentCount: 0,
+                uniqueUrlCount: 0,
+                indexedAt: null,
+              },
+            ],
+          ],
+        ]);
+        mockStore.queryLibraryVersions.mockResolvedValue(enrichedMap);
+        const result = await docService.listLibraries();
+        const lib = result.find((r) => r.library === "libActive");
+        expect(lib).toBeTruthy();
+        const byVer = Object.fromEntries(lib!.versions.map((v) => [v.ref.version, v]));
+        expect(byVer["1.0.0"].progress).toBeUndefined();
+        expect(byVer["1.1.0"].progress).toEqual({ pages: 2, maxPages: 10 });
+        expect(byVer["1.2.0"].progress).toEqual({ pages: 0, maxPages: 10 });
       });
     });
   }); // Closing brace for describe("Core Functionality", ...)
