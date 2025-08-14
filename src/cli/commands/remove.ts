@@ -14,25 +14,35 @@ export function createRemoveCommand(program: Command): Command {
       "-v, --version <string>",
       "Version to remove (optional, removes unversioned if omitted)",
     )
-    .action(async (library: string, options: { version?: string }, command) => {
-      const globalOptions = command.parent?.opts() || {};
-      setupLogging(globalOptions);
-
-      const docService = await createDocumentManagement();
-      const { version } = options;
-      try {
-        await docService.removeAllDocuments(library, version);
-        console.log(
-          `✅ Successfully removed documents for ${library}${version ? `@${version}` : " (unversioned)"}.`,
-        );
-      } catch (error) {
-        console.error(
-          `❌ Failed to remove documents for ${library}${version ? `@${version}` : " (unversioned)"}:`,
-          error instanceof Error ? error.message : String(error),
-        );
-        throw error;
-      } finally {
-        await docService.shutdown();
-      }
-    });
+    .option(
+      "--server-url <url>",
+      "URL of external pipeline worker RPC (e.g., http://localhost:6280/api)",
+    )
+    .action(
+      async (
+        library: string,
+        options: { version?: string; serverUrl?: string },
+        command,
+      ) => {
+        const globalOptions = command.parent?.opts() || {};
+        setupLogging(globalOptions);
+        const serverUrl = options.serverUrl;
+        const docService = await createDocumentManagement({ serverUrl });
+        const { version } = options;
+        try {
+          await docService.removeAllDocuments(library, version);
+          console.log(
+            `✅ Successfully removed documents for ${library}${version ? `@${version}` : " (unversioned)"}.`,
+          );
+        } catch (error) {
+          console.error(
+            `❌ Failed to remove documents for ${library}${version ? `@${version}` : " (unversioned)"}:`,
+            error instanceof Error ? error.message : String(error),
+          );
+          throw error;
+        } finally {
+          await docService.shutdown();
+        }
+      },
+    );
 }

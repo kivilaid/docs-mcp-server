@@ -3,6 +3,7 @@
  */
 
 import type { Command } from "commander";
+import { Option } from "commander";
 import { startAppServer } from "../../app";
 import { startStdioServer } from "../../mcp/startStdioServer";
 import { initializeTools } from "../../mcp/tools";
@@ -23,15 +24,21 @@ export function createMcpCommand(program: Command): Command {
   return program
     .command("mcp")
     .description("Start MCP server only")
-    .option(
-      "--protocol <type>",
-      "Protocol for MCP server: 'auto' (default), 'stdio', or 'http'",
-      CLI_DEFAULTS.PROTOCOL,
+    .addOption(
+      new Option("--protocol <protocol>", "Protocol for MCP server")
+        .choices(["auto", "stdio", "http"])
+        .default(CLI_DEFAULTS.PROTOCOL),
     )
-    .option(
-      "--port <number>",
-      "Port for the MCP server",
-      CLI_DEFAULTS.HTTP_PORT.toString(),
+    .addOption(
+      new Option("--port <number>", "Port for the MCP server")
+        .argParser((v) => {
+          const n = Number(v);
+          if (!Number.isInteger(n) || n < 1 || n > 65535) {
+            throw new Error("Port must be an integer between 1 and 65535");
+          }
+          return String(n);
+        })
+        .default(CLI_DEFAULTS.HTTP_PORT.toString()),
     )
     .option(
       "--server-url <url>",

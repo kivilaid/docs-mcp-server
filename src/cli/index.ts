@@ -2,7 +2,7 @@
  * Main CLI setup and command registration.
  */
 
-import { Command } from "commander";
+import { Command, Option } from "commander";
 import packageJson from "../../package.json";
 import { LogLevel, setLogLevel } from "../utils/logger";
 import { createDefaultAction } from "./commands/default";
@@ -28,9 +28,13 @@ export function createCliProgram(): Command {
     .name("docs-mcp-server")
     .description("Unified CLI, MCP Server, and Web Interface for Docs MCP Server.")
     .version(packageJson.version)
-    .option("--verbose", "Enable verbose (debug) logging", false)
-    .option("--silent", "Disable all logging except errors", false)
+    // Mutually exclusive logging flags
+    .addOption(
+      new Option("--verbose", "Enable verbose (debug) logging").conflicts("silent"),
+    )
+    .addOption(new Option("--silent", "Disable all logging except errors"))
     .enablePositionalOptions()
+    .allowExcessArguments(false)
     .showHelpAfterError(true);
 
   // Set up global options handling

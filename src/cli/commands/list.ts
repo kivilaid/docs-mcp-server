@@ -11,11 +11,15 @@ export function createListCommand(program: Command): Command {
   return program
     .command("list")
     .description("List all available libraries and their versions")
-    .action(async (command) => {
-      const globalOptions = command.opts() || {};
+    .option(
+      "--server-url <url>",
+      "URL of external pipeline worker RPC (e.g., http://localhost:6280/api)",
+    )
+    .action(async (options: { serverUrl?: string }, command: Command) => {
+      const globalOptions = command.parent?.opts() || {};
       setupLogging(globalOptions);
-
-      const docService = await createDocumentManagement();
+      const { serverUrl } = options;
+      const docService = await createDocumentManagement({ serverUrl });
       try {
         const listLibrariesTool = new ListLibrariesTool(docService);
         const result = await listLibrariesTool.execute();

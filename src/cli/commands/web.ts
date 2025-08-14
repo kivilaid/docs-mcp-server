@@ -3,6 +3,7 @@
  */
 
 import type { Command } from "commander";
+import { Option } from "commander";
 import { startAppServer } from "../../app";
 import type { PipelineOptions } from "../../pipeline";
 import { createDocumentManagement } from "../../store";
@@ -20,10 +21,16 @@ export function createWebCommand(program: Command): Command {
   return program
     .command("web")
     .description("Start web interface only")
-    .option(
-      "--port <number>",
-      "Port for the web interface",
-      CLI_DEFAULTS.WEB_PORT.toString(),
+    .addOption(
+      new Option("--port <number>", "Port for the web interface")
+        .argParser((v) => {
+          const n = Number(v);
+          if (!Number.isInteger(n) || n < 1 || n > 65535) {
+            throw new Error("Port must be an integer between 1 and 65535");
+          }
+          return String(n);
+        })
+        .default(CLI_DEFAULTS.WEB_PORT.toString()),
     )
     .option(
       "--server-url <url>",

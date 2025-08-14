@@ -3,6 +3,7 @@
  */
 
 import type { Command } from "commander";
+import { Option } from "commander";
 import { startAppServer } from "../../app";
 import type { PipelineOptions } from "../../pipeline";
 import { createLocalDocumentManagement } from "../../store";
@@ -20,7 +21,17 @@ export function createWorkerCommand(program: Command): Command {
   return program
     .command("worker")
     .description("Start external pipeline worker (HTTP API)")
-    .option("--port <number>", "Port for worker API", "8080")
+    .addOption(
+      new Option("--port <number>", "Port for worker API")
+        .argParser((v) => {
+          const n = Number(v);
+          if (!Number.isInteger(n) || n < 1 || n > 65535) {
+            throw new Error("Port must be an integer between 1 and 65535");
+          }
+          return String(n);
+        })
+        .default("8080"),
+    )
     .option("--resume", "Resume interrupted jobs on startup", true)
     .option("--no-resume", "Do not resume jobs on startup")
     .action(async (cmdOptions: { port: string; resume: boolean }, command) => {

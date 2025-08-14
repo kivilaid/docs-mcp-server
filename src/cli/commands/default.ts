@@ -3,6 +3,7 @@
  */
 
 import type { Command } from "commander";
+import { Option } from "commander";
 import { startAppServer } from "../../app";
 import { startStdioServer } from "../../mcp/startStdioServer";
 import { initializeTools } from "../../mcp/tools";
@@ -21,12 +22,22 @@ import {
 
 export function createDefaultAction(program: Command): Command {
   return program
-    .option(
-      "--protocol <type>",
-      "Protocol for MCP server: 'auto' (default), 'stdio', or 'http'",
-      "auto",
+    .addOption(
+      new Option("--protocol <protocol>", "Protocol for MCP server")
+        .choices(["auto", "stdio", "http"])
+        .default("auto"),
     )
-    .option("--port <number>", "Port for the server", CLI_DEFAULTS.HTTP_PORT.toString())
+    .addOption(
+      new Option("--port <number>", "Port for the server")
+        .argParser((v) => {
+          const n = Number(v);
+          if (!Number.isInteger(n) || n < 1 || n > 65535) {
+            throw new Error("Port must be an integer between 1 and 65535");
+          }
+          return String(n);
+        })
+        .default(CLI_DEFAULTS.HTTP_PORT.toString()),
+    )
     .option("--resume", "Resume interrupted jobs on startup", false)
     .option("--no-resume", "Do not resume jobs on startup")
     .action(

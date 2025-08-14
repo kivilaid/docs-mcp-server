@@ -3,9 +3,11 @@
  * Tests that commands accept the correct arguments according to the CLI Commands and Arguments Matrix.
  */
 
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createCliProgram } from "./index";
 import { resolveProtocol, validatePort, validateResumeFlag } from "./utils";
+
+// Mocks for execution tests will be defined below in dedicated describe block
 
 // --- Additional mocks for createPipelineWithCallbacks behavior tests ---
 vi.mock("../pipeline/PipelineFactory", () => ({
@@ -23,6 +25,32 @@ vi.mock("../utils/logger", () => ({
   setLogLevel: vi.fn(),
   LogLevel: { ERROR: 0, WARN: 1, INFO: 2, DEBUG: 3 },
 }));
+
+// --- Mocks & state for handler wiring regression (formerly commandHandlers.test.ts) ---
+let capturedCreateArgs: any[] = [];
+let listToolExecuteCalled = false;
+vi.mock("../store", async () => {
+  const actual = await vi.importActual<any>("../store");
+  return {
+    ...actual,
+    createDocumentManagement: vi.fn(async (opts: any) => {
+      capturedCreateArgs.push(opts);
+      return { shutdown: vi.fn() } as any;
+    }),
+  };
+});
+vi.mock("../tools", async () => {
+  const actual = await vi.importActual<any>("../tools");
+  return {
+    ...actual,
+    ListLibrariesTool: vi.fn().mockImplementation(() => ({
+      execute: vi.fn(async () => {
+        listToolExecuteCalled = true;
+        return { libraries: [] };
+      }),
+    })),
+  };
+});
 
 describe("CLI Command Arguments Matrix", () => {
   const program = createCliProgram();
@@ -78,28 +106,28 @@ describe("CLI Command Arguments Matrix", () => {
     search: {
       hasVerboseSilent: true,
       hasPort: false,
-      hasServerUrl: false,
+      hasServerUrl: true,
       hasProtocol: false,
       hasResume: false,
     },
     list: {
       hasVerboseSilent: true,
       hasPort: false,
-      hasServerUrl: false,
+      hasServerUrl: true,
       hasProtocol: false,
       hasResume: false,
     },
     remove: {
       hasVerboseSilent: true,
       hasPort: false,
-      hasServerUrl: false,
+      hasServerUrl: true,
       hasProtocol: false,
       hasResume: false,
     },
     "find-version": {
       hasVerboseSilent: true,
       hasPort: false,
-      hasServerUrl: false,
+      hasServerUrl: true,
       hasProtocol: false,
       hasResume: false,
     },
@@ -237,6 +265,26 @@ describe("createPipelineWithCallbacks behavior", () => {
       }),
     );
     expect(pipeline).toBeDefined();
+  });
+});
+
+describe("CLI command handler parameters (regression)", () => {
+  beforeEach(() => {
+    capturedCreateArgs = [];
+    listToolExecuteCalled = false;
+  });
+
+  it("list command forwards --server-url and uses correct (options, command) signature", async () => {
+    const { createCliProgram } = await import("./index");
+    const program = createCliProgram();
+    const serverUrl = "http://example.com/api";
+
+    await expect(
+      program.parseAsync(["node", "test", "list", "--server-url", serverUrl]),
+    ).resolves.not.toThrow();
+
+    expect(capturedCreateArgs).toContainEqual({ serverUrl });
+    expect(listToolExecuteCalled).toBe(true);
   });
 });
 

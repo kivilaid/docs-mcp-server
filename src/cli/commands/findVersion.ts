@@ -12,21 +12,31 @@ export function createFindVersionCommand(program: Command): Command {
     .command("find-version <library>")
     .description("Find the best matching version for a library")
     .option("-v, --version <string>", "Pattern to match (optional, supports ranges)")
-    .action(async (library: string, options: { version?: string }, command) => {
-      const globalOptions = command.parent?.opts() || {};
-      setupLogging(globalOptions);
-
-      const docService = await createDocumentManagement();
-      try {
-        const findVersionTool = new FindVersionTool(docService);
-        const versionInfo = await findVersionTool.execute({
-          library,
-          targetVersion: options.version,
-        });
-        if (!versionInfo) throw new Error("Failed to get version information");
-        console.log(versionInfo);
-      } finally {
-        await docService.shutdown();
-      }
-    });
+    .option(
+      "--server-url <url>",
+      "URL of external pipeline worker RPC (e.g., http://localhost:6280/api)",
+    )
+    .action(
+      async (
+        library: string,
+        options: { version?: string; serverUrl?: string },
+        command,
+      ) => {
+        const globalOptions = command.parent?.opts() || {};
+        setupLogging(globalOptions);
+        const serverUrl = options.serverUrl;
+        const docService = await createDocumentManagement({ serverUrl });
+        try {
+          const findVersionTool = new FindVersionTool(docService);
+          const versionInfo = await findVersionTool.execute({
+            library,
+            targetVersion: options.version,
+          });
+          if (!versionInfo) throw new Error("Failed to get version information");
+          console.log(versionInfo);
+        } finally {
+          await docService.shutdown();
+        }
+      },
+    );
 }

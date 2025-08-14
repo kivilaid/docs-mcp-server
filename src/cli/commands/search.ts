@@ -23,6 +23,10 @@ export function createSearchCommand(program: Command): Command {
     )
     .option("-l, --limit <number>", "Maximum number of results", "5")
     .option("-e, --exact-match", "Only use exact version match (default: false)", false)
+    .option(
+      "--server-url <url>",
+      "URL of external pipeline worker RPC (e.g., http://localhost:6280/api)",
+    )
     .action(
       async (
         library: string,
@@ -31,13 +35,14 @@ export function createSearchCommand(program: Command): Command {
           version?: string;
           limit: string;
           exactMatch: boolean;
+          serverUrl?: string;
         },
         command,
       ) => {
         const globalOptions = command.parent?.opts() || {};
         setupLogging(globalOptions);
-
-        const docService = await createDocumentManagement();
+        const serverUrl = options.serverUrl;
+        const docService = await createDocumentManagement({ serverUrl });
         try {
           const searchTool = new SearchTool(docService);
           const result = await searchTool.execute({
