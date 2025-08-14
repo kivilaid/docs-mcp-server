@@ -7,6 +7,31 @@ import { createDocumentManagement } from "../../store";
 import { SearchTool } from "../../tools";
 import { formatOutput, setupLogging } from "../utils";
 
+export async function searchAction(
+  library: string,
+  query: string,
+  options: { version?: string; limit: string; exactMatch: boolean; serverUrl?: string },
+  command: Command,
+) {
+  const globalOptions = command.parent?.opts() || {};
+  setupLogging(globalOptions);
+  const serverUrl = options.serverUrl;
+  const docService = await createDocumentManagement({ serverUrl });
+  try {
+    const searchTool = new SearchTool(docService);
+    const result = await searchTool.execute({
+      library,
+      version: options.version,
+      query,
+      limit: Number.parseInt(options.limit),
+      exactMatch: options.exactMatch,
+    });
+    console.log(formatOutput(result.results));
+  } finally {
+    await docService.shutdown();
+  }
+}
+
 export function createSearchCommand(program: Command): Command {
   return program
     .command("search <library> <query>")
@@ -27,35 +52,5 @@ export function createSearchCommand(program: Command): Command {
       "--server-url <url>",
       "URL of external pipeline worker RPC (e.g., http://localhost:6280/api)",
     )
-    .action(
-      async (
-        library: string,
-        query: string,
-        options: {
-          version?: string;
-          limit: string;
-          exactMatch: boolean;
-          serverUrl?: string;
-        },
-        command,
-      ) => {
-        const globalOptions = command.parent?.opts() || {};
-        setupLogging(globalOptions);
-        const serverUrl = options.serverUrl;
-        const docService = await createDocumentManagement({ serverUrl });
-        try {
-          const searchTool = new SearchTool(docService);
-          const result = await searchTool.execute({
-            library,
-            version: options.version,
-            query,
-            limit: Number.parseInt(options.limit),
-            exactMatch: options.exactMatch,
-          });
-          console.log(formatOutput(result.results));
-        } finally {
-          await docService.shutdown();
-        }
-      },
-    );
+    .action(searchAction);
 }

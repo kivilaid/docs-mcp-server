@@ -8,6 +8,25 @@ import { ScrapeMode } from "../../scraper/types";
 import { FetchUrlTool } from "../../tools";
 import { parseHeaders, setupLogging } from "../utils";
 
+export async function fetchUrlAction(
+  url: string,
+  options: { followRedirects: boolean; scrapeMode: ScrapeMode; header: string[] },
+  command: Command,
+) {
+  const globalOptions = command.parent?.opts() || {};
+  setupLogging(globalOptions);
+
+  const headers = parseHeaders(options.header);
+  const fetchUrlTool = new FetchUrlTool(new HttpFetcher(), new FileFetcher());
+  const content = await fetchUrlTool.execute({
+    url,
+    followRedirects: options.followRedirects,
+    scrapeMode: options.scrapeMode,
+    headers: Object.keys(headers).length > 0 ? headers : undefined,
+  });
+  console.log(content);
+}
+
 export function createFetchUrlCommand(program: Command): Command {
   return program
     .command("fetch-url <url>")
@@ -37,30 +56,5 @@ export function createFetchUrlCommand(program: Command): Command {
       (val: string, prev: string[] = []) => prev.concat([val]),
       [] as string[],
     )
-    .action(
-      async (
-        url: string,
-        options: {
-          followRedirects: boolean;
-          scrapeMode: ScrapeMode;
-          header: string[];
-        },
-        command,
-      ) => {
-        const globalOptions = command.parent?.opts() || {};
-        setupLogging(globalOptions);
-
-        const headers = parseHeaders(options.header);
-
-        // FetchUrlTool does not require DocumentManagementService or PipelineManager
-        const fetchUrlTool = new FetchUrlTool(new HttpFetcher(), new FileFetcher());
-        const content = await fetchUrlTool.execute({
-          url,
-          followRedirects: options.followRedirects,
-          scrapeMode: options.scrapeMode,
-          headers: Object.keys(headers).length > 0 ? headers : undefined,
-        });
-        console.log(content);
-      },
-    );
+    .action(fetchUrlAction);
 }
