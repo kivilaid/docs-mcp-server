@@ -5,7 +5,7 @@ import semver from "semver";
 import * as sqliteVec from "sqlite-vec";
 import type { ScraperOptions } from "../scraper/types";
 import type { DocumentMetadata } from "../types";
-import { EMBEDDING_BATCH_SIZE } from "../utils/config";
+import { EMBEDDING_BATCH_CHARS, EMBEDDING_BATCH_SIZE } from "../utils/config";
 import { logger } from "../utils/logger";
 import { applyMigrations } from "./applyMigrations";
 import { ConnectionError, DimensionError, StoreError } from "./errors";
@@ -724,10 +724,54 @@ export class DocumentStore {
       });
 
       // Batch embedding creation to avoid token limit errors
+      // Use size-based batching to prevent 413 errors
+      const maxBatchChars =
+        Number(process.env.DOCS_MCP_EMBEDDING_BATCH_CHARS) || EMBEDDING_BATCH_CHARS;
       const rawEmbeddings: number[][] = [];
-      for (let i = 0; i < texts.length; i += EMBEDDING_BATCH_SIZE) {
-        const batchTexts = texts.slice(i, i + EMBEDDING_BATCH_SIZE);
-        const batchEmbeddings = await this.embeddings.embedDocuments(batchTexts);
+
+      let currentBatch: string[] = [];
+      let currentBatchSize = 0;
+      let batchCount = 0;
+
+      for (const text of texts) {
+        const textSize = text.length;
+
+        // If adding this text would exceed the limit, process the current batch first
+        if (currentBatchSize + textSize > maxBatchChars && currentBatch.length > 0) {
+          batchCount++;
+          logger.debug(
+            `🔄 Processing embedding batch ${batchCount}: ${currentBatch.length} texts, ${currentBatchSize} chars`,
+          );
+          const batchEmbeddings = await this.embeddings.embedDocuments(currentBatch);
+          rawEmbeddings.push(...batchEmbeddings);
+          currentBatch = [];
+          currentBatchSize = 0;
+        }
+
+        // Add text to current batch
+        currentBatch.push(text);
+        currentBatchSize += textSize;
+
+        // Also respect the count-based limit for APIs that have per-request item limits
+        if (currentBatch.length >= EMBEDDING_BATCH_SIZE) {
+          batchCount++;
+          logger.debug(
+            `🔄 Processing embedding batch ${batchCount}: ${currentBatch.length} texts, ${currentBatchSize} chars`,
+          );
+          const batchEmbeddings = await this.embeddings.embedDocuments(currentBatch);
+          rawEmbeddings.push(...batchEmbeddings);
+          currentBatch = [];
+          currentBatchSize = 0;
+        }
+      }
+
+      // Process any remaining texts in the final batch
+      if (currentBatch.length > 0) {
+        batchCount++;
+        logger.debug(
+          `🔄 Processing final embedding batch ${batchCount}: ${currentBatch.length} texts, ${currentBatchSize} chars`,
+        );
+        const batchEmbeddings = await this.embeddings.embedDocuments(currentBatch);
         rawEmbeddings.push(...batchEmbeddings);
       }
       const paddedEmbeddings = rawEmbeddings.map((vector) => this.padVector(vector));

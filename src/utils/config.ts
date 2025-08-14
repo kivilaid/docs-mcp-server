@@ -48,6 +48,13 @@ export const SPLITTER_MAX_CHUNK_SIZE = 5000;
 export const EMBEDDING_BATCH_SIZE = 100;
 
 /**
+ * Maximum total character size for a single embedding batch request.
+ * This prevents "413 Request entity too large" errors from embedding APIs.
+ * Default is 50000 (~50KB), can be overridden with DOCS_MCP_EMBEDDING_BATCH_CHARS environment variable.
+ */
+export const EMBEDDING_BATCH_CHARS = 50000;
+
+/**
  * Maximum number of retries for database migrations if busy.
  */
 export const MIGRATION_MAX_RETRIES = 5;
