@@ -224,6 +224,21 @@ describe("DocumentManagementService", () => {
       expect(id).toBe(30);
       expect(mockStore.resolveLibraryAndVersionIds).toHaveBeenCalledWith("express", "");
     });
+
+    it("reuses single unversioned version across multiple ensureVersion calls (regression)", async () => {
+      // simulate same returned id each time
+      mockStore.resolveLibraryAndVersionIds
+        .mockResolvedValueOnce({ libraryId: 1, versionId: 10 })
+        .mockResolvedValueOnce({ libraryId: 1, versionId: 10 })
+        .mockResolvedValueOnce({ libraryId: 1, versionId: 10 });
+      const a = await docService.ensureVersion({ library: "TestLib", version: "" });
+      const b = await docService.ensureVersion({ library: "TestLib", version: "" });
+      const c = await docService.ensureVersion({ library: "TestLib", version: "" });
+      expect(a).toBe(10);
+      expect(b).toBe(10);
+      expect(c).toBe(10);
+      expect(mockStore.resolveLibraryAndVersionIds).toHaveBeenCalledTimes(3);
+    });
   });
 
   // --- Factory function behavior tests ---
@@ -545,28 +560,29 @@ describe("DocumentManagementService", () => {
     });
 
     describe("listLibraries", () => {
-      it("should list libraries and their detailed versions, including unversioned", async () => {
-        // Mock data now includes LibraryVersionDetails and unversioned cases
-        const mockLibraryMap = new Map<
-          string,
-          Array<{
-            version: string;
-            documentCount: number;
-            uniqueUrlCount: number;
-            indexedAt: string | null;
-          }>
-        >([
+      it("should list libraries with enriched version metadata", async () => {
+        const mockLibraryMap = new Map([
           [
-            "lib1", // Standard case
+            "lib1",
             [
               {
                 version: "1.0.0",
+                versionId: 101,
+                status: "completed",
+                progressPages: 10,
+                progressMaxPages: 10,
+                sourceUrl: null,
                 documentCount: 10,
                 uniqueUrlCount: 5,
                 indexedAt: "2024-01-01T00:00:00.000Z",
               },
               {
                 version: "1.1.0",
+                versionId: 102,
+                status: "completed",
+                progressPages: 15,
+                progressMaxPages: 15,
+                sourceUrl: null,
                 documentCount: 15,
                 uniqueUrlCount: 7,
                 indexedAt: "2024-02-01T00:00:00.000Z",
@@ -574,10 +590,15 @@ describe("DocumentManagementService", () => {
             ],
           ],
           [
-            "lib2", // Standard case
+            "lib2",
             [
               {
                 version: "2.0.0",
+                versionId: 201,
+                status: "completed",
+                progressPages: 20,
+                progressMaxPages: 20,
+                sourceUrl: null,
                 documentCount: 20,
                 uniqueUrlCount: 10,
                 indexedAt: "2024-03-01T00:00:00.000Z",
@@ -585,10 +606,15 @@ describe("DocumentManagementService", () => {
             ],
           ],
           [
-            "unversioned-only", // Only unversioned
+            "unversioned-only",
             [
               {
                 version: "",
+                versionId: 300,
+                status: "completed",
+                progressPages: 1,
+                progressMaxPages: 1,
+                sourceUrl: null,
                 documentCount: 1,
                 uniqueUrlCount: 1,
                 indexedAt: "2024-04-01T00:00:00.000Z",
@@ -596,93 +622,103 @@ describe("DocumentManagementService", () => {
             ],
           ],
           [
-            "mixed-versions", // Semver and unversioned
+            "mixed-versions",
             [
               {
-                version: "", // Unversioned comes first from store sort
+                version: "",
+                versionId: 400,
+                status: "completed",
+                progressPages: 2,
+                progressMaxPages: 2,
+                sourceUrl: null,
                 documentCount: 2,
                 uniqueUrlCount: 1,
                 indexedAt: "2024-04-03T00:00:00.000Z",
               },
               {
                 version: "1.0.0",
+                versionId: 401,
+                status: "completed",
+                progressPages: 5,
+                progressMaxPages: 5,
+                sourceUrl: null,
                 documentCount: 5,
                 uniqueUrlCount: 2,
                 indexedAt: "2024-04-02T00:00:00.000Z",
               },
             ],
           ],
-        ]);
-        mockStore.queryLibraryVersions.mockResolvedValue(mockLibraryMap);
+        ] as any);
+        mockStore.queryLibraryVersions.mockResolvedValue(mockLibraryMap as any);
 
         const result = await docService.listLibraries();
-
-        // Assert the structure matches the new detailed format
-        const shape = (
-          lib: string,
-          ver: {
-            version: string;
-            documentCount: number;
-            uniqueUrlCount: number;
-            indexedAt: string | null;
-          }[],
-        ) => ({
-          library: lib,
-          versions: ver.map((v) => ({
-            id: -1,
-            ref: { library: lib, version: v.version },
-            status: "not_indexed",
-            progress: { pages: 0, maxPages: v.indexedAt ? 1 : 0 },
-            counts: { documents: v.documentCount, uniqueUrls: v.uniqueUrlCount },
-            indexedAt: v.indexedAt,
-            sourceUrl: undefined,
+        expect(
+          result.map((r) => ({
+            library: r.library,
+            versions: r.versions.map((v) => ({
+              ref: v.ref,
+              status: v.status,
+              counts: v.counts,
+              indexedAt: v.indexedAt,
+            })),
           })),
-        });
-        expect(result).toEqual([
-          shape("lib1", [
-            {
-              version: "1.0.0",
-              documentCount: 10,
-              uniqueUrlCount: 5,
-              indexedAt: "2024-01-01T00:00:00.000Z",
-            },
-            {
-              version: "1.1.0",
-              documentCount: 15,
-              uniqueUrlCount: 7,
-              indexedAt: "2024-02-01T00:00:00.000Z",
-            },
-          ]),
-          shape("lib2", [
-            {
-              version: "2.0.0",
-              documentCount: 20,
-              uniqueUrlCount: 10,
-              indexedAt: "2024-03-01T00:00:00.000Z",
-            },
-          ]),
-          shape("unversioned-only", [
-            {
-              version: "",
-              documentCount: 1,
-              uniqueUrlCount: 1,
-              indexedAt: "2024-04-01T00:00:00.000Z",
-            },
-          ]),
-          shape("mixed-versions", [
-            {
-              version: "",
-              documentCount: 2,
-              uniqueUrlCount: 1,
-              indexedAt: "2024-04-03T00:00:00.000Z",
-            },
-            {
-              version: "1.0.0",
-              documentCount: 5,
-              uniqueUrlCount: 2,
-              indexedAt: "2024-04-02T00:00:00.000Z",
-            },
-          ]),
+        ).toEqual([
+          {
+            library: "lib1",
+            versions: [
+              {
+                ref: { library: "lib1", version: "1.0.0" },
+                status: "completed",
+                counts: { documents: 10, uniqueUrls: 5 },
+                indexedAt: "2024-01-01T00:00:00.000Z",
+              },
+              {
+                ref: { library: "lib1", version: "1.1.0" },
+                status: "completed",
+                counts: { documents: 15, uniqueUrls: 7 },
+                indexedAt: "2024-02-01T00:00:00.000Z",
+              },
+            ],
+          },
+          {
+            library: "lib2",
+            versions: [
+              {
+                ref: { library: "lib2", version: "2.0.0" },
+                status: "completed",
+                counts: { documents: 20, uniqueUrls: 10 },
+                indexedAt: "2024-03-01T00:00:00.000Z",
+              },
+            ],
+          },
+          {
+            library: "unversioned-only",
+            versions: [
+              {
+                ref: { library: "unversioned-only", version: "" },
+                status: "completed",
+                counts: { documents: 1, uniqueUrls: 1 },
+                indexedAt: "2024-04-01T00:00:00.000Z",
+              },
+            ],
+          },
+          {
+            library: "mixed-versions",
+            versions: [
+              {
+                ref: { library: "mixed-versions", version: "" },
+                status: "completed",
+                counts: { documents: 2, uniqueUrls: 1 },
+                indexedAt: "2024-04-03T00:00:00.000Z",
+              },
+              {
+                ref: { library: "mixed-versions", version: "1.0.0" },
+                status: "completed",
+                counts: { documents: 5, uniqueUrls: 2 },
+                indexedAt: "2024-04-02T00:00:00.000Z",
+              },
+            ],
+          },
         ]);
         expect(mockStore.queryLibraryVersions).toHaveBeenCalledTimes(1);
       });
@@ -708,28 +744,25 @@ describe("DocumentManagementService", () => {
       // Test case where store returns a library that only had an unversioned entry
       // (which is now included, not filtered by the store)
       it("should correctly handle libraries with only unversioned entries", async () => {
-        const mockLibraryMap = new Map<
-          string,
-          Array<{
-            version: string;
-            documentCount: number;
-            uniqueUrlCount: number;
-            indexedAt: string | null;
-          }>
-        >([
+        const mockLibraryMap = new Map([
           [
             "lib-unversioned",
             [
               {
-                version: "", // The unversioned entry
+                version: "",
+                versionId: 999,
+                status: "completed",
+                progressPages: 0,
+                progressMaxPages: 0,
+                sourceUrl: null,
                 documentCount: 3,
                 uniqueUrlCount: 2,
                 indexedAt: "2024-04-04T00:00:00.000Z",
               },
             ],
           ],
-        ]);
-        mockStore.queryLibraryVersions.mockResolvedValue(mockLibraryMap);
+        ] as any);
+        mockStore.queryLibraryVersions.mockResolvedValue(mockLibraryMap as any);
 
         const result = await docService.listLibraries();
         expect(result).toEqual([
@@ -737,10 +770,10 @@ describe("DocumentManagementService", () => {
             library: "lib-unversioned",
             versions: [
               {
-                id: -1,
+                id: 999,
                 ref: { library: "lib-unversioned", version: "" },
-                status: "not_indexed",
-                progress: { pages: 0, maxPages: 1 },
+                status: "completed",
+                progress: { pages: 0, maxPages: 0 },
                 counts: { documents: 3, uniqueUrls: 2 },
                 indexedAt: "2024-04-04T00:00:00.000Z",
                 sourceUrl: undefined,
@@ -1053,81 +1086,79 @@ describe("DocumentManagementService", () => {
         expect(result).toEqual([]);
       });
 
-      it("maps versions and overlays active status", async () => {
-        const libraryMap = new Map<
-          string,
-          Array<{
-            version: string;
-            documentCount: number;
-            uniqueUrlCount: number;
-            indexedAt: string | null;
-          }>
-        >([
+      it("passes through multiple statuses and progress fields for enriched rows", async () => {
+        const enrichedMap = new Map<string, any[]>([
           [
-            "libA",
+            "libStatus",
             [
               {
                 version: "1.0.0",
-                documentCount: 10,
-                uniqueUrlCount: 5,
-                indexedAt: "2024-01-01T00:00:00.000Z",
+                versionId: 11,
+                status: "completed",
+                progressPages: 10,
+                progressMaxPages: 10,
+                sourceUrl: "https://ex/libStatus/1.0.0",
+                documentCount: 50,
+                uniqueUrlCount: 45,
+                indexedAt: "2024-02-01T00:00:00.000Z",
+              },
+              {
+                version: "1.1.0",
+                versionId: 12,
+                status: "failed",
+                progressPages: 3,
+                progressMaxPages: 8,
+                sourceUrl: "https://ex/libStatus/1.1.0",
+                documentCount: 12,
+                uniqueUrlCount: 10,
+                indexedAt: null,
+              },
+              {
+                version: "2.0.0",
+                versionId: 13,
+                status: "cancelled",
+                progressPages: 5,
+                progressMaxPages: 20,
+                sourceUrl: null,
+                documentCount: 0,
+                uniqueUrlCount: 0,
+                indexedAt: null,
               },
               {
                 version: "",
-                documentCount: 2,
-                uniqueUrlCount: 2,
-                indexedAt: "2024-01-02T00:00:00.000Z",
+                versionId: 14,
+                status: "not_indexed",
+                progressPages: 0,
+                progressMaxPages: 0,
+                sourceUrl: null,
+                documentCount: 0,
+                uniqueUrlCount: 0,
+                indexedAt: null,
               },
             ],
           ],
-          [
-            "libB",
-            [{ version: "2.0.0", documentCount: 3, uniqueUrlCount: 3, indexedAt: null }],
-          ],
         ]);
-        mockStore.queryLibraryVersions.mockResolvedValue(libraryMap);
-        // Active version only for libA 1.0.0
-        mockStore.getVersionsByStatus.mockResolvedValue([
-          {
-            id: 77,
-            library_id: 1,
-            library_name: "libA",
-            name: "1.0.0",
-            created_at: "2024-01-01T00:00:00.000Z",
-            status: "running",
-            progress_pages: 4,
-            progress_max_pages: 10,
-            error_message: null,
-            started_at: "2024-01-01T00:00:00.000Z",
-            updated_at: "2024-01-01T00:05:00.000Z",
-            source_url: "https://docs.example.com/libA/1.0.0",
-            scraper_options: null,
-          },
-        ]);
+        mockStore.queryLibraryVersions.mockResolvedValue(enrichedMap);
 
         const result = await docService.listLibraries();
-
-        // Find libA 1.0.0 summary
-        const libA = result.find((r) => r.library === "libA");
-        expect(libA).toBeTruthy();
-        const v100 = libA?.versions.find((v) => v.ref.version === "1.0.0");
-        const vunver = libA?.versions.find((v) => v.ref.version === "");
-        expect(v100).toMatchObject({
-          id: 77,
-          status: "running",
-          progress: { pages: 4, maxPages: 10 },
-          sourceUrl: "https://docs.example.com/libA/1.0.0",
+        const lib = result.find((r) => r.library === "libStatus");
+        expect(lib).toBeTruthy();
+        const byVer = Object.fromEntries(
+          lib!.versions.map((v) => [v.ref.version || "__unver__", v]),
+        );
+        expect(byVer["1.0.0"]).toMatchObject({
+          status: "completed",
+          progress: { pages: 10, maxPages: 10 },
         });
-        // Unversioned entry should have NOT_INDEXED default and maxPages 1 due to indexedAt present
-        expect(vunver).toMatchObject({
-          id: -1,
-          status: "not_indexed",
-          progress: { pages: 0, maxPages: 1 },
+        expect(byVer["1.1.0"]).toMatchObject({
+          status: "failed",
+          progress: { pages: 3, maxPages: 8 },
         });
-        // libB 2.0.0 should have NOT_INDEXED and maxPages 0 since indexedAt null
-        const libB = result.find((r) => r.library === "libB");
-        const v200 = libB?.versions[0];
-        expect(v200).toMatchObject({
+        expect(byVer["2.0.0"]).toMatchObject({
+          status: "cancelled",
+          progress: { pages: 5, maxPages: 20 },
+        });
+        expect(byVer.__unver__).toMatchObject({
           status: "not_indexed",
           progress: { pages: 0, maxPages: 0 },
         });

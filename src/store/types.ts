@@ -175,11 +175,15 @@ export function normalizeVersionName(name: string | null): string {
 }
 
 /**
- * Helper function to convert empty string to NULL for database storage.
- * APIs use empty string for unversioned content, but database stores NULL.
+ * Helper function for version name normalization prior to storage.
+ * Policy:
+ *  - Empty string represents the unversioned variant (stored as '').
+ *  - Names are lower-cased at call sites (see resolveLibraryAndVersionIds) to enforce
+ *    case-insensitive uniqueness; this function only preserves the empty-string rule.
  */
-export function denormalizeVersionName(name: string): string | null {
-  return name === "" ? null : name;
+export function denormalizeVersionName(name: string): string {
+  // Store unversioned as empty string to leverage UNIQUE(library_id, name)
+  return name === "" ? "" : name;
 }
 
 /**

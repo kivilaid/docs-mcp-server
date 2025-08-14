@@ -225,18 +225,24 @@ export class DocumentStore {
          AND COALESCE(v.name, '') = COALESCE(?, '')
          LIMIT 1`,
       ),
+      // Library/version aggregation including versions without documents and status/progress fields
       queryLibraryVersions: this.db.prepare<[]>(
         `SELECT
           l.name as library,
-          v.name as version,
-          COUNT(*) as documentCount,
-          COUNT(DISTINCT d.url) as uniqueUrlCount,
-          MIN(d.indexed_at) as indexedAt
-        FROM documents d
-        JOIN versions v ON d.version_id = v.id
+          COALESCE(v.name, '') as version,
+          v.id as versionId,
+          v.status as status,
+          v.progress_pages as progressPages,
+          v.progress_max_pages as progressMaxPages,
+          v.source_url as sourceUrl,
+          MIN(d.indexed_at) as indexedAt,
+          COUNT(d.id) as documentCount,
+          COUNT(DISTINCT d.url) as uniqueUrlCount
+        FROM versions v
         JOIN libraries l ON v.library_id = l.id
-        GROUP BY l.name, v.name
-        ORDER BY l.name, v.name`,
+        LEFT JOIN documents d ON d.version_id = v.id
+        GROUP BY v.id
+        ORDER BY l.name, version`,
       ),
       getChildChunks: this.db.prepare<
         [string, string, string, number, string, bigint, number]
@@ -427,10 +433,11 @@ export class DocumentStore {
     const libraryId = libraryIdRow.id;
 
     // Insert or get version_id
+    // Reuse existing unversioned entry if present; storing '' ensures UNIQUE constraint applies
     this.statements.insertVersion.run(libraryId, normalizedVersion);
     const versionIdRow = this.statements.resolveVersionId.get(
       libraryId,
-      normalizedVersion,
+      normalizedVersion === null ? "" : normalizedVersion,
     ) as { id: number } | undefined;
     if (!versionIdRow || typeof versionIdRow.id !== "number") {
       throw new StoreError(
@@ -596,6 +603,11 @@ export class DocumentStore {
       string,
       Array<{
         version: string;
+        versionId: number;
+        status: VersionStatus; // Persisted enum value
+        progressPages: number;
+        progressMaxPages: number;
+        sourceUrl: string | null;
         documentCount: number;
         uniqueUrlCount: number;
         indexedAt: string | null;
@@ -603,13 +615,18 @@ export class DocumentStore {
     >
   > {
     try {
-      // Define the expected row structure from the GROUP BY query
+      // Define the expected row structure from the GROUP BY query (including versions without documents)
       interface LibraryVersionRow {
         library: string;
         version: string;
+        versionId: number;
+        status: VersionStatus;
+        progressPages: number;
+        progressMaxPages: number;
+        sourceUrl: string | null;
         documentCount: number;
         uniqueUrlCount: number;
-        indexedAt: string | null; // SQLite MIN might return string or null
+        indexedAt: string | null; // MIN() may return null
       }
 
       const rows = this.statements.queryLibraryVersions.all() as LibraryVersionRow[];
@@ -617,6 +634,11 @@ export class DocumentStore {
         string,
         Array<{
           version: string;
+          versionId: number;
+          status: VersionStatus;
+          progressPages: number;
+          progressMaxPages: number;
+          sourceUrl: string | null;
           documentCount: number;
           uniqueUrlCount: number;
           indexedAt: string | null;
@@ -635,6 +657,12 @@ export class DocumentStore {
 
         libraryMap.get(library)?.push({
           version: row.version,
+          versionId: row.versionId,
+          // Preserve raw string status here; DocumentManagementService will cast to VersionStatus
+          status: row.status,
+          progressPages: row.progressPages,
+          progressMaxPages: row.progressMaxPages,
+          sourceUrl: row.sourceUrl,
           documentCount: row.documentCount,
           uniqueUrlCount: row.uniqueUrlCount,
           indexedAt: indexedAtISO,

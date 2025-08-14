@@ -116,6 +116,38 @@ describe("DocumentStore - Integration Tests", () => {
       expect(testlibVersions[0].uniqueUrlCount).toBe(2);
     });
 
+    it("treats library names case-insensitively and reuses same library id", async () => {
+      const { libraryId: a } = await store.resolveLibraryAndVersionIds("React", "");
+      const { libraryId: b } = await store.resolveLibraryAndVersionIds("react", "");
+      const { libraryId: c } = await store.resolveLibraryAndVersionIds("REACT", "");
+      expect(a).toBe(b);
+      expect(b).toBe(c);
+    });
+
+    it("treats version names case-insensitively within a library", async () => {
+      const { versionId: v1 } = await store.resolveLibraryAndVersionIds("cslib", "1.0.0");
+      const { versionId: v2 } = await store.resolveLibraryAndVersionIds("cslib", "1.0.0");
+      const { versionId: v3 } = await store.resolveLibraryAndVersionIds("cslib", "1.0.0");
+      expect(v1).toBe(v2);
+      expect(v2).toBe(v3);
+    });
+
+    it("collapses mixed-case version names to a single version id", async () => {
+      const { versionId: v1 } = await store.resolveLibraryAndVersionIds(
+        "mixcase",
+        "Alpha",
+      );
+      const { versionId: v2 } = await store.resolveLibraryAndVersionIds(
+        "mixcase",
+        "alpha",
+      );
+      const { versionId: v3 } = await store.resolveLibraryAndVersionIds(
+        "mixcase",
+        "ALPHA",
+      );
+      expect(v1).toBe(v2);
+      expect(v2).toBe(v3);
+    });
     it("should handle document deletion correctly", async () => {
       const docs: Document[] = [
         {

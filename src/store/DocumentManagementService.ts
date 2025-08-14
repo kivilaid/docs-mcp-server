@@ -25,9 +25,9 @@ import type {
   ScraperConfig,
   StoreSearchResult,
   VersionRef,
+  VersionStatus,
   VersionSummary,
 } from "./types";
-import { VersionStatus } from "./types";
 
 /**
  * Provides semantic search capabilities across different versions of library documentation.
@@ -182,40 +182,20 @@ export class DocumentManagementService {
    */
   async listLibraries(): Promise<LibrarySummary[]> {
     const libMap = await this.store.queryLibraryVersions();
-    // Active = queued, running, updating
-    const active =
-      (await this.getVersionsByStatus([
-        VersionStatus.QUEUED,
-        VersionStatus.RUNNING,
-        VersionStatus.UPDATING,
-      ])) || [];
-
-    // Index active versions by (library, version) for lookup
-    const activeIndex = new Map<string, DbVersionWithLibrary>();
-    for (const v of active) {
-      const key = `${v.library_name}|${v.name ?? ""}`;
-      activeIndex.set(key, v);
-    }
-
     const summaries: LibrarySummary[] = [];
     for (const [library, versions] of libMap) {
-      const vs = versions.map((v) => {
-        const key = `${library}|${v.version}`;
-        const activeVersion = activeIndex.get(key);
-        const base: VersionSummary = {
-          id: activeVersion?.id ?? -1,
-          ref: { library, version: v.version },
-          status: activeVersion?.status ?? VersionStatus.NOT_INDEXED,
-          progress: {
-            pages: activeVersion?.progress_pages ?? 0,
-            maxPages: activeVersion?.progress_max_pages ?? (v.indexedAt ? 1 : 0),
-          },
-          counts: { documents: v.documentCount, uniqueUrls: v.uniqueUrlCount },
-          indexedAt: v.indexedAt,
-          sourceUrl: activeVersion?.source_url ?? undefined,
-        };
-        return base;
-      });
+      const vs = versions.map(
+        (v) =>
+          ({
+            id: v.versionId,
+            ref: { library, version: v.version },
+            status: v.status as VersionStatus,
+            progress: { pages: v.progressPages, maxPages: v.progressMaxPages },
+            counts: { documents: v.documentCount, uniqueUrls: v.uniqueUrlCount },
+            indexedAt: v.indexedAt,
+            sourceUrl: v.sourceUrl ?? undefined,
+          }) satisfies VersionSummary,
+      );
       summaries.push({ library, versions: vs });
     }
     return summaries;
