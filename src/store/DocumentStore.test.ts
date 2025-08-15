@@ -819,4 +819,183 @@ describe("DocumentStore - Integration Tests", () => {
       expect(await countDocuments(library, version, url)).toBe(1);
     });
   });
+
+  describe("Embedding Batch Size Limits", () => {
+    let mockEmbedDocuments: ReturnType<typeof vi.fn>;
+
+    beforeEach(() => {
+      // Get a reference to the mocked embedDocuments function
+      // @ts-expect-error Accessing private property for testing
+      mockEmbedDocuments = vi.mocked(store.embeddings.embedDocuments);
+      mockEmbedDocuments.mockClear();
+    });
+
+    it("should batch documents by character size limit", async () => {
+      // Test: Character limit takes precedence over count when reached first
+      // Create 3 docs that fit 2 per batch by character size (~48KB total for 2 docs)
+      const contentSize = 24000; // 24KB each, 2 docs + headers = ~48.2KB (under 50KB limit)
+      const docs: Document[] = Array.from({ length: 3 }, (_, i) => ({
+        pageContent: "x".repeat(contentSize),
+        metadata: {
+          title: `Doc ${i + 1}`,
+          url: `https://example.com/doc${i + 1}`,
+          path: ["section"],
+        },
+      }));
+
+      await store.addDocuments("testlib", "1.0.0", docs);
+
+      // Behavior: Should create 2 batches - first with 2 docs, second with 1 doc
+      expect(mockEmbedDocuments).toHaveBeenCalledTimes(2);
+      expect(mockEmbedDocuments.mock.calls[0][0]).toHaveLength(2);
+      expect(mockEmbedDocuments.mock.calls[1][0]).toHaveLength(1);
+    });
+
+    it("should batch documents by count limit when character limit not reached", async () => {
+      // Test: Count limit (100) takes precedence when character limit isn't reached
+      // Create 101 small documents that won't hit character limit
+      const docs: Document[] = Array.from({ length: 101 }, (_, i) => ({
+        pageContent: "Small content",
+        metadata: {
+          title: `Doc ${i + 1}`,
+          url: `https://example.com/doc${i + 1}`,
+          path: ["section"],
+        },
+      }));
+
+      await store.addDocuments("testlib", "1.0.0", docs);
+
+      // Behavior: Should create 2 batches - 100 docs then 1 doc (count limit)
+      expect(mockEmbedDocuments).toHaveBeenCalledTimes(2);
+      expect(mockEmbedDocuments.mock.calls[0][0]).toHaveLength(100);
+      expect(mockEmbedDocuments.mock.calls[1][0]).toHaveLength(1);
+    });
+
+    it("should respect both character and count limits simultaneously", async () => {
+      // Test: Dual constraint - whichever limit is hit first should trigger batching
+      // Create 50 medium-sized docs where character limit will be hit before count limit
+      const contentSize = 2000; // 2KB each, so ~24 docs per 50KB batch
+      const docs: Document[] = Array.from({ length: 50 }, (_, i) => ({
+        pageContent: "x".repeat(contentSize),
+        metadata: {
+          title: `Doc ${i + 1}`,
+          url: `https://example.com/doc${i + 1}`,
+          path: ["section"],
+        },
+      }));
+
+      await store.addDocuments("testlib", "1.0.0", docs);
+
+      // Behavior: Character limit should be hit before count limit (100)
+      // Should create 3 batches: 24 + 24 + 2 docs = 50 docs total
+      expect(mockEmbedDocuments).toHaveBeenCalledTimes(3);
+      expect(mockEmbedDocuments.mock.calls[0][0]).toHaveLength(24);
+      expect(mockEmbedDocuments.mock.calls[1][0]).toHaveLength(24);
+      expect(mockEmbedDocuments.mock.calls[2][0]).toHaveLength(2);
+
+      // Verify character limit is being respected (~50KB per batch)
+      const batch1Chars = mockEmbedDocuments.mock.calls[0][0].reduce(
+        (sum: number, text: string) => sum + text.length,
+        0,
+      );
+      const batch2Chars = mockEmbedDocuments.mock.calls[1][0].reduce(
+        (sum: number, text: string) => sum + text.length,
+        0,
+      );
+      expect(batch1Chars).toBeLessThan(51000); // Under 51KB
+      expect(batch2Chars).toBeLessThan(51000); // Under 51KB
+    });
+
+    it("should handle custom character limit from environment variable", async () => {
+      // Test: Environment variable override works correctly
+      const originalEnv = process.env.DOCS_MCP_EMBEDDING_BATCH_CHARS;
+      process.env.DOCS_MCP_EMBEDDING_BATCH_CHARS = "1000"; // 1KB limit
+
+      try {
+        const docs: Document[] = [
+          {
+            pageContent: "x".repeat(800), // 800 chars + ~79 char header = ~879 chars
+            metadata: {
+              title: "Doc 1",
+              url: "https://example.com/doc1",
+              path: ["section"],
+            },
+          },
+          {
+            pageContent: "x".repeat(800), // Adding this would exceed 1KB limit
+            metadata: {
+              title: "Doc 2",
+              url: "https://example.com/doc2",
+              path: ["section"],
+            },
+          },
+        ];
+
+        await store.addDocuments("testlib", "1.0.0", docs);
+
+        // Behavior: Should create separate batches due to reduced character limit
+        expect(mockEmbedDocuments).toHaveBeenCalledTimes(2);
+        expect(mockEmbedDocuments.mock.calls[0][0]).toHaveLength(1);
+        expect(mockEmbedDocuments.mock.calls[1][0]).toHaveLength(1);
+      } finally {
+        // Restore original environment
+        if (originalEnv !== undefined) {
+          process.env.DOCS_MCP_EMBEDDING_BATCH_CHARS = originalEnv;
+        } else {
+          delete process.env.DOCS_MCP_EMBEDDING_BATCH_CHARS;
+        }
+      }
+    });
+
+    it("should handle edge cases correctly", async () => {
+      // Test edge cases: empty array, single large doc, normal operation
+
+      // Empty documents should not call embedding service
+      await store.addDocuments("testlib", "1.0.0", []);
+      expect(mockEmbedDocuments).not.toHaveBeenCalled();
+
+      mockEmbedDocuments.mockClear();
+
+      // Single very large document should still work (no artificial size limits)
+      const veryLargeDoc: Document[] = [
+        {
+          pageContent: "x".repeat(60000), // 60KB, exceeds default 50KB limit
+          metadata: {
+            title: "Very Large Doc",
+            url: "https://example.com/large-doc",
+            path: ["section"],
+          },
+        },
+      ];
+
+      await store.addDocuments("testlib", "1.0.0", veryLargeDoc);
+      expect(mockEmbedDocuments).toHaveBeenCalledTimes(1);
+      expect(mockEmbedDocuments.mock.calls[0][0]).toHaveLength(1);
+    });
+
+    it("should include proper document headers in embedding text", async () => {
+      // Test: Document formatting includes required metadata headers
+      const docs: Document[] = [
+        {
+          pageContent: "Test content",
+          metadata: {
+            title: "Test Title",
+            url: "https://example.com/test",
+            path: ["path", "to", "doc"],
+          },
+        },
+      ];
+
+      await store.addDocuments("testlib", "1.0.0", docs);
+
+      // Behavior: Embedding text should include structured metadata
+      expect(mockEmbedDocuments).toHaveBeenCalledTimes(1);
+      const embeddedText = mockEmbedDocuments.mock.calls[0][0][0];
+
+      expect(embeddedText).toContain("<title>Test Title</title>");
+      expect(embeddedText).toContain("<url>https://example.com/test</url>");
+      expect(embeddedText).toContain("<path>path / to / doc</path>");
+      expect(embeddedText).toContain("Test content");
+    });
+  });
 });
