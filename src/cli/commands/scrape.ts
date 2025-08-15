@@ -3,17 +3,95 @@
  */
 
 import type { Command } from "commander";
-import type { IPipeline, PipelineOptions } from "../../pipeline";
-import { PipelineFactory } from "../../pipeline";
+import type { PipelineOptions } from "../../pipeline";
+import type { IPipeline } from "../../pipeline/trpc/interfaces";
 import { ScrapeMode } from "../../scraper/types";
-import { DocumentManagementService } from "../../store/DocumentManagementService";
+import { createDocumentManagement } from "../../store";
+import type { IDocumentManagement } from "../../store/trpc/interfaces";
 import { ScrapeTool } from "../../tools";
 import {
   DEFAULT_MAX_CONCURRENCY,
   DEFAULT_MAX_DEPTH,
   DEFAULT_MAX_PAGES,
 } from "../../utils/config";
-import { parseHeaders, setupLogging } from "../utils";
+import { createPipelineWithCallbacks, parseHeaders, setupLogging } from "../utils";
+
+export async function scrapeAction(
+  library: string,
+  url: string,
+  options: {
+    version?: string;
+    maxPages: string;
+    maxDepth: string;
+    maxConcurrency: string;
+    ignoreErrors: boolean;
+    scope: string;
+    followRedirects: boolean;
+    scrapeMode: ScrapeMode;
+    includePattern: string[];
+    excludePattern: string[];
+    header: string[];
+    serverUrl?: string;
+  },
+  command: Command,
+) {
+  const globalOptions = command.parent?.opts() || {};
+  setupLogging(globalOptions);
+
+  const serverUrl = options.serverUrl;
+  const docService: IDocumentManagement = await createDocumentManagement({ serverUrl });
+  let pipeline: IPipeline | null = null;
+
+  try {
+    const pipelineOptions: PipelineOptions = {
+      recoverJobs: false,
+      concurrency: 1,
+      serverUrl,
+    };
+
+    pipeline = await createPipelineWithCallbacks(
+      serverUrl ? undefined : (docService as unknown as never),
+      pipelineOptions,
+    );
+    await pipeline.start();
+    const scrapeTool = new ScrapeTool(pipeline);
+
+    const headers = parseHeaders(options.header);
+
+    const result = await scrapeTool.execute({
+      url,
+      library,
+      version: options.version,
+      options: {
+        maxPages: Number.parseInt(options.maxPages),
+        maxDepth: Number.parseInt(options.maxDepth),
+        maxConcurrency: Number.parseInt(options.maxConcurrency),
+        ignoreErrors: options.ignoreErrors,
+        scope: options.scope as "subpages" | "hostname" | "domain",
+        followRedirects: options.followRedirects,
+        scrapeMode: options.scrapeMode,
+        includePatterns:
+          Array.isArray(options.includePattern) && options.includePattern.length > 0
+            ? options.includePattern
+            : undefined,
+        excludePatterns:
+          Array.isArray(options.excludePattern) && options.excludePattern.length > 0
+            ? options.excludePattern
+            : undefined,
+        headers: Object.keys(headers).length > 0 ? headers : undefined,
+      },
+    });
+
+    if ("pagesScraped" in result) {
+      console.log(`✅ Successfully scraped ${result.pagesScraped} pages`);
+    } else {
+      console.log(`🚀 Scraping job started with ID: ${result.jobId}`);
+    }
+  } finally {
+    if (pipeline) await pipeline.stop();
+    await docService.shutdown();
+  }
+}
 
 export function createScrapeCommand(program: Command): Command {
   return program
@@ -96,84 +174,7 @@ export function createScrapeCommand(program: Command): Command {
     )
     .option(
       "--server-url <url>",
-      "URL of external pipeline worker API (e.g., http://localhost:6280/api)",
+      "URL of external pipeline worker RPC (e.g., http://localhost:6280/api)",
     )
-    .action(
-      async (
-        library: string,
-        url: string,
-        options: {
-          version?: string;
-          maxPages: string;
-          maxDepth: string;
-          maxConcurrency: string;
-          ignoreErrors: boolean;
-          scope: string;
-          followRedirects: boolean;
-          scrapeMode: ScrapeMode;
-          includePattern: string[];
-          excludePattern: string[];
-          header: string[];
-          serverUrl?: string;
-        },
-        command,
-      ) => {
-        const globalOptions = command.parent?.opts() || {};
-        setupLogging(globalOptions);
-
-        const docService = new DocumentManagementService();
-        let pipeline: IPipeline | null = null;
-
-        try {
-          await docService.initialize();
-
-          // Use server-url if provided, otherwise run locally
-          const pipelineOptions: PipelineOptions = {
-            recoverJobs: false, // CLI: no job recovery (immediate execution)
-            concurrency: 1, // CLI: single job at a time
-            serverUrl: options.serverUrl, // Use external worker if specified
-          };
-
-          pipeline = await PipelineFactory.createPipeline(docService, pipelineOptions);
-          await pipeline.start();
-          const scrapeTool = new ScrapeTool(pipeline);
-
-          // Parse headers from CLI options
-          const headers = parseHeaders(options.header);
-
-          const result = await scrapeTool.execute({
-            url,
-            library,
-            version: options.version,
-            options: {
-              maxPages: Number.parseInt(options.maxPages),
-              maxDepth: Number.parseInt(options.maxDepth),
-              maxConcurrency: Number.parseInt(options.maxConcurrency),
-              ignoreErrors: options.ignoreErrors,
-              scope: options.scope as "subpages" | "hostname" | "domain",
-              followRedirects: options.followRedirects,
-              scrapeMode: options.scrapeMode,
-              includePatterns:
-                Array.isArray(options.includePattern) && options.includePattern.length > 0
-                  ? options.includePattern
-                  : undefined,
-              excludePatterns:
-                Array.isArray(options.excludePattern) && options.excludePattern.length > 0
-                  ? options.excludePattern
-                  : undefined,
-              headers: Object.keys(headers).length > 0 ? headers : undefined,
-            },
-          });
-
-          if ("pagesScraped" in result) {
-            console.log(`✅ Successfully scraped ${result.pagesScraped} pages`);
-          } else {
-            console.log(`🚀 Scraping job started with ID: ${result.jobId}`);
-          }
-        } finally {
-          if (pipeline) await pipeline.stop();
-          await docService.shutdown();
-        }
-      },
-    );
+    .action(scrapeAction);
 }

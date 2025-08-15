@@ -1,9 +1,9 @@
 import type { DocumentManagementService } from "../store";
 import { DEFAULT_MAX_CONCURRENCY } from "../utils/config";
 import { logger } from "../utils/logger";
-import type { IPipeline, PipelineOptions } from "./interfaces";
 import { PipelineClient } from "./PipelineClient";
 import { PipelineManager } from "./PipelineManager";
+import type { IPipeline, PipelineOptions } from "./trpc/interfaces";
 
 /**
  * Factory for creating pipeline interfaces based on functionality requirements.
@@ -16,8 +16,20 @@ export namespace PipelineFactory {
    * @param options - Pipeline configuration options
    * @returns Pipeline interface (PipelineManager or future PipelineClient)
    */
+  // Overload: Local pipeline (in-process worker)
   export async function createPipeline(
     docService: DocumentManagementService,
+    options?: Omit<PipelineOptions, "serverUrl">,
+  ): Promise<PipelineManager>;
+  // Overload: Remote pipeline client (out-of-process worker)
+  export async function createPipeline(
+    docService: undefined,
+    options: Required<Pick<PipelineOptions, "serverUrl">> &
+      Omit<PipelineOptions, "serverUrl">,
+  ): Promise<PipelineClient>;
+  // Implementation
+  export async function createPipeline(
+    docService?: DocumentManagementService,
     options: PipelineOptions = {},
   ): Promise<IPipeline> {
     const {
@@ -37,6 +49,8 @@ export namespace PipelineFactory {
     }
 
     // Local embedded pipeline with specified behavior
-    return new PipelineManager(docService, concurrency, { recoverJobs });
+    return new PipelineManager(docService as DocumentManagementService, concurrency, {
+      recoverJobs,
+    });
   }
 }

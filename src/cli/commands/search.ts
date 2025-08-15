@@ -3,8 +3,34 @@
  */
 
 import type { Command } from "commander";
+import { createDocumentManagement } from "../../store";
 import { SearchTool } from "../../tools";
-import { formatOutput, initializeDocumentService, setupLogging } from "../utils";
+import { formatOutput, setupLogging } from "../utils";
+
+export async function searchAction(
+  library: string,
+  query: string,
+  options: { version?: string; limit: string; exactMatch: boolean; serverUrl?: string },
+  command: Command,
+) {
+  const globalOptions = command.parent?.opts() || {};
+  setupLogging(globalOptions);
+  const serverUrl = options.serverUrl;
+  const docService = await createDocumentManagement({ serverUrl });
+  try {
+    const searchTool = new SearchTool(docService);
+    const result = await searchTool.execute({
+      library,
+      version: options.version,
+      query,
+      limit: Number.parseInt(options.limit),
+      exactMatch: options.exactMatch,
+    });
+    console.log(formatOutput(result.results));
+  } finally {
+    await docService.shutdown();
+  }
+}
 
 export function createSearchCommand(program: Command): Command {
   return program
@@ -22,34 +48,9 @@ export function createSearchCommand(program: Command): Command {
     )
     .option("-l, --limit <number>", "Maximum number of results", "5")
     .option("-e, --exact-match", "Only use exact version match (default: false)", false)
-    .action(
-      async (
-        library: string,
-        query: string,
-        options: {
-          version?: string;
-          limit: string;
-          exactMatch: boolean;
-        },
-        command,
-      ) => {
-        const globalOptions = command.parent?.opts() || {};
-        setupLogging(globalOptions);
-
-        const docService = await initializeDocumentService();
-        try {
-          const searchTool = new SearchTool(docService);
-          const result = await searchTool.execute({
-            library,
-            version: options.version,
-            query,
-            limit: Number.parseInt(options.limit),
-            exactMatch: options.exactMatch,
-          });
-          console.log(formatOutput(result.results));
-        } finally {
-          await docService.shutdown();
-        }
-      },
-    );
+    .option(
+      "--server-url <url>",
+      "URL of external pipeline worker RPC (e.g., http://localhost:6280/api)",
+    )
+    .action(searchAction);
 }

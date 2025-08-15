@@ -3,17 +3,18 @@
  */
 
 import type { Command } from "commander";
+import { Option } from "commander";
 import { startAppServer } from "../../app";
 import { startStdioServer } from "../../mcp/startStdioServer";
 import { initializeTools } from "../../mcp/tools";
 import type { PipelineOptions } from "../../pipeline";
+import { createLocalDocumentManagement } from "../../store";
 import { logger } from "../../utils/logger";
 import {
   CLI_DEFAULTS,
   createAppServerConfig,
+  createPipelineWithCallbacks,
   ensurePlaywrightBrowsersInstalled,
-  initializeDocumentService,
-  initializePipeline,
   resolveProtocol,
   setupLogging,
   validatePort,
@@ -21,13 +22,24 @@ import {
 
 export function createDefaultAction(program: Command): Command {
   return program
-    .option(
-      "--protocol <type>",
-      "Protocol for MCP server: 'auto' (default), 'stdio', or 'http'",
-      "auto",
+    .addOption(
+      new Option("--protocol <protocol>", "Protocol for MCP server")
+        .choices(["auto", "stdio", "http"])
+        .default("auto"),
     )
-    .option("--port <number>", "Port for the server", CLI_DEFAULTS.HTTP_PORT.toString())
+    .addOption(
+      new Option("--port <number>", "Port for the server")
+        .argParser((v) => {
+          const n = Number(v);
+          if (!Number.isInteger(n) || n < 1 || n > 65535) {
+            throw new Error("Port must be an integer between 1 and 65535");
+          }
+          return String(n);
+        })
+        .default(CLI_DEFAULTS.HTTP_PORT.toString()),
+    )
     .option("--resume", "Resume interrupted jobs on startup", false)
+    .option("--no-resume", "Do not resume jobs on startup")
     .action(
       async (
         options: {
@@ -50,12 +62,12 @@ export function createDefaultAction(program: Command): Command {
         // Ensure browsers are installed
         ensurePlaywrightBrowsersInstalled();
 
-        const docService = await initializeDocumentService();
+        const docService = await createLocalDocumentManagement();
         const pipelineOptions: PipelineOptions = {
           recoverJobs: options.resume || false, // Use --resume flag for job recovery
           concurrency: 3,
         };
-        const pipeline = await initializePipeline(docService, pipelineOptions);
+        const pipeline = await createPipelineWithCallbacks(docService, pipelineOptions);
 
         if (resolvedProtocol === "stdio") {
           // Direct stdio mode - bypass AppServer entirely
@@ -74,7 +86,7 @@ export function createDefaultAction(program: Command): Command {
           const config = createAppServerConfig({
             enableWebInterface: true, // Enable web interface in http mode
             enableMcpServer: true, // Always enable MCP server
-            enablePipelineApi: true, // Enable pipeline API in http mode
+            enableApiServer: true, // Enable API (tRPC) in http mode
             enableWorker: true, // Always enable in-process worker for unified server
             port,
           });

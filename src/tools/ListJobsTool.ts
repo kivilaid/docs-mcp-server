@@ -1,4 +1,4 @@
-import type { IPipeline } from "../pipeline/interfaces";
+import type { IPipeline } from "../pipeline/trpc/interfaces";
 import type { PipelineJob, PipelineJobStatus } from "../pipeline/types";
 import type { JobInfo } from "./GetJobInfoTool"; // Import JobInfo
 

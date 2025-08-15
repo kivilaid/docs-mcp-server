@@ -1,6 +1,6 @@
-import type { IPipeline } from "../pipeline/interfaces";
+import type { IPipeline } from "../pipeline/trpc/interfaces";
 import { PipelineJobStatus } from "../pipeline/types";
-import type { DocumentManagementService } from "../store";
+import type { IDocumentManagement } from "../store/trpc/interfaces";
 import { logger } from "../utils/logger";
 import { ToolError } from "./errors";
 
@@ -19,7 +19,7 @@ export interface RemoveToolArgs {
  */
 export class RemoveTool {
   constructor(
-    private readonly documentManagementService: DocumentManagementService,
+    private readonly documentManagementService: IDocumentManagement,
     private readonly pipeline: IPipeline,
   ) {}
 

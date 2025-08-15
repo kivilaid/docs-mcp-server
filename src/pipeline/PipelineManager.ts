@@ -15,8 +15,8 @@ import { VersionStatus } from "../store/types";
 import { DEFAULT_MAX_CONCURRENCY } from "../utils/config";
 import { logger } from "../utils/logger";
 import { CancellationError, PipelineStateError } from "./errors";
-import type { IPipeline } from "./interfaces";
 import { PipelineWorker } from "./PipelineWorker"; // Import the worker
+import type { IPipeline } from "./trpc/interfaces";
 import type { InternalPipelineJob, PipelineJob, PipelineManagerCallbacks } from "./types";
 import { PipelineJobStatus } from "./types";
 
@@ -134,7 +134,9 @@ export class PipelineManager implements IPipeline {
   async recoverPendingJobs(): Promise<void> {
     try {
       // Reset RUNNING jobs to QUEUED (they were interrupted by server restart)
-      const runningVersions = await this.store.getRunningVersions();
+      const runningVersions = await this.store.getVersionsByStatus([
+        VersionStatus.RUNNING,
+      ]);
       for (const version of runningVersions) {
         await this.store.updateVersionStatus(version.id, VersionStatus.QUEUED);
         logger.info(
@@ -328,30 +330,30 @@ export class PipelineManager implements IPipeline {
 
     try {
       // Get the version ID to retrieve stored options
-      const versionId = await this.store.ensureLibraryAndVersion(
+      const versionId = await this.store.ensureVersion({
         library,
-        normalizedVersion,
-      );
-      const versionRecord = await this.store.getVersionWithStoredOptions(versionId);
+        version: normalizedVersion,
+      });
+      const stored = await this.store.getScraperOptions(versionId);
 
-      if (!versionRecord?.scraper_options || !versionRecord.source_url) {
+      if (!stored) {
         throw new Error(
           `No stored scraper options found for ${library}@${normalizedVersion || "unversioned"}`,
         );
       }
 
-      const storedOptions = JSON.parse(versionRecord.scraper_options);
+      const storedOptions = stored.options;
 
       // Reconstruct complete scraper options
       const completeOptions: ScraperOptions = {
-        url: versionRecord.source_url,
+        url: stored.sourceUrl,
         library,
         version: normalizedVersion,
         ...storedOptions,
       };
 
       logger.info(
-        `🔄 Re-indexing ${library}@${normalizedVersion || "unversioned"} with stored options from ${versionRecord.source_url}`,
+        `🔄 Re-indexing ${library}@${normalizedVersion || "unversioned"} with stored options from ${stored.sourceUrl}`,
       );
 
       return this.enqueueJob(library, normalizedVersion, completeOptions);

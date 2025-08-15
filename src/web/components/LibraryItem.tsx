@@ -1,4 +1,5 @@
 import type { LibraryInfo } from "../../tools/ListLibrariesTool";
+import type { VersionSummary } from "../../store/types";
 import VersionDetailsRow from "./VersionDetailsRow"; // Adjusted import path
 
 /**
@@ -27,9 +28,24 @@ const LibraryItem = ({ library }: LibraryItemProps) => (
     {/* Container for version rows */}
     <div class="mt-1">
       {library.versions.length > 0 ? (
-        library.versions.map((version) => (
-          <VersionDetailsRow libraryName={library.name} version={version} />
-        ))
+        library.versions.map((v) => {
+          // Adapt simplified tool version shape to VersionSummary expected by VersionDetailsRow
+          const adapted: VersionSummary = {
+            id: -1,
+            ref: { library: library.name, version: v.version },
+            status: v.status,
+            progress: v.progress,
+            counts: {
+              documents: v.documentCount,
+              uniqueUrls: v.uniqueUrlCount,
+            },
+            indexedAt: v.indexedAt,
+            sourceUrl: v.sourceUrl ?? undefined,
+          };
+          return (
+            <VersionDetailsRow libraryName={library.name} version={adapted} />
+          );
+        })
       ) : (
         // Display message if no versions are indexed
         <p class="text-sm text-gray-500 dark:text-gray-400 italic">

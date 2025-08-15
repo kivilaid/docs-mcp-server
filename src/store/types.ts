@@ -82,6 +82,64 @@ export interface VersionScraperOptions {
 }
 
 /**
+ * Unified return type for retrieving stored scraping configuration for a version.
+ * Includes the original source URL and the parsed scraper options used during indexing.
+ */
+export interface StoredScraperOptions {
+  sourceUrl: string;
+  options: VersionScraperOptions;
+}
+
+/**
+ * Alias for the unified scraping configuration returned by the service.
+ * Prefer ScraperConfig in new code; StoredScraperOptions remains for backward-compat.
+ */
+export type ScraperConfig = StoredScraperOptions;
+
+/**
+ * Canonical reference to a library version in the domain layer.
+ * Version uses empty string for unversioned content.
+ */
+export interface VersionRef {
+  library: string;
+  version: string; // empty string for unversioned
+}
+
+/** Normalize a VersionRef (lowercase, trim; empty string for unversioned). */
+export function normalizeVersionRef(ref: VersionRef): VersionRef {
+  return {
+    library: ref.library.trim().toLowerCase(),
+    version: (ref.version ?? "").trim().toLowerCase(),
+  };
+}
+
+/**
+ * Summary of a specific version for API/UI consumption.
+ * Aggregates status, progress and document statistics.
+ */
+export interface VersionSummary {
+  id: number;
+  ref: VersionRef;
+  status: VersionStatus;
+  /**
+   * Progress information while a version is being indexed.
+   * Omitted once status is COMPLETED to reduce noise.
+   */
+  progress?: { pages: number; maxPages: number };
+  counts: { documents: number; uniqueUrls: number };
+  indexedAt: string | null; // ISO 8601
+  sourceUrl?: string | null;
+}
+
+/**
+ * Summary of a library and its versions for API/UI consumption.
+ */
+export interface LibrarySummary {
+  library: string;
+  versions: VersionSummary[];
+}
+
+/**
  * Database version record type matching the versions table schema.
  * Uses snake_case naming to match database column names.
  */
@@ -113,26 +171,6 @@ export interface DbVersionWithLibrary extends DbVersion {
 }
 
 /**
- * Enhanced version record with computed statistics.
- * Used when we need both database fields and aggregated document stats.
- */
-export interface VersionWithStats extends DbVersion {
-  document_count: number;
-  unique_url_count: number;
-}
-
-/**
- * API-friendly version details for external consumption.
- * Uses camelCase naming for API compatibility.
- */
-export interface LibraryVersionDetails {
-  version: string; // Normalized to empty string for unversioned
-  documentCount: number;
-  uniqueUrlCount: number;
-  indexedAt: string | null; // ISO 8601 format
-}
-
-/**
  * Helper function to convert NULL version name to empty string for API compatibility.
  * Database stores NULL for unversioned content, but APIs expect empty string.
  */
@@ -141,11 +179,15 @@ export function normalizeVersionName(name: string | null): string {
 }
 
 /**
- * Helper function to convert empty string to NULL for database storage.
- * APIs use empty string for unversioned content, but database stores NULL.
+ * Helper function for version name normalization prior to storage.
+ * Policy:
+ *  - Empty string represents the unversioned variant (stored as '').
+ *  - Names are lower-cased at call sites (see resolveLibraryAndVersionIds) to enforce
+ *    case-insensitive uniqueness; this function only preserves the empty-string rule.
  */
-export function denormalizeVersionName(name: string): string | null {
-  return name === "" ? null : name;
+export function denormalizeVersionName(name: string): string {
+  // Store unversioned as empty string to leverage UNIQUE(library_id, name)
+  return name === "" ? "" : name;
 }
 
 /**

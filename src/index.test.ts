@@ -94,12 +94,12 @@ describe("CLI Flag Validation", () => {
         }
       };
 
-      expect(() => validateResumeFlag(true, "http://localhost:8080/api")).toThrow(
+      expect(() => validateResumeFlag(true, "http://localhost:8080")).toThrow(
         "--resume flag is incompatible with --server-url",
       );
 
       // These should NOT throw
-      expect(() => validateResumeFlag(false, "http://localhost:8080/api")).not.toThrow();
+      expect(() => validateResumeFlag(false, "http://localhost:8080")).not.toThrow();
       expect(() => validateResumeFlag(true, undefined)).not.toThrow();
       expect(() => validateResumeFlag(false, undefined)).not.toThrow();
     });
@@ -234,7 +234,7 @@ describe("Service Configuration Validation", () => {
     const expectedWorkerConfig = {
       enableWebInterface: false,
       enableMcpServer: false,
-      enablePipelineApi: true,
+      enableApiServer: true,
       enableWorker: true,
       port: 8080,
     };

@@ -1,5 +1,5 @@
-import type { DocumentManagementService } from "../store";
-import type { LibraryVersionDetails, StoreSearchResult } from "../store/types"; // Import LibraryVersionDetails
+import type { IDocumentManagement } from "../store/trpc/interfaces";
+import type { StoreSearchResult, VersionSummary } from "../store/types";
 import { logger } from "../utils/logger";
 import { VersionNotFoundError } from "./errors";
 
@@ -13,7 +13,12 @@ export interface SearchToolOptions {
 
 export interface SearchToolResultError {
   message: string;
-  availableVersions?: LibraryVersionDetails[]; // Use LibraryVersionDetails
+  availableVersions?: Array<{
+    version: string;
+    documentCount: number;
+    uniqueUrlCount: number;
+    indexedAt: string | null;
+  }>;
   suggestions?: string[]; // Specific to LibraryNotFoundError
 }
 
@@ -27,9 +32,9 @@ export interface SearchToolResult {
  * Returns available versions when requested version is not found.
  */
 export class SearchTool {
-  private docService: DocumentManagementService;
+  private docService: IDocumentManagement;
 
-  constructor(docService: DocumentManagementService) {
+  constructor(docService: IDocumentManagement) {
     this.docService = docService;
   }
 
@@ -43,12 +48,15 @@ export class SearchTool {
       // Fetch detailed versions using listLibraries and find the specific library
       const allLibraries = await this.docService.listLibraries();
       const libraryInfo = allLibraries.find((lib) => lib.library === library);
-      const detailedVersions = libraryInfo ? libraryInfo.versions : [];
-      throw new VersionNotFoundError(
-        library,
-        "latest", // Or perhaps the original 'version' if it wasn't 'latest'? Check logic.
-        detailedVersions,
-      );
+      const detailedVersions = libraryInfo
+        ? (libraryInfo.versions as VersionSummary[]).map((v) => ({
+            version: v.ref.version,
+            documentCount: v.counts.documents,
+            uniqueUrlCount: v.counts.uniqueUrls,
+            indexedAt: v.indexedAt,
+          }))
+        : [];
+      throw new VersionNotFoundError(library, version ?? "latest", detailedVersions);
     }
 
     // Default to 'latest' only when exactMatch is false

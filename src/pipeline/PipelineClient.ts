@@ -1,11 +1,13 @@
 /**
- * HTTP client implementation of the Pipeline interface.
- * Delegates all pipeline operations to an external worker via HTTP API.
+ * tRPC client implementation of the Pipeline interface.
+ * Delegates all pipeline operations to an external worker via tRPC router.
  */
 
+import { createTRPCProxyClient, httpBatchLink } from "@trpc/client";
 import type { ScraperOptions } from "../scraper/types";
 import { logger } from "../utils/logger";
-import type { IPipeline } from "./interfaces";
+import type { IPipeline } from "./trpc/interfaces";
+import type { PipelineRouter } from "./trpc/router";
 import type { PipelineJob, PipelineJobStatus, PipelineManagerCallbacks } from "./types";
 
 /**
@@ -33,23 +35,26 @@ function deserializeJob(serializedJob: Record<string, unknown>): PipelineJob {
  */
 export class PipelineClient implements IPipeline {
   private readonly baseUrl: string;
+  private readonly client: ReturnType<typeof createTRPCProxyClient<PipelineRouter>>;
   private pollingInterval: number = 1000; // 1 second
   private activePolling = new Set<string>(); // Track jobs being polled for completion
 
   constructor(serverUrl: string) {
-    // Use the provided URL as-is, just remove trailing slash for consistency
     this.baseUrl = serverUrl.replace(/\/$/, "");
-    logger.debug(`PipelineClient created for: ${this.baseUrl}`);
+    this.client = createTRPCProxyClient<PipelineRouter>({
+      links: [httpBatchLink({ url: this.baseUrl })],
+    });
+    logger.debug(`PipelineClient (tRPC) created for: ${this.baseUrl}`);
   }
 
   async start(): Promise<void> {
-    // Check if external worker is available
+    // Check connectivity via ping
     try {
-      const response = await fetch(`${this.baseUrl}/health`);
-      if (!response.ok) {
-        throw new Error(`External worker health check failed: ${response.status}`);
-      }
-      logger.debug("PipelineClient connected to external worker");
+      // Root-level ping exists on the unified router; cast for this health check only
+      await (
+        this.client as unknown as { ping: { query: () => Promise<unknown> } }
+      ).ping.query();
+      logger.debug("PipelineClient connected to external worker via tRPC");
     } catch (error) {
       throw new Error(
         `Failed to connect to external worker at ${this.baseUrl}: ${error instanceof Error ? error.message : String(error)}`,
@@ -69,28 +74,17 @@ export class PipelineClient implements IPipeline {
     options: ScraperOptions,
   ): Promise<string> {
     try {
-      const response = await fetch(`${this.baseUrl}/jobs`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          library,
-          version,
-          options,
-        }),
+      const normalizedVersion =
+        typeof version === "string" && version.trim().length === 0
+          ? null
+          : (version ?? null);
+      const result = await this.client.enqueueJob.mutate({
+        library,
+        version: normalizedVersion,
+        options,
       });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Failed to enqueue job: ${response.status} ${errorText}`);
-      }
-
-      const result = await response.json();
-      const jobId = result.jobId;
-
-      logger.debug(`Job ${jobId} enqueued successfully`);
-      return jobId;
+      logger.debug(`Job ${result.jobId} enqueued successfully`);
+      return result.jobId;
     } catch (error) {
       throw new Error(
         `Failed to enqueue job: ${error instanceof Error ? error.message : String(error)}`,
@@ -100,18 +94,10 @@ export class PipelineClient implements IPipeline {
 
   async getJob(jobId: string): Promise<PipelineJob | undefined> {
     try {
-      const response = await fetch(`${this.baseUrl}/jobs/${jobId}`);
-
-      if (response.status === 404) {
-        return undefined;
-      }
-
-      if (!response.ok) {
-        throw new Error(`Failed to get job: ${response.status} ${response.statusText}`);
-      }
-
-      const serializedJob = await response.json();
-      return deserializeJob(serializedJob);
+      const serializedJob = await this.client.getJob.query({ id: jobId });
+      return serializedJob
+        ? deserializeJob(serializedJob as unknown as Record<string, unknown>)
+        : undefined;
     } catch (error) {
       throw new Error(
         `Failed to get job ${jobId}: ${error instanceof Error ? error.message : String(error)}`,
@@ -121,21 +107,11 @@ export class PipelineClient implements IPipeline {
 
   async getJobs(status?: PipelineJobStatus): Promise<PipelineJob[]> {
     try {
-      const url = new URL(`${this.baseUrl}/jobs`);
-      if (status) {
-        url.searchParams.set("status", status);
-      }
-
-      const response = await fetch(url.toString());
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Failed to get jobs: ${response.status} ${errorText}`);
-      }
-
-      const result = await response.json();
+      const result = await this.client.getJobs.query({ status });
       const serializedJobs = result.jobs || [];
-      return serializedJobs.map(deserializeJob);
+      return serializedJobs.map((j) =>
+        deserializeJob(j as unknown as Record<string, unknown>),
+      );
     } catch (error) {
       logger.error(`Failed to get jobs from external worker: ${error}`);
       throw error;
@@ -144,15 +120,7 @@ export class PipelineClient implements IPipeline {
 
   async cancelJob(jobId: string): Promise<void> {
     try {
-      const response = await fetch(`${this.baseUrl}/jobs/${jobId}`, {
-        method: "DELETE",
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Failed to cancel job: ${response.status} ${errorText}`);
-      }
-
+      await this.client.cancelJob.mutate({ id: jobId });
       logger.debug(`Job cancelled via external worker: ${jobId}`);
     } catch (error) {
       logger.error(`Failed to cancel job ${jobId} via external worker: ${error}`);
@@ -162,18 +130,7 @@ export class PipelineClient implements IPipeline {
 
   async clearCompletedJobs(): Promise<number> {
     try {
-      const response = await fetch(`${this.baseUrl}/jobs`, {
-        method: "DELETE",
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(
-          `Failed to clear completed jobs: ${response.status} ${errorText}`,
-        );
-      }
-
-      const result = await response.json();
+      const result = await this.client.clearCompletedJobs.mutate();
       logger.debug(`Cleared ${result.count} completed jobs via external worker`);
       return result.count || 0;
     } catch (error) {

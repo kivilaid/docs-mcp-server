@@ -3,7 +3,7 @@
  * This service starts the pipeline and configures it for background job processing.
  */
 
-import type { IPipeline } from "../pipeline/interfaces";
+import type { IPipeline } from "../pipeline/trpc/interfaces";
 import { logger } from "../utils/logger";
 
 /**

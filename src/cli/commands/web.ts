@@ -3,14 +3,16 @@
  */
 
 import type { Command } from "commander";
+import { Option } from "commander";
 import { startAppServer } from "../../app";
 import type { PipelineOptions } from "../../pipeline";
+import { createDocumentManagement } from "../../store";
+import type { IDocumentManagement } from "../../store/trpc/interfaces";
 import { logger } from "../../utils/logger";
 import {
   CLI_DEFAULTS,
   createAppServerConfig,
-  initializeDocumentService,
-  initializePipeline,
+  createPipelineWithCallbacks,
   setupLogging,
   validatePort,
 } from "../utils";
@@ -19,14 +21,20 @@ export function createWebCommand(program: Command): Command {
   return program
     .command("web")
     .description("Start web interface only")
-    .option(
-      "--port <number>",
-      "Port for the web interface",
-      CLI_DEFAULTS.WEB_PORT.toString(),
+    .addOption(
+      new Option("--port <number>", "Port for the web interface")
+        .argParser((v) => {
+          const n = Number(v);
+          if (!Number.isInteger(n) || n < 1 || n > 65535) {
+            throw new Error("Port must be an integer between 1 and 65535");
+          }
+          return String(n);
+        })
+        .default(CLI_DEFAULTS.WEB_PORT.toString()),
     )
     .option(
       "--server-url <url>",
-      "URL of external pipeline worker API (e.g., http://localhost:6280/api)",
+      "URL of external pipeline worker RPC (e.g., http://localhost:6280/api)",
     )
     .action(
       async (
@@ -43,19 +51,24 @@ export function createWebCommand(program: Command): Command {
         setupLogging(globalOptions);
 
         try {
-          const docService = await initializeDocumentService();
+          const docService: IDocumentManagement = await createDocumentManagement({
+            serverUrl,
+          });
           const pipelineOptions: PipelineOptions = {
             recoverJobs: false, // Web command doesn't support job recovery
             serverUrl,
             concurrency: 3,
           };
-          const pipeline = await initializePipeline(docService, pipelineOptions);
+          const pipeline = await createPipelineWithCallbacks(
+            serverUrl ? undefined : (docService as unknown as never),
+            pipelineOptions,
+          );
 
           // Configure web-only server
           const config = createAppServerConfig({
             enableWebInterface: true,
             enableMcpServer: false,
-            enablePipelineApi: false,
+            enableApiServer: false,
             enableWorker: !serverUrl,
             port,
             externalWorkerUrl: serverUrl,

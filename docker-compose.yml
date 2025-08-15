@@ -14,10 +14,17 @@ services:
       dockerfile: Dockerfile
     command: ["worker", "--port", "8080"]
     container_name: docs-mcp-worker
+    restart: unless-stopped
     env_file:
       - .env
     volumes:
       - docs-mcp-data:/data
+    healthcheck:
+      test: 'node -e ''require("net").connect(8080, "127.0.0.1").on("connect",()=>process.exit(0)).on("error",()=>process.exit(1))'''
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
     deploy:
       resources:
         limits:
@@ -42,15 +49,14 @@ services:
         "http://worker:8080/api",
       ]
     container_name: docs-mcp-server
+    restart: unless-stopped
     ports:
       - "6280:6280"
     env_file:
       - .env
-    volumes:
-      # For now we use the same volume for all services
-      - docs-mcp-data:/data
     depends_on:
-      - worker
+      worker:
+        condition: service_healthy
     deploy:
       resources:
         limits:
@@ -66,14 +72,14 @@ services:
       dockerfile: Dockerfile
     command: ["web", "--port", "6281", "--server-url", "http://worker:8080/api"]
     container_name: docs-mcp-web
+    restart: unless-stopped
     ports:
       - "6281:6281"
     env_file:
       - .env
-    volumes:
-      - docs-mcp-data:/data
     depends_on:
-      - worker
+      worker:
+        condition: service_healthy
     deploy:
       resources:
         limits:

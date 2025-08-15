@@ -1,4 +1,4 @@
-import type { LibraryVersionDetails } from "../../store/types";
+import type { VersionSummary } from "../../store/types";
 import VersionBadge from "./VersionBadge"; // Adjusted import path
 import LoadingSpinner from "./LoadingSpinner"; // Import spinner
 
@@ -6,7 +6,7 @@ import LoadingSpinner from "./LoadingSpinner"; // Import spinner
  * Props for the VersionDetailsRow component.
  */
 interface VersionDetailsRowProps {
-  version: LibraryVersionDetails;
+  version: VersionSummary;
   libraryName: string;
   showDelete?: boolean; // Optional prop to control delete button visibility
 }
@@ -26,9 +26,9 @@ const VersionDetailsRow = ({
     ? new Date(version.indexedAt).toLocaleDateString()
     : "N/A";
   // Display 'Unversioned' if version string is empty
-  const versionLabel = version.version || "Unversioned";
+  const versionLabel = version.ref.version || "Unversioned";
   // Use empty string for unversioned in param and rowId
-  const versionParam = version.version || "";
+  const versionParam = version.ref.version || "";
 
   // Sanitize both libraryName and versionParam for valid CSS selector
   const sanitizedLibraryName = libraryName.replace(/[^a-zA-Z0-9-_]/g, "-");
@@ -52,8 +52,8 @@ const VersionDetailsRow = ({
         class="text-sm text-gray-900 dark:text-white w-1/4 truncate"
         title={versionLabel}
       >
-        {version.version ? (
-          <VersionBadge version={version.version} />
+        {version.ref.version ? (
+          <VersionBadge version={version.ref.version} />
         ) : (
           <span>Unversioned</span>
         )}
@@ -64,13 +64,13 @@ const VersionDetailsRow = ({
         <span title="Number of unique pages indexed">
           Pages:{" "}
           <span class="font-semibold" safe>
-            {version.uniqueUrlCount.toLocaleString()}
+            {version.counts.uniqueUrls.toLocaleString()}
           </span>
         </span>
         <span title="Number of indexed snippets">
           Snippets:{" "}
           <span class="font-semibold" safe>
-            {version.documentCount.toLocaleString()}
+            {version.counts.documents.toLocaleString()}
           </span>
         </span>
         <span title="Date last indexed">

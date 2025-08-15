@@ -4,14 +4,14 @@
 
 The system supports two deployment patterns with automatic protocol detection for seamless integration with different environments.
 
-## Unified Server Mode
+## Standalone Server Mode
 
 Single process containing all services on one port (default: 6280). This mode combines:
 
 - MCP server accessible via `/mcp` and `/sse` endpoints
 - Web interface for job management
 - Embedded worker for document processing
-- Pipeline API for programmatic access
+- API (tRPC over HTTP) for programmatic access
 
 ### Use Cases
 
@@ -27,7 +27,7 @@ Services can be selectively enabled via AppServerConfig:
 - `enableMcpServer`: MCP protocol endpoint
 - `enableWebInterface`: Web UI and management API
 - `enableWorker`: Embedded job processing
-- `enablePipelineApi`: HTTP API for job operations
+- `enableApiServer`: HTTP API for pipeline and data operations (served at `/api`)
 
 ## Distributed Mode
 
@@ -35,9 +35,9 @@ Separate coordinator and worker processes for scaling. The coordinator handles i
 
 ### Architecture
 
-- **Coordinator**: Runs MCP server, web interface, and pipeline API
-- **Workers**: Execute document processing jobs via HTTP API
-- **Communication**: REST API between coordinator and workers
+- **Coordinator**: Runs MCP server, web interface, and API
+- **Workers**: Execute document processing jobs
+- **Communication**: Coordinator uses the API (tRPC over HTTP) to talk to workers
 
 ### Use Cases
 
@@ -48,7 +48,7 @@ Separate coordinator and worker processes for scaling. The coordinator handles i
 
 ### Worker Management
 
-Workers expose `/api/health` endpoint for monitoring. Coordinators route jobs to available workers via round-robin or configured strategy.
+Workers may expose a simple `/health` or container-level healthcheck for monitoring. Coordinators communicate with workers via Pipeline RPC.
 
 ## Protocol Auto-Detection
 
@@ -75,7 +75,7 @@ if (!process.stdin.isTTY && !process.stdout.isTTY) {
 
 - Server-Sent Events transport for MCP
 - Full web interface available
-- Pipeline API accessible
+- API accessible at `/api`
 - Suitable for browser access
 
 ### Manual Override
@@ -99,7 +99,7 @@ Protocol can be explicitly set via `--protocol stdio|http` flag, bypassing auto-
 
 Job recovery behavior depends on deployment mode:
 
-### Unified Server
+### Standalone Server
 
 - Embedded worker recovers pending jobs from database
 - Enabled by default for persistent job processing
@@ -134,7 +134,7 @@ services:
   coordinator:
     image: ghcr.io/arabold/docs-mcp-server:latest
     ports: ["6280:6280"]
-    command: ["mcp", "--server-url", "http://worker:8080/api"]
+  command: ["mcp", "--server-url", "http://worker:8080/api"]
 
   worker:
     image: ghcr.io/arabold/docs-mcp-server:latest
@@ -146,11 +146,11 @@ services:
 
 ### Multiple Workers
 
-Coordinators can balance load across multiple workers by configuring multiple server URLs or using a load balancer.
+Use a load balancer (or DNS) in front of multiple worker instances. The coordinator is configured with a single `--server-url` that points to the balancer.
 
 ### Health Checks
 
-Workers expose `/api/health` endpoint for load balancer health checks and coordinator monitoring.
+Expose a lightweight `/health` endpoint or container healthcheck for load balancers and monitoring.
 
 ### Scaling Strategies
 

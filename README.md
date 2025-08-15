@@ -96,7 +96,7 @@ Add this to your MCP settings (VS Code, Claude Desktop, etc.):
 
 **Alternative connection types:**
 
-```json
+```jsonc
 // SSE (Server-Sent Events)
 "type": "sse", "url": "http://localhost:6280/sse"
 
@@ -122,7 +122,7 @@ OPENAI_API_KEY="your-key" npx @arabold/docs-mcp-server@latest list
 OPENAI_API_KEY="your-key" npx @arabold/docs-mcp-server@latest search react "useState hook"
 
 # Scrape new documentation (connects to running server's worker)
-OPENAI_API_KEY="your-key" npx @arabold/docs-mcp-server@latest scrape react https://react.dev/reference/react --server-url http://localhost:6280/api
+npx @arabold/docs-mcp-server@latest scrape react https://react.dev/reference/react --server-url http://localhost:6280/api
 ```
 
 ### Adding Library Documentation
@@ -248,9 +248,7 @@ See the tooltips in the Web UI and CLI help for more details.
 
 ## Advanced: Docker Compose (Scaling)
 
-For production deployments or when you need to scale processing, use Docker Compose to run separate services.
-
-> **Note:** This feature is work in progress and will still be improved in future releases. Currently, it still requires all services to share the same database volume, defeating its original purpose.
+For production deployments or when you need to scale processing, use Docker Compose to run separate services. The system selects a local in-process worker or a remote worker client based on configuration, keeping behavior consistent across modes.
 
 **Start the services:**
 

@@ -10,8 +10,8 @@ export interface AppServerConfig {
   /** Enable MCP protocol routes for AI tool integration */
   enableMcpServer: boolean;
 
-  /** Enable Pipeline API routes for programmatic access */
-  enablePipelineApi: boolean;
+  /** Enable API server (tRPC at /api) for programmatic access */
+  enableApiServer: boolean;
 
   /** Enable embedded worker for job processing */
   enableWorker: boolean;

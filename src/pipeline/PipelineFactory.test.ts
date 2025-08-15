@@ -21,7 +21,7 @@ describe("PipelineFactory", () => {
     it("should create PipelineManager when no serverUrl provided", async () => {
       const options = { concurrency: 5, recoverJobs: true };
 
-      await PipelineFactory.createPipeline(
+      const pipeline = await PipelineFactory.createPipeline(
         mockDocService as DocumentManagementService,
         options,
       );
@@ -30,18 +30,24 @@ describe("PipelineFactory", () => {
         recoverJobs: true,
       });
       expect(PipelineClient).not.toHaveBeenCalled();
+      // Behavior: returned instance is the one constructed by PipelineManager
+      const ManagerMock = PipelineManager as unknown as { mock: { instances: any[] } };
+      expect(pipeline).toBe(ManagerMock.mock.instances[0]);
     });
 
     it("should create PipelineClient when serverUrl provided", async () => {
       const options = { serverUrl: "http://localhost:8080", concurrency: 3 };
 
-      await PipelineFactory.createPipeline(
+      const pipeline = await PipelineFactory.createPipeline(
         mockDocService as DocumentManagementService,
         options,
       );
 
       expect(PipelineClient).toHaveBeenCalledWith("http://localhost:8080");
       expect(PipelineManager).not.toHaveBeenCalled();
+      // Behavior: returned instance is the one constructed by PipelineClient
+      const ClientMock = PipelineClient as unknown as { mock: { instances: any[] } };
+      expect(pipeline).toBe(ClientMock.mock.instances[0]);
     });
 
     it("should use default options when none provided", async () => {

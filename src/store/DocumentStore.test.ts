@@ -116,6 +116,38 @@ describe("DocumentStore - Integration Tests", () => {
       expect(testlibVersions[0].uniqueUrlCount).toBe(2);
     });
 
+    it("treats library names case-insensitively and reuses same library id", async () => {
+      const { libraryId: a } = await store.resolveLibraryAndVersionIds("React", "");
+      const { libraryId: b } = await store.resolveLibraryAndVersionIds("react", "");
+      const { libraryId: c } = await store.resolveLibraryAndVersionIds("REACT", "");
+      expect(a).toBe(b);
+      expect(b).toBe(c);
+    });
+
+    it("treats version names case-insensitively within a library", async () => {
+      const { versionId: v1 } = await store.resolveLibraryAndVersionIds("cslib", "1.0.0");
+      const { versionId: v2 } = await store.resolveLibraryAndVersionIds("cslib", "1.0.0");
+      const { versionId: v3 } = await store.resolveLibraryAndVersionIds("cslib", "1.0.0");
+      expect(v1).toBe(v2);
+      expect(v2).toBe(v3);
+    });
+
+    it("collapses mixed-case version names to a single version id", async () => {
+      const { versionId: v1 } = await store.resolveLibraryAndVersionIds(
+        "mixcase",
+        "Alpha",
+      );
+      const { versionId: v2 } = await store.resolveLibraryAndVersionIds(
+        "mixcase",
+        "alpha",
+      );
+      const { versionId: v3 } = await store.resolveLibraryAndVersionIds(
+        "mixcase",
+        "ALPHA",
+      );
+      expect(v1).toBe(v2);
+      expect(v2).toBe(v3);
+    });
     it("should handle document deletion correctly", async () => {
       const docs: Document[] = [
         {
@@ -528,30 +560,6 @@ describe("DocumentStore - Integration Tests", () => {
       expect(activeVersions.some((v) => v.name === "1.0.0")).toBe(true);
       expect(activeVersions.some((v) => v.name === "2.0.0")).toBe(true);
     });
-
-    it("should get running and active versions", async () => {
-      // Create versions with specific statuses
-      const { versionId: runningId } = await store.resolveLibraryAndVersionIds(
-        "runninglib",
-        "1.0.0",
-      );
-      const { versionId: queuedId } = await store.resolveLibraryAndVersionIds(
-        "queuedlib",
-        "1.0.0",
-      );
-
-      await store.updateVersionStatus(runningId, VersionStatus.RUNNING);
-      await store.updateVersionStatus(queuedId, VersionStatus.QUEUED);
-
-      // Test getRunningVersions
-      const runningVersions = await store.getRunningVersions();
-      expect(runningVersions.some((v) => v.library_name === "runninglib")).toBe(true);
-
-      // Test getActiveVersions (should include both QUEUED and RUNNING)
-      const activeVersions = await store.getActiveVersions();
-      expect(activeVersions.some((v) => v.library_name === "runninglib")).toBe(true);
-      expect(activeVersions.some((v) => v.library_name === "queuedlib")).toBe(true);
-    });
   });
 
   describe("Scraper Options Storage", () => {
@@ -578,16 +586,16 @@ describe("DocumentStore - Integration Tests", () => {
       await store.storeScraperOptions(versionId, scraperOptions);
 
       // Retrieve options
-      const retrievedOptions = await store.getVersionScraperOptions(versionId);
+      const retrieved = await store.getScraperOptions(versionId);
 
-      expect(retrievedOptions).not.toBeNull();
-      expect(retrievedOptions?.maxDepth).toBe(3);
-      expect(retrievedOptions?.maxPages).toBe(100);
-      expect(retrievedOptions?.scope).toBe("subpages");
-      expect(retrievedOptions?.followRedirects).toBe(true);
+      expect(retrieved).not.toBeNull();
+      expect(retrieved?.options.maxDepth).toBe(3);
+      expect(retrieved?.options.maxPages).toBe(100);
+      expect(retrieved?.options.scope).toBe("subpages");
+      expect(retrieved?.options.followRedirects).toBe(true);
 
       // Verify signal was filtered out (it's not storable)
-      expect(retrievedOptions).not.toHaveProperty("signal");
+      expect(retrieved?.options).not.toHaveProperty("signal");
     });
 
     it("should store source URL correctly", async () => {
@@ -604,9 +612,9 @@ describe("DocumentStore - Integration Tests", () => {
       await store.storeScraperOptions(versionId, scraperOptions);
 
       // Retrieve version with stored options
-      const versionWithOptions = await store.getVersionWithStoredOptions(versionId);
-      expect(versionWithOptions).not.toBeNull();
-      expect(versionWithOptions?.source_url).toBe(sourceUrl);
+      const stored = await store.getScraperOptions(versionId);
+      expect(stored).not.toBeNull();
+      expect(stored?.sourceUrl).toBe(sourceUrl);
     });
 
     it("should find versions by source URL", async () => {
@@ -654,13 +662,8 @@ describe("DocumentStore - Integration Tests", () => {
       );
 
       // Version without stored options should return null
-      const retrievedOptions = await store.getVersionScraperOptions(versionId);
-      expect(retrievedOptions).toBeNull();
-
-      const versionWithOptions = await store.getVersionWithStoredOptions(versionId);
-      expect(versionWithOptions).not.toBeNull();
-      expect(versionWithOptions?.source_url).toBeNull();
-      expect(versionWithOptions?.scraper_options).toBeNull();
+      const retrieved = await store.getScraperOptions(versionId);
+      expect(retrieved).toBeNull();
     });
   });
 

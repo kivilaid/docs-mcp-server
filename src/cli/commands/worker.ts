@@ -3,15 +3,16 @@
  */
 
 import type { Command } from "commander";
+import { Option } from "commander";
 import { startAppServer } from "../../app";
 import type { PipelineOptions } from "../../pipeline";
+import { createLocalDocumentManagement } from "../../store";
 import { logger } from "../../utils/logger";
 import {
   CLI_DEFAULTS,
   createAppServerConfig,
+  createPipelineWithCallbacks,
   ensurePlaywrightBrowsersInstalled,
-  initializeDocumentService,
-  initializePipeline,
   setupLogging,
   validatePort,
 } from "../utils";
@@ -20,8 +21,19 @@ export function createWorkerCommand(program: Command): Command {
   return program
     .command("worker")
     .description("Start external pipeline worker (HTTP API)")
-    .option("--port <number>", "Port for worker API", "8080")
+    .addOption(
+      new Option("--port <number>", "Port for worker API")
+        .argParser((v) => {
+          const n = Number(v);
+          if (!Number.isInteger(n) || n < 1 || n > 65535) {
+            throw new Error("Port must be an integer between 1 and 65535");
+          }
+          return String(n);
+        })
+        .default("8080"),
+    )
     .option("--resume", "Resume interrupted jobs on startup", true)
+    .option("--no-resume", "Do not resume jobs on startup")
     .action(async (cmdOptions: { port: string; resume: boolean }, command) => {
       const globalOptions = command.parent?.opts() || {};
       const port = validatePort(cmdOptions.port);
@@ -35,23 +47,22 @@ export function createWorkerCommand(program: Command): Command {
         ensurePlaywrightBrowsersInstalled();
 
         // Initialize services
-        const docService = await initializeDocumentService();
+        const docService = await createLocalDocumentManagement();
         const pipelineOptions: PipelineOptions = {
           recoverJobs: cmdOptions.resume, // Use the resume option
           concurrency: CLI_DEFAULTS.MAX_CONCURRENCY,
         };
-        const pipeline = await initializePipeline(docService, pipelineOptions);
+        const pipeline = await createPipelineWithCallbacks(docService, pipelineOptions);
 
         // Configure worker-only server
         const config = createAppServerConfig({
           enableWebInterface: false,
           enableMcpServer: false,
-          enablePipelineApi: true,
+          enableApiServer: true,
           enableWorker: true,
           port,
         });
 
-        logger.info(`🚀 Starting external pipeline worker with HTTP API`);
         await startAppServer(docService, pipeline, config);
 
         await new Promise(() => {}); // Keep running forever

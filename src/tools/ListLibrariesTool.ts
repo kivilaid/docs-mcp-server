@@ -1,10 +1,19 @@
-import type { DocumentManagementService } from "../store/DocumentManagementService";
-import type { LibraryVersionDetails } from "../store/types";
+import type { IDocumentManagement } from "../store/trpc/interfaces";
+import type { VersionStatus, VersionSummary } from "../store/types";
 
 // Define the structure for the tool's output, using the detailed version info
 export interface LibraryInfo {
   name: string;
-  versions: LibraryVersionDetails[]; // Use the detailed interface
+  versions: Array<{
+    version: string;
+    documentCount: number;
+    uniqueUrlCount: number;
+    indexedAt: string | null;
+    status: VersionStatus;
+    // Progress is omitted for COMPLETED versions to reduce noise
+    progress?: { pages: number; maxPages: number };
+    sourceUrl?: string | null;
+  }>;
 }
 
 export interface ListLibrariesResult {
@@ -15,9 +24,9 @@ export interface ListLibrariesResult {
  * Tool for listing all available libraries and their indexed versions in the store.
  */
 export class ListLibrariesTool {
-  private docService: DocumentManagementService;
+  private docService: IDocumentManagement;
 
-  constructor(docService: DocumentManagementService) {
+  constructor(docService: IDocumentManagement) {
     this.docService = docService;
   }
 
@@ -29,7 +38,15 @@ export class ListLibrariesTool {
     // No complex mapping is needed here anymore, just ensure the names match
     const libraries: LibraryInfo[] = rawLibraries.map(({ library, versions }) => ({
       name: library,
-      versions: versions, // Directly assign the detailed versions array
+      versions: versions.map((v: VersionSummary) => ({
+        version: v.ref.version,
+        documentCount: v.counts.documents,
+        uniqueUrlCount: v.counts.uniqueUrls,
+        indexedAt: v.indexedAt,
+        status: v.status,
+        ...(v.progress ? { progress: v.progress } : undefined),
+        sourceUrl: v.sourceUrl,
+      })),
     }));
 
     return { libraries };

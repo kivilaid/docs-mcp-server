@@ -8,7 +8,7 @@ import { chromium } from "playwright";
 import type { AppServerConfig } from "../app";
 import type { IPipeline, PipelineOptions } from "../pipeline";
 import { PipelineFactory } from "../pipeline";
-import { DocumentManagementService } from "../store/DocumentManagementService";
+import type { DocumentManagementService } from "../store";
 import {
   DEFAULT_HTTP_PORT,
   DEFAULT_MAX_CONCURRENCY,
@@ -124,26 +124,26 @@ export function validatePort(portString: string): number {
 }
 
 /**
- * Initializes DocumentManagementService for CLI commands
+ * Creates a pipeline (local or client) and attaches default CLI callbacks.
+ * This makes the side-effects explicit and keeps creation consistent.
  */
-export async function initializeDocumentService(): Promise<DocumentManagementService> {
-  const docService = new DocumentManagementService();
-  await docService.initialize();
-  return docService;
-}
-
-/**
- * Initializes PipelineManager for CLI commands
- */
-export async function initializePipeline(
-  docService: DocumentManagementService,
+export async function createPipelineWithCallbacks(
+  docService: DocumentManagementService | undefined,
   options: PipelineOptions = {},
 ): Promise<IPipeline> {
-  logger.debug(`Initializing PipelineManager with options: ${JSON.stringify(options)}`);
-  const manager = await PipelineFactory.createPipeline(docService, options);
+  logger.debug(`Initializing pipeline with options: ${JSON.stringify(options)}`);
+  const { serverUrl, ...rest } = options;
+  const pipeline = serverUrl
+    ? await PipelineFactory.createPipeline(undefined, { serverUrl, ...rest })
+    : await (async () => {
+        if (!docService) {
+          throw new Error("Local pipeline requires a DocumentManagementService instance");
+        }
+        return PipelineFactory.createPipeline(docService, rest);
+      })();
 
   // Configure progress callbacks for real-time updates
-  manager.setCallbacks({
+  pipeline.setCallbacks({
     onJobProgress: async (job, progress) => {
       logger.debug(
         `📊 Job ${job.id} progress: ${progress.pagesScraped}/${progress.totalPages} pages`,
@@ -159,7 +159,7 @@ export async function initializePipeline(
     },
   });
 
-  return manager;
+  return pipeline;
 }
 
 /**
@@ -168,7 +168,7 @@ export async function initializePipeline(
 export function createAppServerConfig(options: {
   enableWebInterface?: boolean;
   enableMcpServer?: boolean;
-  enablePipelineApi?: boolean;
+  enableApiServer?: boolean;
   enableWorker?: boolean;
   port: number;
   externalWorkerUrl?: string;
@@ -176,7 +176,7 @@ export function createAppServerConfig(options: {
   return {
     enableWebInterface: options.enableWebInterface ?? false,
     enableMcpServer: options.enableMcpServer ?? true,
-    enablePipelineApi: options.enablePipelineApi ?? false,
+    enableApiServer: options.enableApiServer ?? false,
     enableWorker: options.enableWorker ?? true,
     port: options.port,
     externalWorkerUrl: options.externalWorkerUrl,

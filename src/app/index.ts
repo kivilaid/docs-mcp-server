@@ -10,8 +10,8 @@
 export { AppServer } from "./AppServer";
 export type { AppServerConfig } from "./AppServerConfig";
 
-import type { IPipeline } from "../pipeline/interfaces";
-import type { DocumentManagementService } from "../store/DocumentManagementService";
+import type { IPipeline } from "../pipeline/trpc/interfaces";
+import type { IDocumentManagement } from "../store/trpc/interfaces";
 import { AppServer } from "./AppServer";
 import type { AppServerConfig } from "./AppServerConfig";
 
@@ -20,7 +20,7 @@ import type { AppServerConfig } from "./AppServerConfig";
  * Convenience function for CLI integration.
  */
 export async function startAppServer(
-  docService: DocumentManagementService,
+  docService: IDocumentManagement,
   pipeline: IPipeline,
   config: AppServerConfig,
 ): Promise<AppServer> {

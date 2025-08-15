@@ -5,7 +5,7 @@
 
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { IPipeline } from "../pipeline/interfaces";
+import type { IPipeline } from "../pipeline/trpc/interfaces";
 import type { DocumentManagementService } from "../store/DocumentManagementService";
 import { AppServer } from "./AppServer";
 import type { AppServerConfig } from "./AppServerConfig";
@@ -22,8 +22,8 @@ const mockMcpService = vi.hoisted(() => ({
   cleanupMcpService: vi.fn(),
 }));
 
-const mockPipelineApiService = vi.hoisted(() => ({
-  registerPipelineApiService: vi.fn(),
+const mockTrpcService = vi.hoisted(() => ({
+  registerTrpcService: vi.fn(),
 }));
 
 const mockWebService = vi.hoisted(() => ({
@@ -48,7 +48,7 @@ vi.mock("fastify", () => ({
 }));
 
 vi.mock("../services/mcpService", () => mockMcpService);
-vi.mock("../services/pipelineApiService", () => mockPipelineApiService);
+vi.mock("../services/trpcService", () => mockTrpcService);
 vi.mock("../services/webService", () => mockWebService);
 vi.mock("../services/workerService", () => mockWorkerService);
 vi.mock("../utils/logger", () => ({ logger: mockLogger }));
@@ -78,7 +78,7 @@ describe("AppServer Behavior Tests", () => {
     mockFastify.close.mockResolvedValue(undefined);
     mockMcpService.registerMcpService.mockResolvedValue(mockMcpServer as McpServer);
     mockMcpService.cleanupMcpService.mockResolvedValue(undefined);
-    mockPipelineApiService.registerPipelineApiService.mockResolvedValue(undefined);
+    mockTrpcService.registerTrpcService.mockResolvedValue(undefined);
     mockWebService.registerWebService.mockResolvedValue(undefined);
     mockWorkerService.registerWorkerService.mockResolvedValue(undefined);
     mockWorkerService.stopWorkerService.mockResolvedValue(undefined);
@@ -89,7 +89,7 @@ describe("AppServer Behavior Tests", () => {
       const config: AppServerConfig = {
         enableWebInterface: true,
         enableMcpServer: false,
-        enablePipelineApi: false,
+        enableApiServer: false,
         enableWorker: false,
         port: 3000,
         // externalWorkerUrl not provided
@@ -110,7 +110,7 @@ describe("AppServer Behavior Tests", () => {
       const config: AppServerConfig = {
         enableWebInterface: false,
         enableMcpServer: true,
-        enablePipelineApi: false,
+        enableApiServer: false,
         enableWorker: false,
         port: 3000,
         // externalWorkerUrl not provided
@@ -131,7 +131,7 @@ describe("AppServer Behavior Tests", () => {
       const config: AppServerConfig = {
         enableWebInterface: true,
         enableMcpServer: false,
-        enablePipelineApi: false,
+        enableApiServer: false,
         enableWorker: true,
         port: 3000,
       };
@@ -149,7 +149,7 @@ describe("AppServer Behavior Tests", () => {
       const config: AppServerConfig = {
         enableWebInterface: true,
         enableMcpServer: false,
-        enablePipelineApi: false,
+        enableApiServer: false,
         enableWorker: false,
         port: 3000,
         externalWorkerUrl: "http://external-worker:8080",
@@ -164,11 +164,11 @@ describe("AppServer Behavior Tests", () => {
       expect(() => server.start()).not.toThrow();
     });
 
-    it("should warn when worker is enabled but Pipeline API is disabled", async () => {
+    it("should warn when worker is enabled but API server is disabled", async () => {
       const config: AppServerConfig = {
         enableWebInterface: false,
         enableMcpServer: false,
-        enablePipelineApi: false,
+        enableApiServer: false,
         enableWorker: true,
         port: 3000,
       };
@@ -182,7 +182,7 @@ describe("AppServer Behavior Tests", () => {
       await server.start();
 
       expect(mockLogger.warn).toHaveBeenCalledWith(
-        expect.stringContaining("Worker is enabled but Pipeline API is disabled"),
+        expect.stringContaining("API server is disabled"),
       );
     });
 
@@ -190,7 +190,7 @@ describe("AppServer Behavior Tests", () => {
       const config: AppServerConfig = {
         enableWebInterface: true,
         enableMcpServer: true,
-        enablePipelineApi: true,
+        enableApiServer: true,
         enableWorker: true,
         port: 3000,
       };
@@ -210,7 +210,7 @@ describe("AppServer Behavior Tests", () => {
       const config: AppServerConfig = {
         enableWebInterface: false,
         enableMcpServer: false,
-        enablePipelineApi: false,
+        enableApiServer: false,
         enableWorker: false,
         port: 3000,
       };
@@ -227,7 +227,7 @@ describe("AppServer Behavior Tests", () => {
       expect(mockFastify.register).toHaveBeenCalledTimes(1); // Just formbody
       expect(mockWebService.registerWebService).not.toHaveBeenCalled();
       expect(mockMcpService.registerMcpService).not.toHaveBeenCalled();
-      expect(mockPipelineApiService.registerPipelineApiService).not.toHaveBeenCalled();
+      expect(mockTrpcService.registerTrpcService).not.toHaveBeenCalled();
       expect(mockWorkerService.registerWorkerService).not.toHaveBeenCalled();
     });
 
@@ -235,7 +235,7 @@ describe("AppServer Behavior Tests", () => {
       const config: AppServerConfig = {
         enableWebInterface: true,
         enableMcpServer: false,
-        enablePipelineApi: false,
+        enableApiServer: false,
         enableWorker: true, // Required for web interface
         port: 3000,
       };
@@ -255,14 +255,14 @@ describe("AppServer Behavior Tests", () => {
       );
       expect(mockWorkerService.registerWorkerService).toHaveBeenCalledWith(mockPipeline);
       expect(mockMcpService.registerMcpService).not.toHaveBeenCalled();
-      expect(mockPipelineApiService.registerPipelineApiService).not.toHaveBeenCalled();
+      expect(mockTrpcService.registerTrpcService).not.toHaveBeenCalled();
     });
 
     it("should register only MCP server when enabled", async () => {
       const config: AppServerConfig = {
         enableWebInterface: false,
         enableMcpServer: true,
-        enablePipelineApi: false,
+        enableApiServer: false,
         enableWorker: true, // Required for MCP server
         port: 3000,
       };
@@ -282,14 +282,15 @@ describe("AppServer Behavior Tests", () => {
       );
       expect(mockWorkerService.registerWorkerService).toHaveBeenCalledWith(mockPipeline);
       expect(mockWebService.registerWebService).not.toHaveBeenCalled();
-      expect(mockPipelineApiService.registerPipelineApiService).not.toHaveBeenCalled();
+      // tRPC service should not be registered in this mode
+      expect(mockTrpcService.registerTrpcService).not.toHaveBeenCalled();
     });
 
-    it("should register only Pipeline API when enabled", async () => {
+    it("should register only API when enabled", async () => {
       const config: AppServerConfig = {
         enableWebInterface: false,
         enableMcpServer: false,
-        enablePipelineApi: true,
+        enableApiServer: true,
         enableWorker: false,
         port: 3000,
       };
@@ -302,9 +303,10 @@ describe("AppServer Behavior Tests", () => {
 
       await server.start();
 
-      expect(mockPipelineApiService.registerPipelineApiService).toHaveBeenCalledWith(
+      expect(mockTrpcService.registerTrpcService).toHaveBeenCalledWith(
         mockFastify,
         mockPipeline,
+        mockDocService,
       );
       expect(mockWebService.registerWebService).not.toHaveBeenCalled();
       expect(mockMcpService.registerMcpService).not.toHaveBeenCalled();
@@ -315,7 +317,7 @@ describe("AppServer Behavior Tests", () => {
       const config: AppServerConfig = {
         enableWebInterface: true,
         enableMcpServer: true,
-        enablePipelineApi: true,
+        enableApiServer: true,
         enableWorker: true,
         port: 3000,
       };
@@ -338,9 +340,10 @@ describe("AppServer Behavior Tests", () => {
         mockDocService,
         mockPipeline,
       );
-      expect(mockPipelineApiService.registerPipelineApiService).toHaveBeenCalledWith(
+      expect(mockTrpcService.registerTrpcService).toHaveBeenCalledWith(
         mockFastify,
         mockPipeline,
+        mockDocService,
       );
       expect(mockWorkerService.registerWorkerService).toHaveBeenCalledWith(mockPipeline);
     });
@@ -349,7 +352,7 @@ describe("AppServer Behavior Tests", () => {
       const config: AppServerConfig = {
         enableWebInterface: true,
         enableMcpServer: false,
-        enablePipelineApi: false,
+        enableApiServer: false,
         enableWorker: true,
         port: 3000,
       };
@@ -381,7 +384,7 @@ describe("AppServer Behavior Tests", () => {
       const config: AppServerConfig = {
         enableWebInterface: false,
         enableMcpServer: false,
-        enablePipelineApi: true,
+        enableApiServer: true,
         enableWorker: false,
         port: 4000,
       };
@@ -405,7 +408,7 @@ describe("AppServer Behavior Tests", () => {
       const config: AppServerConfig = {
         enableWebInterface: true,
         enableMcpServer: true,
-        enablePipelineApi: true,
+        enableApiServer: true,
         enableWorker: true,
         port: 3000,
       };
@@ -425,11 +428,9 @@ describe("AppServer Behavior Tests", () => {
         expect.stringContaining("Web interface:"),
       );
       expect(mockLogger.info).toHaveBeenCalledWith(
-        expect.stringContaining("MCP endpoint:"),
+        expect.stringContaining("MCP endpoints:"),
       );
-      expect(mockLogger.info).toHaveBeenCalledWith(
-        expect.stringContaining("Pipeline API:"),
-      );
+      expect(mockLogger.info).toHaveBeenCalledWith(expect.stringContaining("API:"));
       expect(mockLogger.info).toHaveBeenCalledWith(
         expect.stringContaining("Embedded worker:"),
       );
@@ -439,7 +440,7 @@ describe("AppServer Behavior Tests", () => {
       const config: AppServerConfig = {
         enableWebInterface: true,
         enableMcpServer: false,
-        enablePipelineApi: false,
+        enableApiServer: false,
         enableWorker: false,
         port: 3000,
         externalWorkerUrl: "http://external-worker:8080",
@@ -465,7 +466,7 @@ describe("AppServer Behavior Tests", () => {
       const config: AppServerConfig = {
         enableWebInterface: false,
         enableMcpServer: false,
-        enablePipelineApi: true,
+        enableApiServer: true,
         enableWorker: false,
         port: 3000,
       };
@@ -489,7 +490,7 @@ describe("AppServer Behavior Tests", () => {
       const config: AppServerConfig = {
         enableWebInterface: true,
         enableMcpServer: true,
-        enablePipelineApi: true,
+        enableApiServer: true,
         enableWorker: true,
         port: 3000,
       };
@@ -515,7 +516,7 @@ describe("AppServer Behavior Tests", () => {
       const config: AppServerConfig = {
         enableWebInterface: false,
         enableMcpServer: false,
-        enablePipelineApi: true,
+        enableApiServer: true,
         enableWorker: false,
         port: 3000,
       };
@@ -541,7 +542,7 @@ describe("AppServer Behavior Tests", () => {
       const config: AppServerConfig = {
         enableWebInterface: false,
         enableMcpServer: true, // Enable MCP server so it gets cleaned up too
-        enablePipelineApi: false,
+        enableApiServer: false,
         enableWorker: true,
         port: 3000,
       };
@@ -565,11 +566,11 @@ describe("AppServer Behavior Tests", () => {
   });
 
   describe("Configuration Edge Cases", () => {
-    it("should handle minimal configuration with only Pipeline API", async () => {
+    it("should handle minimal configuration with only API", async () => {
       const config: AppServerConfig = {
         enableWebInterface: false,
         enableMcpServer: false,
-        enablePipelineApi: true,
+        enableApiServer: true,
         enableWorker: false,
         port: 3000,
       };
@@ -583,20 +584,19 @@ describe("AppServer Behavior Tests", () => {
       const fastifyInstance = await server.start();
 
       expect(fastifyInstance).toBe(mockFastify);
-      expect(mockPipelineApiService.registerPipelineApiService).toHaveBeenCalledWith(
+      expect(mockTrpcService.registerTrpcService).toHaveBeenCalledWith(
         mockFastify,
         mockPipeline,
+        mockDocService,
       );
-      expect(mockLogger.info).toHaveBeenCalledWith(
-        expect.stringContaining("Pipeline API:"),
-      );
+      expect(mockLogger.info).toHaveBeenCalledWith(expect.stringContaining("API:"));
     });
 
     it("should handle configuration with both embedded and external worker", async () => {
       const config: AppServerConfig = {
         enableWebInterface: true,
         enableMcpServer: false,
-        enablePipelineApi: false,
+        enableApiServer: false,
         enableWorker: true,
         port: 3000,
         externalWorkerUrl: "http://external-worker:8080", // This should be ignored
@@ -624,7 +624,7 @@ describe("AppServer Behavior Tests", () => {
       const config: AppServerConfig = {
         enableWebInterface: false,
         enableMcpServer: false,
-        enablePipelineApi: true,
+        enableApiServer: true,
         enableWorker: false,
         port: 65535, // Maximum valid port
       };

@@ -19,12 +19,14 @@ import { DocumentRetrieverService } from "./DocumentRetrieverService";
 import { DocumentStore } from "./DocumentStore";
 import { StoreError } from "./errors";
 import type {
-  DbVersion,
   DbVersionWithLibrary,
   FindVersionResult,
-  LibraryVersionDetails,
+  LibrarySummary,
+  ScraperConfig,
   StoreSearchResult,
-  VersionScraperOptions,
+  VersionRef,
+  VersionStatus,
+  VersionSummary,
 } from "./types";
 
 /**
@@ -119,17 +121,8 @@ export class DocumentManagementService {
   /**
    * Gets versions by their current status.
    */
-  async getVersionsByStatus(
-    statuses: import("./types").VersionStatus[],
-  ): Promise<import("./types").DbVersionWithLibrary[]> {
+  async getVersionsByStatus(statuses: VersionStatus[]): Promise<DbVersionWithLibrary[]> {
     return this.store.getVersionsByStatus(statuses);
-  }
-
-  /**
-   * Gets all versions currently in RUNNING status.
-   */
-  async getRunningVersions(): Promise<import("./types").DbVersionWithLibrary[]> {
-    return this.store.getRunningVersions();
   }
 
   /**
@@ -137,7 +130,7 @@ export class DocumentManagementService {
    */
   async updateVersionStatus(
     versionId: number,
-    status: import("./types").VersionStatus,
+    status: VersionStatus,
     errorMessage?: string,
   ): Promise<void> {
     return this.store.updateVersionStatus(versionId, status, errorMessage);
@@ -164,17 +157,52 @@ export class DocumentManagementService {
   /**
    * Retrieves stored scraper options for a version.
    */
-  async getVersionScraperOptions(
-    versionId: number,
-  ): Promise<VersionScraperOptions | null> {
-    return this.store.getVersionScraperOptions(versionId);
+  /**
+   * Retrieves stored scraping configuration for a version.
+   */
+  async getScraperOptions(versionId: number): Promise<ScraperConfig | null> {
+    return this.store.getScraperOptions(versionId);
   }
 
   /**
-   * Retrieves a version record with all stored options.
+   * Ensures a library/version exists using a VersionRef and returns version ID.
+   * Delegates to existing ensureLibraryAndVersion for storage.
    */
-  async getVersionWithStoredOptions(versionId: number): Promise<DbVersion | null> {
-    return this.store.getVersionWithStoredOptions(versionId);
+  async ensureVersion(ref: VersionRef): Promise<number> {
+    const normalized = {
+      library: ref.library.trim().toLowerCase(),
+      version: (ref.version ?? "").trim().toLowerCase(),
+    };
+    return this.ensureLibraryAndVersion(normalized.library, normalized.version);
+  }
+
+  /**
+   * Returns enriched library summaries including version status/progress and counts.
+   * Uses existing store APIs; keeps DB details encapsulated.
+   */
+  async listLibraries(): Promise<LibrarySummary[]> {
+    const libMap = await this.store.queryLibraryVersions();
+    const summaries: LibrarySummary[] = [];
+    for (const [library, versions] of libMap) {
+      const vs = versions.map(
+        (v) =>
+          ({
+            id: v.versionId,
+            ref: { library, version: v.version },
+            status: v.status as VersionStatus,
+            // Include progress only while indexing is active; set undefined for COMPLETED
+            progress:
+              v.status === "completed"
+                ? undefined
+                : { pages: v.progressPages, maxPages: v.progressMaxPages },
+            counts: { documents: v.documentCount, uniqueUrls: v.uniqueUrlCount },
+            indexedAt: v.indexedAt,
+            sourceUrl: v.sourceUrl ?? undefined,
+          }) satisfies VersionSummary,
+      );
+      summaries.push({ library, versions: vs });
+    }
+    return summaries;
   }
 
   /**
@@ -391,25 +419,7 @@ export class DocumentManagementService {
     return this.documentRetriever.search(library, normalizedVersion, query, limit);
   }
 
-  async listLibraries(): Promise<
-    Array<{ library: string; versions: LibraryVersionDetails[] }>
-  > {
-    // queryLibraryVersions now returns the detailed map directly
-    const libraryMap = await this.store.queryLibraryVersions();
-
-    // Transform the map into the desired array structure
-    return Array.from(libraryMap.entries()).map(([library, versions]) => ({
-      library,
-      versions, // The versions array already contains LibraryVersionDetails
-    }));
-  }
-
-  /**
-   * Gets all versions in active states (queued, running, updating).
-   */
-  async getActiveVersions(): Promise<import("./types").DbVersionWithLibrary[]> {
-    return this.store.getActiveVersions();
-  }
+  // Deprecated simple listing removed: enriched listLibraries() is canonical
 
   /**
    * Ensures a library and version exist in the database and returns the version ID.

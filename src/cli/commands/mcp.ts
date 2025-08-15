@@ -3,16 +3,18 @@
  */
 
 import type { Command } from "commander";
+import { Option } from "commander";
 import { startAppServer } from "../../app";
 import { startStdioServer } from "../../mcp/startStdioServer";
 import { initializeTools } from "../../mcp/tools";
 import type { PipelineOptions } from "../../pipeline";
+import { createDocumentManagement } from "../../store";
+import type { IDocumentManagement } from "../../store/trpc/interfaces";
 import { logger } from "../../utils/logger";
 import {
   CLI_DEFAULTS,
   createAppServerConfig,
-  initializeDocumentService,
-  initializePipeline,
+  createPipelineWithCallbacks,
   resolveProtocol,
   setupLogging,
   validatePort,
@@ -22,19 +24,25 @@ export function createMcpCommand(program: Command): Command {
   return program
     .command("mcp")
     .description("Start MCP server only")
-    .option(
-      "--protocol <type>",
-      "Protocol for MCP server: 'auto' (default), 'stdio', or 'http'",
-      CLI_DEFAULTS.PROTOCOL,
+    .addOption(
+      new Option("--protocol <protocol>", "Protocol for MCP server")
+        .choices(["auto", "stdio", "http"])
+        .default(CLI_DEFAULTS.PROTOCOL),
     )
-    .option(
-      "--port <number>",
-      "Port for the MCP server",
-      CLI_DEFAULTS.HTTP_PORT.toString(),
+    .addOption(
+      new Option("--port <number>", "Port for the MCP server")
+        .argParser((v) => {
+          const n = Number(v);
+          if (!Number.isInteger(n) || n < 1 || n > 65535) {
+            throw new Error("Port must be an integer between 1 and 65535");
+          }
+          return String(n);
+        })
+        .default(CLI_DEFAULTS.HTTP_PORT.toString()),
     )
     .option(
       "--server-url <url>",
-      "URL of external pipeline worker API (e.g., http://localhost:6280/api)",
+      "URL of external pipeline worker RPC (e.g., http://localhost:6280/api)",
     )
     .action(
       async (
@@ -54,13 +62,18 @@ export function createMcpCommand(program: Command): Command {
         setupLogging(globalOptions, resolvedProtocol);
 
         try {
-          const docService = await initializeDocumentService();
+          const docService: IDocumentManagement = await createDocumentManagement({
+            serverUrl,
+          });
           const pipelineOptions: PipelineOptions = {
             recoverJobs: false, // MCP command doesn't support job recovery
             serverUrl,
             concurrency: 3,
           };
-          const pipeline = await initializePipeline(docService, pipelineOptions);
+          const pipeline = await createPipelineWithCallbacks(
+            serverUrl ? undefined : (docService as unknown as never),
+            pipelineOptions,
+          );
 
           if (resolvedProtocol === "stdio") {
             // Direct stdio mode - bypass AppServer entirely
@@ -81,7 +94,7 @@ export function createMcpCommand(program: Command): Command {
             const config = createAppServerConfig({
               enableWebInterface: false, // Never enable web interface in mcp command
               enableMcpServer: true,
-              enablePipelineApi: false, // Never enable pipeline API in mcp command
+              enableApiServer: false, // Never enable API in mcp command
               enableWorker: !serverUrl,
               port,
               externalWorkerUrl: serverUrl,

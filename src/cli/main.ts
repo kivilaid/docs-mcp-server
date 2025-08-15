@@ -4,14 +4,14 @@
 
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { IPipeline } from "../pipeline";
-import type { DocumentManagementService } from "../store/DocumentManagementService";
+import type { IDocumentManagement } from "../store/trpc/interfaces";
 import { logger } from "../utils/logger";
 import { createCliProgram } from "./index";
 
 // Module-level variables for active services and shutdown state
 let activeAppServer: Promise<{ stop: () => Promise<void> }> | null = null;
 let activeMcpStdioServer: McpServer | null = null;
-let activeDocService: DocumentManagementService | null = null;
+let activeDocService: IDocumentManagement | null = null;
 let activePipelineManager: IPipeline | null = null;
 let isShuttingDown = false;
 
@@ -67,7 +67,7 @@ const sigintHandler = async (): Promise<void> => {
 export function registerGlobalServices(services: {
   appServer?: Promise<{ stop: () => Promise<void> }>;
   mcpStdioServer?: McpServer;
-  docService?: DocumentManagementService;
+  docService?: IDocumentManagement;
   pipelineManager?: IPipeline;
 }): void {
   if (services.appServer) activeAppServer = services.appServer;
