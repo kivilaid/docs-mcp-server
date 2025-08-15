@@ -1,3 +1,20 @@
+# [1.19.0](https://github.com/arabold/docs-mcp-server/compare/v1.18.0...v1.19.0) (2025-08-15)
+
+
+### Bug Fixes
+
+* **cli:** normalizes unversioned input to null for pipeline jobs ([00c2d9d](https://github.com/arabold/docs-mcp-server/commit/00c2d9ddbad86cb143b42457494c7a96b56c3816))
+* **cli:** removed some duplicate logging ([cc56814](https://github.com/arabold/docs-mcp-server/commit/cc56814898aa9fb0032822c21f9927bf589d404c))
+* omits progress info for completed library versions ([9f87315](https://github.com/arabold/docs-mcp-server/commit/9f873153ed7c79f72677fb50058cb21d50bb46e6))
+* prevent 413 errors when embedding large documents ([ead87d1](https://github.com/arabold/docs-mcp-server/commit/ead87d100e65b6cbc3198de0658f57e44cc980f7))
+
+
+### Features
+
+* **cli:** adds --no-resume flag to CLI commands ([0624d62](https://github.com/arabold/docs-mcp-server/commit/0624d6254f8d5d9090e0096a8736340147e7cc9a))
+* **cli:** adds --server-url support to all supported CLI commands ([c4084f4](https://github.com/arabold/docs-mcp-server/commit/c4084f46f8532fbe9656f532463cbad74228b871))
+* improves version deduplication and enriches library metadata ([bd6ad33](https://github.com/arabold/docs-mcp-server/commit/bd6ad337a10adfc06baaa2000147d78cc895b06c))
+
 # [1.18.0](https://github.com/arabold/docs-mcp-server/compare/v1.17.0...v1.18.0) (2025-08-08)
 
 
