@@ -174,4 +174,53 @@ describe("HtmlLinkExtractorMiddleware", () => {
     expect(context.errors[0].message).toContain("Failed to extract links from HTML");
     expect(context.errors[0].message).toContain(errorMsg);
   });
+
+  it("should resolve mixed relative links with queries, hashes, and handle duplicates/protocols", async () => {
+    const middleware = new HtmlLinkExtractorMiddleware();
+    const sourceUrl = "http://example.com/docs/sub/page.html";
+    const html = `
+      <html><body>
+        <a href="http://external.com/page">Abs</a>
+        <a href="example-a?view=page1">Rel+Q</a>
+        <a href="/example-a?view=page1">Root+Q</a>
+        <a href="../example-a?view=page1">Parent+Q</a>
+        <a href="?view=page1">QueryOnly</a>
+        <a href="#section1">HashOnly</a>
+        <a href="example-a?view=abc#frag">Rel+Q+Hash</a>
+        <a href="example-a?view=a">DupA</a>
+        <a href="example-a?view=b">DupB</a>
+        <a href="example-a?view=a">DupARepeat</a>
+        <a href="javascript:void(0)">JS</a>
+        <a href="mailto:user@example.com?subject=Hi">Mail</a>
+        <a href="test%2Dabc?view=test%2Dabc">Encoded</a>
+        <a href="../example-a?view=zzz#h">Parent+Q+Hash</a>
+        <a href="HTTP://external.com/UP">UpperProto</a>
+        <a href="example-a.html?view=page1">HtmlExt</a>
+      </body></html>`;
+    const context = createMockContext(html, sourceUrl);
+    const next = vi.fn().mockResolvedValue(undefined);
+
+    await middleware.process(context, next);
+
+    expect(next).toHaveBeenCalledOnce();
+    const expected = [
+      "http://external.com/page",
+      "http://example.com/docs/sub/example-a?view=page1",
+      "http://example.com/example-a?view=page1",
+      "http://example.com/docs/example-a?view=page1",
+      "http://example.com/docs/sub/page.html?view=page1",
+      "http://example.com/docs/sub/page.html#section1",
+      "http://example.com/docs/sub/example-a?view=abc#frag",
+      "http://example.com/docs/sub/example-a?view=a",
+      "http://example.com/docs/sub/example-a?view=b",
+      "http://example.com/docs/sub/test%2Dabc?view=test%2Dabc",
+      "http://example.com/docs/example-a?view=zzz#h",
+      "http://external.com/UP",
+      "http://example.com/docs/sub/example-a.html?view=page1",
+    ];
+    expect(context.links).toEqual(expected);
+    expect(context.links.some((l) => l.startsWith("javascript:"))).toBe(false);
+    expect(context.links.some((l) => l.startsWith("mailto:"))).toBe(false);
+    expect(context.errors).toHaveLength(0);
+  });
 });
