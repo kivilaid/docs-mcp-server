@@ -1,13 +1,13 @@
 import type { Document, ProgressCallback } from "../../types";
 import { logger } from "../../utils/logger";
 import type { UrlNormalizerOptions } from "../../utils/url";
-import { hasSameDomain, hasSameHostname, isSubpath } from "../../utils/url";
 import { HttpFetcher } from "../fetcher";
 import type { RawContent } from "../fetcher/types";
 import { HtmlPipeline } from "../pipelines/HtmlPipeline";
 import { MarkdownPipeline } from "../pipelines/MarkdownPipeline";
 import type { ContentPipeline, ProcessedContent } from "../pipelines/types";
 import type { ScraperOptions, ScraperProgress } from "../types";
+import { isInScope } from "../utils/scope";
 import { BaseScraperStrategy, type QueueItem } from "./BaseScraperStrategy";
 
 export interface WebScraperStrategyOptions {
@@ -39,28 +39,7 @@ export class WebScraperStrategy extends BaseScraperStrategy {
     }
   }
 
-  /**
-   * Determines if a target URL should be followed based on the scope setting.
-   */
-  private isInScope(
-    baseUrl: URL,
-    targetUrl: URL,
-    scope: "subpages" | "hostname" | "domain",
-  ): boolean {
-    try {
-      // First check if the URLs are on the same domain or hostname
-      if (scope === "domain") {
-        return hasSameDomain(baseUrl, targetUrl);
-      }
-      if (scope === "hostname") {
-        return hasSameHostname(baseUrl, targetUrl);
-      }
-      // 'subpages' (default)
-      return hasSameHostname(baseUrl, targetUrl) && isSubpath(baseUrl, targetUrl);
-    } catch {
-      return false;
-    }
-  }
+  // Removed custom isInScope logic; using shared scope utility for consistent behavior
 
   /**
    * Processes a single queue item by fetching its content and processing it through pipelines.
@@ -118,14 +97,14 @@ export class WebScraperStrategy extends BaseScraperStrategy {
         return { document: undefined, links: processed.links };
       }
 
-      // Filter extracted links based on scope and custom filter
+      // Filter extracted links using shared scope logic (isInScope + computeBaseDirectory handle file vs directory base)
       const baseUrl = new URL(options.url);
       const filteredLinks = processed.links.filter((link) => {
         try {
           const targetUrl = new URL(link);
           const scope = options.scope || "subpages";
           return (
-            this.isInScope(baseUrl, targetUrl, scope) &&
+            isInScope(baseUrl, targetUrl, scope) &&
             (!this.shouldFollowLinkFn || this.shouldFollowLinkFn(baseUrl, targetUrl))
           );
         } catch {

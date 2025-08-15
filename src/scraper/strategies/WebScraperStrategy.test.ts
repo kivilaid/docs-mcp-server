@@ -714,4 +714,115 @@ describe("WebScraperStrategy", () => {
     expect(mockFetchFn).toHaveBeenCalledWith(original, expect.anything());
     expect(mockFetchFn).toHaveBeenCalledWith(expectedCanonicalFollow, expect.anything());
   });
+
+  // Integration: relative resolution from index.html with subpages scope
+  it("should follow nested descendant from index.html (subpages scope) but not upward sibling", async () => {
+    const start = "https://example.com/api/index.html";
+    const nestedRel = "aiq/agent/index.html";
+    const upwardRel = "../shared/index.html";
+    const expectedNested = "https://example.com/api/aiq/agent/index.html";
+    const expectedUpward = "https://example.com/shared/index.html";
+
+    mockFetchFn.mockImplementation(async (url: string) => {
+      if (url === start) {
+        return {
+          content: `<html><body>
+            <a href="${nestedRel}">Nested</a>
+            <a href="${upwardRel}">UpOne</a>
+          </body></html>`,
+          mimeType: "text/html",
+          source: url,
+        };
+      }
+      return {
+        content: `<html><head><title>${url}</title></head><body>${url}</body></html>`,
+        mimeType: "text/html",
+        source: url,
+      };
+    });
+
+    options.url = start;
+    options.scope = "subpages";
+    options.maxDepth = 1;
+    options.maxPages = 5;
+
+    const progressCallback = vi.fn();
+    await strategy.scrape(options, progressCallback);
+
+    expect(mockFetchFn).toHaveBeenCalledWith(start, expect.anything());
+    expect(mockFetchFn).toHaveBeenCalledWith(expectedNested, expect.anything());
+    expect(mockFetchFn).not.toHaveBeenCalledWith(expectedUpward, expect.anything());
+  });
+
+  // Integration: upward relative allowed with hostname scope
+  it("should follow upward relative link when scope=hostname", async () => {
+    const start = "https://example.com/api/index.html";
+    const nestedRel = "aiq/agent/index.html";
+    const upwardRel = "../shared/index.html";
+    const expectedNested = "https://example.com/api/aiq/agent/index.html";
+    const expectedUpward = "https://example.com/shared/index.html";
+
+    mockFetchFn.mockImplementation(async (url: string) => {
+      if (url === start) {
+        return {
+          content: `<html><body>
+            <a href="${nestedRel}">Nested</a>
+            <a href="${upwardRel}">UpOne</a>
+          </body></html>`,
+          mimeType: "text/html",
+          source: url,
+        };
+      }
+      return {
+        content: `<html><head><title>${url}</title></head><body>${url}</body></html>`,
+        mimeType: "text/html",
+        source: url,
+      };
+    });
+
+    options.url = start;
+    options.scope = "hostname";
+    options.maxDepth = 1;
+    options.maxPages = 10;
+
+    const progressCallback = vi.fn();
+    await strategy.scrape(options, progressCallback);
+
+    expect(mockFetchFn).toHaveBeenCalledWith(start, expect.anything());
+    expect(mockFetchFn).toHaveBeenCalledWith(expectedNested, expect.anything());
+    expect(mockFetchFn).toHaveBeenCalledWith(expectedUpward, expect.anything());
+  });
+
+  // Integration: directory base parity
+  it("should treat directory base and index.html base equivalently for nested descendant", async () => {
+    const startDir = "https://example.com/api/";
+    const nestedRel = "aiq/agent/index.html";
+    const expectedNested = "https://example.com/api/aiq/agent/index.html";
+
+    mockFetchFn.mockImplementation(async (url: string) => {
+      if (url === startDir) {
+        return {
+          content: `<html><body><a href="${nestedRel}">Nested</a></body></html>`,
+          mimeType: "text/html",
+          source: url,
+        };
+      }
+      return {
+        content: `<html><head><title>${url}</title></head><body>${url}</body></html>`,
+        mimeType: "text/html",
+        source: url,
+      };
+    });
+
+    options.url = startDir;
+    options.scope = "subpages";
+    options.maxDepth = 1;
+    options.maxPages = 5;
+
+    const progressCallback = vi.fn();
+    await strategy.scrape(options, progressCallback);
+
+    expect(mockFetchFn).toHaveBeenCalledWith(startDir, expect.anything());
+    expect(mockFetchFn).toHaveBeenCalledWith(expectedNested, expect.anything());
+  });
 });

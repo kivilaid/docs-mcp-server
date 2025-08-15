@@ -101,11 +101,9 @@ export function hasSameDomain(urlA: URL, urlB: URL): boolean {
  *          result = true
  */
 export function isSubpath(baseUrl: URL, targetUrl: URL): boolean {
-  // Normalize paths to ensure consistent comparison
   const basePath = baseUrl.pathname.endsWith("/")
     ? baseUrl.pathname
     : `${baseUrl.pathname}/`;
-
   return targetUrl.pathname.startsWith(basePath);
 }
 

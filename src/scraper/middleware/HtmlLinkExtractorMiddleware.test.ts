@@ -223,4 +223,56 @@ describe("HtmlLinkExtractorMiddleware", () => {
     expect(context.links.some((l) => l.startsWith("mailto:"))).toBe(false);
     expect(context.errors).toHaveLength(0);
   });
+
+  describe("relative resolution from file base (index.html)", () => {
+    it("should resolve links relative to the file's parent directory", async () => {
+      const middleware = new HtmlLinkExtractorMiddleware();
+      const sourceUrl = "http://example.com/api/index.html";
+      const html = `
+        <html><body>
+          <a href="aiq/agent/index.html">Nested</a>
+          <a href="../shared/index.html">UpOne</a>
+          <a href="?q=1">QuerySame</a>
+          <a href="#top">HashSame</a>
+        </body></html>`;
+      const context = createMockContext(html, sourceUrl);
+      const next = vi.fn().mockResolvedValue(undefined);
+
+      await middleware.process(context, next);
+
+      expect(next).toHaveBeenCalledOnce();
+      expect(context.links).toEqual([
+        "http://example.com/api/aiq/agent/index.html",
+        "http://example.com/shared/index.html",
+        "http://example.com/api/index.html?q=1",
+        "http://example.com/api/index.html#top",
+      ]);
+    });
+  });
+
+  describe("relative resolution from directory base (trailing slash)", () => {
+    it("should resolve links relative to the directory itself", async () => {
+      const middleware = new HtmlLinkExtractorMiddleware();
+      const sourceUrl = "http://example.com/api/"; // directory form
+      const html = `
+        <html><body>
+          <a href="aiq/agent/index.html">Nested</a>
+          <a href="../shared/index.html">UpOne</a>
+          <a href="?q=1">QueryDir</a>
+          <a href="#top">HashDir</a>
+        </body></html>`;
+      const context = createMockContext(html, sourceUrl);
+      const next = vi.fn().mockResolvedValue(undefined);
+
+      await middleware.process(context, next);
+
+      expect(next).toHaveBeenCalledOnce();
+      expect(context.links).toEqual([
+        "http://example.com/api/aiq/agent/index.html",
+        "http://example.com/shared/index.html",
+        "http://example.com/api/?q=1",
+        "http://example.com/api/#top",
+      ]);
+    });
+  });
 });
