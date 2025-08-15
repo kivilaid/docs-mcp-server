@@ -554,5 +554,24 @@ describe("HttpFetcher", () => {
         statusCode: 301,
       });
     });
+
+    it("should expose final redirect URL as source (canonical trailing slash + query)", async () => {
+      const fetcher = new HttpFetcher();
+      const original = "https://learn.microsoft.com/en-us/azure/bot-service";
+      const finalUrl = `${original}/?view=azure-bot-service-4.0`;
+
+      // Simulate axios response object after redirects (follow-redirects style)
+      mockedAxios.get.mockResolvedValue({
+        data: Buffer.from("<html><body>OK</body></html>", "utf-8"),
+        headers: { "content-type": "text/html" },
+        request: { res: { responseUrl: finalUrl } },
+        config: { url: finalUrl },
+      });
+
+      const result = await fetcher.fetch(original);
+
+      // Expected to FAIL before implementation change (currently returns original)
+      expect(result.source).toBe(finalUrl);
+    });
   });
 });

@@ -679,4 +679,39 @@ describe("WebScraperStrategy", () => {
       expect(receivedDocs).toHaveLength(3); // Base + 2 allowed pages
     });
   });
+
+  // Canonical redirect test: relative links resolve against canonical final URL (directory form)
+  it("should resolve relative links against canonical final URL with trailing slash + query", async () => {
+    const original = "https://learn.microsoft.com/en-us/azure/bot-service";
+    const canonical = `${original}/?view=azure-bot-service-4.0`; // What the server redirects to
+    const relHref = "bot-overview?view=azure-bot-service-4.0";
+    const expectedCanonicalFollow =
+      "https://learn.microsoft.com/en-us/azure/bot-service/bot-overview?view=azure-bot-service-4.0";
+
+    // Mock fetch: initial fetch returns HTML with relative link and final canonical source (post-redirect)
+    mockFetchFn.mockImplementation(async (url: string) => {
+      if (url === original) {
+        return {
+          content: `<html><body><a href="${relHref}">Link</a></body></html>`,
+          mimeType: "text/html",
+          source: canonical, // Final URL after redirect
+        };
+      }
+      return {
+        content: `<html><head><title>${url}</title></head><body>${url}</body></html>`,
+        mimeType: "text/html",
+        source: url,
+      };
+    });
+
+    options.url = original;
+    options.maxDepth = 1;
+    options.maxPages = 5;
+
+    const progressCallback = vi.fn();
+    await strategy.scrape(options, progressCallback);
+
+    expect(mockFetchFn).toHaveBeenCalledWith(original, expect.anything());
+    expect(mockFetchFn).toHaveBeenCalledWith(expectedCanonicalFollow, expect.anything());
+  });
 });
