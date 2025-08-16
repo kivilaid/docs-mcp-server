@@ -11,7 +11,7 @@ import type { URL } from "node:url";
 export function computeBaseDirectory(pathname: string): string {
   if (pathname === "") return "/";
   if (pathname.endsWith("/")) return pathname;
-  const lastSegment = pathname.split("/").pop() || "";
+  const lastSegment = pathname.split("/").at(-1) || "";
   const looksLikeFile = lastSegment.includes(".");
   if (looksLikeFile) {
     return pathname.replace(/\/[^/]*$/, "/");

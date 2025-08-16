@@ -44,7 +44,7 @@ export class HtmlLinkExtractorMiddleware implements ContentProcessorMiddleware {
             //
             // Reject (fallback to original page URL) if the first character is a colon or
             // there is a colon before any slash that does NOT form a valid scheme.
-            const hasScheme = /^[a-zA-Z][a-zA-Z0-9+.+-]*:/.test(trimmed);
+            const hasScheme = /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(trimmed);
             const protocolRelative = trimmed.startsWith("//");
             const firstSlash = trimmed.indexOf("/");
             const firstColon = trimmed.indexOf(":");

@@ -105,8 +105,8 @@ export abstract class BaseScraperStrategy implements ScraperStrategy {
                 (finalUrlObj.protocol === "http:" || finalUrlObj.protocol === "https:")
               ) {
                 this.canonicalBaseUrl = finalUrlObj;
-                logger.info(
-                  `ℹ️  Updated scope base after redirect: ${original.href} -> ${finalUrlObj.href}`,
+                logger.debug(
+                  `Updated scope base after redirect: ${original.href} -> ${finalUrlObj.href}`,
                 );
               } else {
                 this.canonicalBaseUrl = original;
