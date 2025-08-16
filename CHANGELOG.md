@@ -1,3 +1,16 @@
+# [1.20.0](https://github.com/arabold/docs-mcp-server/compare/v1.19.0...v1.20.0) (2025-08-16)
+
+
+### Bug Fixes
+
+* improve URL subpath detection logic for directory-like segments ([5aaa7bb](https://github.com/arabold/docs-mcp-server/commit/5aaa7bbec2335f441c49377531c6c4281de013f9))
+* properly follow links after initial redirect ([9329a77](https://github.com/arabold/docs-mcp-server/commit/9329a77d5da3c88854d346b9d3f7cbc9fea2d8b9))
+
+
+### Features
+
+* enhance link resolution with base tag handling and scope filtering for cross-origin links ([6403325](https://github.com/arabold/docs-mcp-server/commit/64033255dac2d5042ffc4c2ddef72816688c916b))
+
 # [1.19.0](https://github.com/arabold/docs-mcp-server/compare/v1.18.0...v1.19.0) (2025-08-15)
 
 
