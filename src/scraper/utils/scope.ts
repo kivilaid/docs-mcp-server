@@ -2,6 +2,24 @@
 import type { URL } from "node:url";
 
 /**
+ * Compute the effective base directory for scope=subpages.
+ * Rules:
+ * - If path ends with '/', treat as directory (keep as-is)
+ * - Else if last segment contains a dot, treat as file and use its parent directory
+ * - Else treat the path as a directory name (append '/')
+ */
+export function computeBaseDirectory(pathname: string): string {
+  if (pathname === "") return "/";
+  if (pathname.endsWith("/")) return pathname;
+  const lastSegment = pathname.split("/").at(-1) || "";
+  const looksLikeFile = lastSegment.includes(".");
+  if (looksLikeFile) {
+    return pathname.replace(/\/[^/]*$/, "/");
+  }
+  return `${pathname}/`;
+}
+
+/**
  * Returns true if the targetUrl is in scope of the baseUrl for the given scope.
  * - "subpages": same hostname, and target path starts with the parent directory of the base path
  * - "hostname": same hostname
@@ -13,19 +31,16 @@ export function isInScope(
   scope: "subpages" | "hostname" | "domain",
 ): boolean {
   if (baseUrl.protocol !== targetUrl.protocol) return false;
+
   switch (scope) {
     case "subpages": {
       if (baseUrl.hostname !== targetUrl.hostname) return false;
-      // Use the parent directory of the base path
-      const baseDir = baseUrl.pathname.endsWith("/")
-        ? baseUrl.pathname
-        : baseUrl.pathname.replace(/\/[^/]*$/, "/");
+      const baseDir = computeBaseDirectory(baseUrl.pathname);
       return targetUrl.pathname.startsWith(baseDir);
     }
     case "hostname":
       return baseUrl.hostname === targetUrl.hostname;
     case "domain": {
-      // Compare the last two segments of the hostname (e.g. example.com)
       const getDomain = (host: string) => host.split(".").slice(-2).join(".");
       return getDomain(baseUrl.hostname) === getDomain(targetUrl.hostname);
     }

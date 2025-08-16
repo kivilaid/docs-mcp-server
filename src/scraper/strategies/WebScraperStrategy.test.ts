@@ -679,4 +679,185 @@ describe("WebScraperStrategy", () => {
       expect(receivedDocs).toHaveLength(3); // Base + 2 allowed pages
     });
   });
+
+  // Canonical redirect test: relative links resolve against canonical final URL (directory form)
+  it("should resolve relative links against canonical final URL with trailing slash + query", async () => {
+    const original = "https://learn.microsoft.com/en-us/azure/bot-service";
+    const canonical = `${original}/?view=azure-bot-service-4.0`; // What the server redirects to
+    const relHref = "bot-overview?view=azure-bot-service-4.0";
+    const expectedCanonicalFollow =
+      "https://learn.microsoft.com/en-us/azure/bot-service/bot-overview?view=azure-bot-service-4.0";
+
+    // Mock fetch: initial fetch returns HTML with relative link and final canonical source (post-redirect)
+    mockFetchFn.mockImplementation(async (url: string) => {
+      if (url === original) {
+        return {
+          content: `<html><body><a href="${relHref}">Link</a></body></html>`,
+          mimeType: "text/html",
+          source: canonical, // Final URL after redirect
+        };
+      }
+      return {
+        content: `<html><head><title>${url}</title></head><body>${url}</body></html>`,
+        mimeType: "text/html",
+        source: url,
+      };
+    });
+
+    options.url = original;
+    options.maxDepth = 1;
+    options.maxPages = 5;
+
+    const progressCallback = vi.fn();
+    await strategy.scrape(options, progressCallback);
+
+    expect(mockFetchFn).toHaveBeenCalledWith(original, expect.anything());
+    expect(mockFetchFn).toHaveBeenCalledWith(expectedCanonicalFollow, expect.anything());
+  });
+
+  // Integration: relative resolution from index.html with subpages scope
+  it("should follow nested descendant from index.html (subpages scope) but not upward sibling", async () => {
+    const start = "https://example.com/api/index.html";
+    const nestedRel = "aiq/agent/index.html";
+    const upwardRel = "../shared/index.html";
+    const expectedNested = "https://example.com/api/aiq/agent/index.html";
+    const expectedUpward = "https://example.com/shared/index.html";
+
+    mockFetchFn.mockImplementation(async (url: string) => {
+      if (url === start) {
+        return {
+          content: `<html><body>
+            <a href="${nestedRel}">Nested</a>
+            <a href="${upwardRel}">UpOne</a>
+          </body></html>`,
+          mimeType: "text/html",
+          source: url,
+        };
+      }
+      return {
+        content: `<html><head><title>${url}</title></head><body>${url}</body></html>`,
+        mimeType: "text/html",
+        source: url,
+      };
+    });
+
+    options.url = start;
+    options.scope = "subpages";
+    options.maxDepth = 1;
+    options.maxPages = 5;
+
+    const progressCallback = vi.fn();
+    await strategy.scrape(options, progressCallback);
+
+    expect(mockFetchFn).toHaveBeenCalledWith(start, expect.anything());
+    expect(mockFetchFn).toHaveBeenCalledWith(expectedNested, expect.anything());
+    expect(mockFetchFn).not.toHaveBeenCalledWith(expectedUpward, expect.anything());
+  });
+
+  // Integration: upward relative allowed with hostname scope
+  it("should follow upward relative link when scope=hostname", async () => {
+    const start = "https://example.com/api/index.html";
+    const nestedRel = "aiq/agent/index.html";
+    const upwardRel = "../shared/index.html";
+    const expectedNested = "https://example.com/api/aiq/agent/index.html";
+    const expectedUpward = "https://example.com/shared/index.html";
+
+    mockFetchFn.mockImplementation(async (url: string) => {
+      if (url === start) {
+        return {
+          content: `<html><body>
+            <a href="${nestedRel}">Nested</a>
+            <a href="${upwardRel}">UpOne</a>
+          </body></html>`,
+          mimeType: "text/html",
+          source: url,
+        };
+      }
+      return {
+        content: `<html><head><title>${url}</title></head><body>${url}</body></html>`,
+        mimeType: "text/html",
+        source: url,
+      };
+    });
+
+    options.url = start;
+    options.scope = "hostname";
+    options.maxDepth = 1;
+    options.maxPages = 10;
+
+    const progressCallback = vi.fn();
+    await strategy.scrape(options, progressCallback);
+
+    expect(mockFetchFn).toHaveBeenCalledWith(start, expect.anything());
+    expect(mockFetchFn).toHaveBeenCalledWith(expectedNested, expect.anything());
+    expect(mockFetchFn).toHaveBeenCalledWith(expectedUpward, expect.anything());
+  });
+
+  // Integration: directory base parity
+  it("should treat directory base and index.html base equivalently for nested descendant", async () => {
+    const startDir = "https://example.com/api/";
+    const nestedRel = "aiq/agent/index.html";
+    const expectedNested = "https://example.com/api/aiq/agent/index.html";
+
+    mockFetchFn.mockImplementation(async (url: string) => {
+      if (url === startDir) {
+        return {
+          content: `<html><body><a href="${nestedRel}">Nested</a></body></html>`,
+          mimeType: "text/html",
+          source: url,
+        };
+      }
+      return {
+        content: `<html><head><title>${url}</title></head><body>${url}</body></html>`,
+        mimeType: "text/html",
+        source: url,
+      };
+    });
+
+    options.url = startDir;
+    options.scope = "subpages";
+    options.maxDepth = 1;
+    options.maxPages = 5;
+
+    const progressCallback = vi.fn();
+    await strategy.scrape(options, progressCallback);
+
+    expect(mockFetchFn).toHaveBeenCalledWith(startDir, expect.anything());
+    expect(mockFetchFn).toHaveBeenCalledWith(expectedNested, expect.anything());
+  });
+
+  it("should not enqueue cross-origin links introduced via <base href> when scope=subpages", async () => {
+    const start = "https://example.com/app/index.html";
+    const cdnBase = "https://cdn.example.com/lib/";
+    const relLink = "script.js";
+    const resolved = `${cdnBase}${relLink}`;
+
+    mockFetchFn.mockImplementation(async (url: string) => {
+      if (url === start) {
+        return {
+          content: `<html><head><base href="${cdnBase}"></head><body><a href="${relLink}">Script</a></body></html>`,
+          mimeType: "text/html",
+          source: url,
+        };
+      }
+      // Any unexpected fetches return generic content
+      return {
+        content: `<html><head><title>${url}</title></head><body>${url}</body></html>`,
+        mimeType: "text/html",
+        source: url,
+      };
+    });
+
+    options.url = start;
+    options.scope = "subpages";
+    options.maxDepth = 1;
+    options.maxPages = 5;
+
+    const progressCallback = vi.fn();
+    await strategy.scrape(options, progressCallback);
+
+    // Should fetch only the start page; the cross-origin (different hostname) base-derived link is filtered out
+    expect(mockFetchFn).toHaveBeenCalledWith(start, expect.anything());
+    expect(mockFetchFn).not.toHaveBeenCalledWith(resolved, expect.anything());
+  });
 });

@@ -1,56 +1,63 @@
 import { describe, expect, it } from "vitest";
-import { isInScope } from "./scope";
+import { computeBaseDirectory, isInScope } from "./scope";
 
-describe("isInScope", () => {
-  const base = new URL("https://docs.example.com/docs/start");
-
-  it("returns true for subpages in subpages scope", () => {
-    expect(
-      isInScope(base, new URL("https://docs.example.com/docs/intro"), "subpages"),
-    ).toBe(true);
-    expect(
-      isInScope(base, new URL("https://docs.example.com/docs/start/child"), "subpages"),
-    ).toBe(true);
-    expect(isInScope(base, new URL("https://docs.example.com/docs"), "subpages")).toBe(
-      false,
-    );
-    expect(isInScope(base, new URL("https://docs.example.com/api"), "subpages")).toBe(
-      false,
-    );
-    expect(isInScope(base, new URL("https://other.com/docs/start"), "subpages")).toBe(
-      false,
-    );
+describe("computeBaseDirectory", () => {
+  it("returns directory unchanged when pathname ends with slash", () => {
+    expect(computeBaseDirectory("/api/")).toBe("/api/");
   });
 
-  it("returns true for same hostname in hostname scope", () => {
-    expect(
-      isInScope(base, new URL("https://docs.example.com/docs/intro"), "hostname"),
-    ).toBe(true);
-    expect(isInScope(base, new URL("https://docs.example.com/api"), "hostname")).toBe(
-      true,
-    );
-    expect(isInScope(base, new URL("https://other.com/docs/start"), "hostname")).toBe(
-      false,
-    );
+  it("treats file-looking path as its parent directory", () => {
+    expect(computeBaseDirectory("/api/index.html")).toBe("/api/");
+    expect(computeBaseDirectory("/deep/path/file.md")).toBe("/deep/path/");
   });
 
-  it("returns true for same domain in domain scope", () => {
-    expect(
-      isInScope(base, new URL("https://docs.example.com/docs/intro"), "domain"),
-    ).toBe(true);
-    expect(isInScope(base, new URL("https://api.example.com/"), "domain")).toBe(true);
-    expect(isInScope(base, new URL("https://other.com/docs/start"), "domain")).toBe(
-      false,
-    );
-    expect(isInScope(base, new URL("https://example.com/"), "domain")).toBe(true);
+  it("treats non-file last segment (no dot) as directory and appends slash", () => {
+    expect(computeBaseDirectory("/api")).toBe("/api/");
+    expect(computeBaseDirectory("/api/v1")).toBe("/api/v1/");
   });
 
-  it("returns false for different protocol", () => {
-    expect(
-      isInScope(base, new URL("http://docs.example.com/docs/intro"), "hostname"),
-    ).toBe(false);
-    expect(
-      isInScope(base, new URL("ftp://docs.example.com/docs/intro"), "hostname"),
-    ).toBe(false);
+  it("root path stays root", () => {
+    expect(computeBaseDirectory("/")).toBe("/");
+  });
+});
+
+describe("isInScope - subpages", () => {
+  const baseFile = new URL("https://example.com/api/index.html");
+  const baseDir = new URL("https://example.com/api/");
+  const nested = new URL("https://example.com/api/child/page.html");
+  const upward = new URL("https://example.com/shared/page.html");
+
+  it("file base acts like its parent directory for descendants", () => {
+    expect(isInScope(baseFile, nested, "subpages")).toBe(true);
+  });
+
+  it("directory base includes descendant", () => {
+    expect(isInScope(baseDir, nested, "subpages")).toBe(true);
+  });
+
+  it("file base excludes upward sibling", () => {
+    expect(isInScope(baseFile, upward, "subpages")).toBe(false);
+  });
+
+  it("non-file segment without slash acts as directory", () => {
+    const base = new URL("https://example.com/api");
+    expect(isInScope(base, nested, "subpages")).toBe(true);
+  });
+});
+
+describe("isInScope - hostname and domain", () => {
+  const base = new URL("https://docs.example.com/guide/");
+  const sameHost = new URL("https://docs.example.com/guide/intro");
+  const diffSub = new URL("https://api.example.com/endpoint");
+  const diffDomain = new URL("https://other.org/");
+
+  it("hostname scope restricts to exact hostname", () => {
+    expect(isInScope(base, sameHost, "hostname")).toBe(true);
+    expect(isInScope(base, diffSub, "hostname")).toBe(false);
+  });
+
+  it("domain scope allows different subdomains under same registrable domain", () => {
+    expect(isInScope(base, diffSub, "domain")).toBe(true);
+    expect(isInScope(base, diffDomain, "domain")).toBe(false);
   });
 });

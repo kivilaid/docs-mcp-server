@@ -1,13 +1,13 @@
 import type { Document, ProgressCallback } from "../../types";
 import { logger } from "../../utils/logger";
 import type { UrlNormalizerOptions } from "../../utils/url";
-import { hasSameDomain, hasSameHostname, isSubpath } from "../../utils/url";
 import { HttpFetcher } from "../fetcher";
 import type { RawContent } from "../fetcher/types";
 import { HtmlPipeline } from "../pipelines/HtmlPipeline";
 import { MarkdownPipeline } from "../pipelines/MarkdownPipeline";
 import type { ContentPipeline, ProcessedContent } from "../pipelines/types";
 import type { ScraperOptions, ScraperProgress } from "../types";
+import { isInScope } from "../utils/scope";
 import { BaseScraperStrategy, type QueueItem } from "./BaseScraperStrategy";
 
 export interface WebScraperStrategyOptions {
@@ -39,28 +39,7 @@ export class WebScraperStrategy extends BaseScraperStrategy {
     }
   }
 
-  /**
-   * Determines if a target URL should be followed based on the scope setting.
-   */
-  private isInScope(
-    baseUrl: URL,
-    targetUrl: URL,
-    scope: "subpages" | "hostname" | "domain",
-  ): boolean {
-    try {
-      // First check if the URLs are on the same domain or hostname
-      if (scope === "domain") {
-        return hasSameDomain(baseUrl, targetUrl);
-      }
-      if (scope === "hostname") {
-        return hasSameHostname(baseUrl, targetUrl);
-      }
-      // 'subpages' (default)
-      return hasSameHostname(baseUrl, targetUrl) && isSubpath(baseUrl, targetUrl);
-    } catch {
-      return false;
-    }
-  }
+  // Removed custom isInScope logic; using shared scope utility for consistent behavior
 
   /**
    * Processes a single queue item by fetching its content and processing it through pipelines.
@@ -75,7 +54,7 @@ export class WebScraperStrategy extends BaseScraperStrategy {
     options: ScraperOptions,
     _progressCallback?: ProgressCallback<ScraperProgress>, // Base class passes it, but not used here
     signal?: AbortSignal, // Add signal
-  ): Promise<{ document?: Document; links?: string[] }> {
+  ): Promise<{ document?: Document; links?: string[]; finalUrl?: string }> {
     const { url } = item;
 
     try {
@@ -118,14 +97,20 @@ export class WebScraperStrategy extends BaseScraperStrategy {
         return { document: undefined, links: processed.links };
       }
 
-      // Filter extracted links based on scope and custom filter
-      const baseUrl = new URL(options.url);
+      // Determine base for scope filtering:
+      // For depth 0 (initial page) use the final fetched URL (rawContent.source) so protocol/host redirects don't drop links.
+      // For deeper pages, use canonicalBaseUrl (set after first page) or fallback to original.
+      const baseUrl =
+        item.depth === 0
+          ? new URL(rawContent.source)
+          : (this.canonicalBaseUrl ?? new URL(options.url));
+
       const filteredLinks = processed.links.filter((link) => {
         try {
           const targetUrl = new URL(link);
           const scope = options.scope || "subpages";
           return (
-            this.isInScope(baseUrl, targetUrl, scope) &&
+            isInScope(baseUrl, targetUrl, scope) &&
             (!this.shouldFollowLinkFn || this.shouldFollowLinkFn(baseUrl, targetUrl))
           );
         } catch {
@@ -148,6 +133,7 @@ export class WebScraperStrategy extends BaseScraperStrategy {
           },
         } satisfies Document,
         links: filteredLinks,
+        finalUrl: rawContent.source,
       };
     } catch (error) {
       // Log fetch errors or pipeline execution errors (if run throws)

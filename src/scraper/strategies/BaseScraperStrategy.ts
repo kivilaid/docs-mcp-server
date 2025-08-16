@@ -26,6 +26,7 @@ export abstract class BaseScraperStrategy implements ScraperStrategy {
   protected pageCount = 0;
   protected totalDiscovered = 0; // Track total URLs discovered (unlimited)
   protected effectiveTotal = 0; // Track effective total (limited by maxPages)
+  protected canonicalBaseUrl?: URL; // Final URL after initial redirect (depth 0)
 
   abstract canHandle(url: string): boolean;
 
@@ -42,7 +43,7 @@ export abstract class BaseScraperStrategy implements ScraperStrategy {
   protected shouldProcessUrl(url: string, options: ScraperOptions): boolean {
     if (options.scope) {
       try {
-        const base = new URL(options.url);
+        const base = this.canonicalBaseUrl ?? new URL(options.url);
         const target = new URL(url);
         if (!isInScope(base, target, options.scope)) return false;
       } catch {
@@ -65,6 +66,7 @@ export abstract class BaseScraperStrategy implements ScraperStrategy {
   ): Promise<{
     document?: Document;
     links?: string[];
+    finalUrl?: string; // Effective fetched URL (post-redirect)
   }>;
 
   // Removed getProcessor method as processing is now handled by strategies using middleware pipelines
@@ -92,6 +94,28 @@ export abstract class BaseScraperStrategy implements ScraperStrategy {
         try {
           // Pass signal to processItem
           const result = await this.processItem(item, options, undefined, signal);
+          // If this is the root (depth 0) and we have a finalUrl differing from original, set canonicalBaseUrl
+          if (item.depth === 0 && !this.canonicalBaseUrl && result?.finalUrl) {
+            try {
+              const finalUrlStr = result.finalUrl as string;
+              const original = new URL(options.url);
+              const finalUrlObj = new URL(finalUrlStr);
+              if (
+                finalUrlObj.href !== original.href &&
+                (finalUrlObj.protocol === "http:" || finalUrlObj.protocol === "https:")
+              ) {
+                this.canonicalBaseUrl = finalUrlObj;
+                logger.debug(
+                  `Updated scope base after redirect: ${original.href} -> ${finalUrlObj.href}`,
+                );
+              } else {
+                this.canonicalBaseUrl = original;
+              }
+            } catch {
+              // Ignore canonical base errors
+              this.canonicalBaseUrl = new URL(options.url);
+            }
+          }
 
           if (result.document) {
             this.pageCount++;
@@ -174,7 +198,8 @@ export abstract class BaseScraperStrategy implements ScraperStrategy {
     this.totalDiscovered = 1; // Start with the initial URL (unlimited counter)
     this.effectiveTotal = 1; // Start with the initial URL (limited counter)
 
-    const baseUrl = new URL(options.url);
+    this.canonicalBaseUrl = new URL(options.url);
+    let baseUrl = this.canonicalBaseUrl;
     const queue = [{ url: options.url, depth: 0 } satisfies QueueItem];
 
     // Track values we've seen (either queued or visited)
@@ -205,6 +230,8 @@ export abstract class BaseScraperStrategy implements ScraperStrategy {
 
       const batch = queue.splice(0, batchSize);
       // Pass signal to processBatch
+      // Always use latest canonical base (may have been updated after first fetch)
+      baseUrl = this.canonicalBaseUrl ?? baseUrl;
       const newUrls = await this.processBatch(
         batch,
         baseUrl,

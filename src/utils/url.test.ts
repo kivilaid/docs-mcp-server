@@ -204,5 +204,21 @@ describe("URL comparison utilities", () => {
       const targetUrl = new URL("https://example.com/docs/page"); // 'doc' vs 'docs'
       expect(isSubpath(baseUrl, targetUrl)).toBe(false);
     });
+
+    it("should treat non-file last segment without slash as directory", () => {
+      const baseUrl = new URL("https://example.com/api");
+      const inside = new URL("https://example.com/api/child/page.html");
+      const outside = new URL("https://example.com/apisibling/page.html");
+      expect(isSubpath(baseUrl, inside)).toBe(true);
+      expect(isSubpath(baseUrl, outside)).toBe(false);
+    });
+
+    it("should not misclassify when filename-like segment lacks dot", () => {
+      const baseUrl = new URL("https://example.com/api/v1");
+      const nested = new URL("https://example.com/api/v1/ref/page");
+      const sibling = new URL("https://example.com/api/v1ref/page");
+      expect(isSubpath(baseUrl, nested)).toBe(true);
+      expect(isSubpath(baseUrl, sibling)).toBe(false);
+    });
   });
 });

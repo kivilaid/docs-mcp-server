@@ -83,12 +83,22 @@ export class HttpFetcher implements ContentFetcher {
           content = Buffer.from(response.data);
         }
 
+        // Determine the final effective URL after redirects (if any)
+        const finalUrl =
+          // Node follow-redirects style
+          response.request?.res?.responseUrl ||
+          // Some adapters may expose directly
+          response.request?.responseUrl ||
+          // Fallback to axios recorded config URL
+          response.config?.url ||
+          source;
+
         return {
           content,
           mimeType,
           charset,
           encoding: contentEncoding,
-          source: source,
+          source: finalUrl,
         } satisfies RawContent;
       } catch (error: unknown) {
         const axiosError = error as AxiosError;
