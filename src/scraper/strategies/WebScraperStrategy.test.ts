@@ -825,4 +825,39 @@ describe("WebScraperStrategy", () => {
     expect(mockFetchFn).toHaveBeenCalledWith(startDir, expect.anything());
     expect(mockFetchFn).toHaveBeenCalledWith(expectedNested, expect.anything());
   });
+
+  it("should not enqueue cross-origin links introduced via <base href> when scope=subpages", async () => {
+    const start = "https://example.com/app/index.html";
+    const cdnBase = "https://cdn.example.com/lib/";
+    const relLink = "script.js";
+    const resolved = `${cdnBase}${relLink}`;
+
+    mockFetchFn.mockImplementation(async (url: string) => {
+      if (url === start) {
+        return {
+          content: `<html><head><base href="${cdnBase}"></head><body><a href="${relLink}">Script</a></body></html>`,
+          mimeType: "text/html",
+          source: url,
+        };
+      }
+      // Any unexpected fetches return generic content
+      return {
+        content: `<html><head><title>${url}</title></head><body>${url}</body></html>`,
+        mimeType: "text/html",
+        source: url,
+      };
+    });
+
+    options.url = start;
+    options.scope = "subpages";
+    options.maxDepth = 1;
+    options.maxPages = 5;
+
+    const progressCallback = vi.fn();
+    await strategy.scrape(options, progressCallback);
+
+    // Should fetch only the start page; the cross-origin (different hostname) base-derived link is filtered out
+    expect(mockFetchFn).toHaveBeenCalledWith(start, expect.anything());
+    expect(mockFetchFn).not.toHaveBeenCalledWith(resolved, expect.anything());
+  });
 });

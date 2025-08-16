@@ -54,7 +54,7 @@ export class WebScraperStrategy extends BaseScraperStrategy {
     options: ScraperOptions,
     _progressCallback?: ProgressCallback<ScraperProgress>, // Base class passes it, but not used here
     signal?: AbortSignal, // Add signal
-  ): Promise<{ document?: Document; links?: string[] }> {
+  ): Promise<{ document?: Document; links?: string[]; finalUrl?: string }> {
     const { url } = item;
 
     try {
@@ -97,8 +97,14 @@ export class WebScraperStrategy extends BaseScraperStrategy {
         return { document: undefined, links: processed.links };
       }
 
-      // Filter extracted links using shared scope logic (isInScope + computeBaseDirectory handle file vs directory base)
-      const baseUrl = new URL(options.url);
+      // Determine base for scope filtering:
+      // For depth 0 (initial page) use the final fetched URL (rawContent.source) so protocol/host redirects don't drop links.
+      // For deeper pages, use canonicalBaseUrl (set after first page) or fallback to original.
+      const baseUrl =
+        item.depth === 0
+          ? new URL(rawContent.source)
+          : (this.canonicalBaseUrl ?? new URL(options.url));
+
       const filteredLinks = processed.links.filter((link) => {
         try {
           const targetUrl = new URL(link);
@@ -127,6 +133,7 @@ export class WebScraperStrategy extends BaseScraperStrategy {
           },
         } satisfies Document,
         links: filteredLinks,
+        finalUrl: rawContent.source,
       };
     } catch (error) {
       // Log fetch errors or pipeline execution errors (if run throws)

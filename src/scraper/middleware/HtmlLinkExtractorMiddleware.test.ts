@@ -275,4 +275,95 @@ describe("HtmlLinkExtractorMiddleware", () => {
       ]);
     });
   });
+
+  describe("base tag handling", () => {
+    it("resolves relative links using relative base path", async () => {
+      const middleware = new HtmlLinkExtractorMiddleware();
+      const sourceUrl = "http://example.com/site/section/page.html";
+      const html = `
+        <html>
+          <head><base href="../assets/"></head>
+          <body>
+            <a href="img/logo.png">Logo</a>
+          </body>
+        </html>`;
+      const context = createMockContext(html, sourceUrl);
+      const next = vi.fn().mockResolvedValue(undefined);
+      await middleware.process(context, next);
+      expect(context.links).toEqual(["http://example.com/site/assets/img/logo.png"]);
+    });
+
+    it("resolves links with absolute cross-origin base", async () => {
+      const middleware = new HtmlLinkExtractorMiddleware();
+      const sourceUrl = "http://example.com/app/index.html";
+      const html = `
+        <html>
+          <head><base href="https://cdn.example.com/lib/"></head>
+          <body><a href="script.js">Script</a></body>
+        </html>`;
+      const context = createMockContext(html, sourceUrl);
+      const next = vi.fn().mockResolvedValue(undefined);
+      await middleware.process(context, next);
+      expect(context.links).toEqual(["https://cdn.example.com/lib/script.js"]);
+    });
+
+    it("supports protocol-relative base", async () => {
+      const middleware = new HtmlLinkExtractorMiddleware();
+      const sourceUrl = "http://example.com/app/index.html";
+      const html = `
+        <html>
+          <head><base href="//cdn.example.com/lib/"></head>
+          <body><a href="style.css">Style</a></body>
+        </html>`;
+      const context = createMockContext(html, sourceUrl);
+      const next = vi.fn().mockResolvedValue(undefined);
+      await middleware.process(context, next);
+      expect(context.links).toEqual(["http://cdn.example.com/lib/style.css"]);
+    });
+
+    it("uses only the first base tag when multiple present", async () => {
+      const middleware = new HtmlLinkExtractorMiddleware();
+      const sourceUrl = "http://example.com/base/test.html";
+      const html = `
+        <html>
+          <head>
+            <base href="/one/">
+            <base href="/two/">
+          </head>
+          <body><a href="a">A</a></body>
+        </html>`;
+      const context = createMockContext(html, sourceUrl);
+      const next = vi.fn().mockResolvedValue(undefined);
+      await middleware.process(context, next);
+      expect(context.links).toEqual(["http://example.com/one/a"]);
+    });
+
+    it("falls back to page URL on invalid base", async () => {
+      const middleware = new HtmlLinkExtractorMiddleware();
+      const sourceUrl = "http://example.com/path/page.html";
+      const html = `
+        <html>
+          <head><base href=":bad:://"></head>
+          <body><a href="rel">Rel</a></body>
+        </html>`;
+      const context = createMockContext(html, sourceUrl);
+      const next = vi.fn().mockResolvedValue(undefined);
+      await middleware.process(context, next);
+      expect(context.links).toEqual(["http://example.com/path/rel"]);
+    });
+
+    it("handles directory page with relative base", async () => {
+      const middleware = new HtmlLinkExtractorMiddleware();
+      const sourceUrl = "http://example.com/docs/"; // directory form
+      const html = `
+        <html>
+          <head><base href="subdir/"></head>
+          <body><a href="a">A</a></body>
+        </html>`;
+      const context = createMockContext(html, sourceUrl);
+      const next = vi.fn().mockResolvedValue(undefined);
+      await middleware.process(context, next);
+      expect(context.links).toEqual(["http://example.com/docs/subdir/a"]);
+    });
+  });
 });
