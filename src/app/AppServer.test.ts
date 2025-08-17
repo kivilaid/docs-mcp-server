@@ -280,6 +280,7 @@ describe("AppServer Behavior Tests", () => {
         mockDocService,
         mockPipeline,
         undefined, // readOnly parameter defaults to false, passed as undefined from config
+        undefined, // authManager
       );
       expect(mockWorkerService.registerWorkerService).toHaveBeenCalledWith(mockPipeline);
       expect(mockWebService.registerWebService).not.toHaveBeenCalled();
@@ -341,6 +342,7 @@ describe("AppServer Behavior Tests", () => {
         mockDocService,
         mockPipeline,
         undefined, // readOnly parameter defaults to false, passed as undefined from config
+        undefined, // authManager
       );
       expect(mockTrpcService.registerTrpcService).toHaveBeenCalledWith(
         mockFastify,

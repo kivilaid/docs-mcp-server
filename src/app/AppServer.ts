@@ -8,6 +8,7 @@ import formBody from "@fastify/formbody";
 import fastifyStatic from "@fastify/static";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import Fastify, { type FastifyInstance } from "fastify";
+import { McpAuthManager } from "../auth";
 import type { IPipeline } from "../pipeline/trpc/interfaces";
 import { cleanupMcpService, registerMcpService } from "../services/mcpService";
 import { registerTrpcService } from "../services/trpcService";
@@ -24,6 +25,7 @@ import type { AppServerConfig } from "./AppServerConfig";
 export class AppServer {
   private server: FastifyInstance;
   private mcpServer: McpServer | null = null;
+  private authManager: McpAuthManager | null = null;
   private config: AppServerConfig;
 
   constructor(
@@ -117,8 +119,18 @@ export class AppServer {
    * Setup the server with plugins and conditionally enabled services.
    */
   private async setupServer(): Promise<void> {
+    // Initialize authentication if enabled
+    if (this.config.auth?.enabled) {
+      await this.initializeAuth();
+    }
+
     // Register core Fastify plugins
     await this.server.register(formBody);
+
+    // Add protected resource metadata endpoint for RFC9728 compliance
+    if (this.config.auth?.enabled && this.authManager) {
+      await this.setupAuthMetadataEndpoint();
+    }
 
     // Conditionally enable services based on configuration
     if (this.config.enableWebInterface) {
@@ -160,6 +172,7 @@ export class AppServer {
       this.docService,
       this.pipeline,
       this.config.readOnly,
+      this.authManager || undefined,
     );
     logger.debug("MCP server service enabled");
   }
@@ -189,6 +202,43 @@ export class AppServer {
       prefix: "/",
       index: false,
     });
+  }
+
+  /**
+   * Initialize OAuth2/OIDC authentication manager.
+   */
+  private async initializeAuth(): Promise<void> {
+    if (!this.config.auth) {
+      return;
+    }
+
+    this.authManager = new McpAuthManager(this.config.auth);
+    await this.authManager.initialize();
+    logger.debug("🔐 Auth manager initialized");
+  }
+
+  /**
+   * Setup protected resource metadata endpoint for RFC9728 compliance.
+   */
+  private async setupAuthMetadataEndpoint(): Promise<void> {
+    if (!this.authManager) {
+      return;
+    }
+
+    const metadata = this.authManager.getProtectedResourceMetadata();
+    if (!metadata) {
+      return;
+    }
+
+    // Register the /.well-known/oauth-protected-resource endpoint
+    this.server.get("/.well-known/oauth-protected-resource", async (_request, reply) => {
+      return reply
+        .header("Content-Type", "application/json")
+        .header("Cache-Control", "public, max-age=3600") // Cache for 1 hour
+        .send(metadata);
+    });
+
+    logger.debug("🔐 Protected resource metadata endpoint registered");
   }
 
   /**

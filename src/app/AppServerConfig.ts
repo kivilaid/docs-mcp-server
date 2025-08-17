@@ -3,6 +3,8 @@
  * Defines which services should be enabled and their configuration options.
  */
 
+import type { McpScope } from "../auth/types";
+
 export interface AppServerConfig {
   /** Enable web interface routes and static file serving */
   enableWebInterface: boolean;
@@ -24,4 +26,18 @@ export interface AppServerConfig {
 
   /** Whether to run MCP server in read-only mode */
   readOnly?: boolean;
+
+  /** Optional OAuth2/OIDC authentication configuration for MCP endpoints */
+  auth?: {
+    /** Enable OAuth2/OIDC authentication (disabled by default) */
+    enabled: boolean;
+    /** Issuer/discovery URL for the OAuth2/OIDC provider */
+    providerUrl?: string;
+    /** Canonical resource identifier (audience) for token validation */
+    resourceId?: string;
+    /** Enabled subset of supported scopes */
+    scopes: McpScope[];
+    /** Allow anonymous read access when auth is enabled (future feature) */
+    allowAnonymousRead?: boolean;
+  };
 }

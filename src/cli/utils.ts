@@ -6,6 +6,8 @@ import { execSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { chromium } from "playwright";
 import type { AppServerConfig } from "../app";
+import { ALL_SCOPES, validateScopeConfiguration } from "../auth/ScopeValidator";
+import type { AuthConfig, McpScope } from "../auth/types";
 import type { IPipeline, PipelineOptions } from "../pipeline";
 import { PipelineFactory } from "../pipeline";
 import type { DocumentManagementService } from "../store";
@@ -173,6 +175,7 @@ export function createAppServerConfig(options: {
   port: number;
   externalWorkerUrl?: string;
   readOnly?: boolean;
+  auth?: AuthConfig;
 }): AppServerConfig {
   return {
     enableWebInterface: options.enableWebInterface ?? false,
@@ -182,6 +185,7 @@ export function createAppServerConfig(options: {
     port: options.port,
     externalWorkerUrl: options.externalWorkerUrl,
     readOnly: options.readOnly ?? false,
+    auth: options.auth,
   };
 }
 
@@ -213,4 +217,134 @@ export const CLI_DEFAULTS = {
   HTTP_PORT: DEFAULT_HTTP_PORT,
   WEB_PORT: DEFAULT_WEB_PORT,
   MAX_CONCURRENCY: DEFAULT_MAX_CONCURRENCY,
+  AUTH_SCOPES: ["read:docs", "write:docs", "admin:jobs"] as const,
 } as const;
+
+/**
+ * Parses auth configuration from CLI options and environment variables.
+ * Precedence: CLI flags > env vars > defaults
+ */
+export function parseAuthConfig(options: {
+  authEnabled?: boolean;
+  authProviderUrl?: string;
+  authResourceId?: string;
+  authScopes?: string;
+  authAllowAnonymousRead?: boolean;
+}): AuthConfig | undefined {
+  // Check CLI flags first, then env vars, then defaults
+  const enabled =
+    options.authEnabled ??
+    (process.env.DOCS_MCP_AUTH_ENABLED?.toLowerCase() === "true" || false);
+
+  if (!enabled) {
+    return undefined;
+  }
+
+  const providerUrl = options.authProviderUrl ?? process.env.DOCS_MCP_AUTH_PROVIDER_URL;
+
+  const resourceId = options.authResourceId ?? process.env.DOCS_MCP_AUTH_RESOURCE_ID;
+
+  const scopesString =
+    options.authScopes ??
+    process.env.DOCS_MCP_AUTH_SCOPES ??
+    CLI_DEFAULTS.AUTH_SCOPES.join(",");
+
+  const allowAnonymousRead =
+    options.authAllowAnonymousRead ??
+    (process.env.DOCS_MCP_AUTH_ALLOW_ANON_READ?.toLowerCase() === "true" || false);
+
+  // Parse scopes from comma-separated string
+  const scopes = scopesString
+    .split(",")
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0) as McpScope[];
+
+  return {
+    enabled,
+    providerUrl,
+    resourceId,
+    scopes,
+    allowAnonymousRead,
+  };
+}
+
+/**
+ * Validates auth configuration when auth is enabled.
+ */
+export function validateAuthConfig(authConfig: AuthConfig): void {
+  if (!authConfig.enabled) {
+    return;
+  }
+
+  const errors: string[] = [];
+
+  // Provider URL is required when auth is enabled
+  if (!authConfig.providerUrl) {
+    errors.push("--auth-provider-url is required when auth is enabled");
+  } else {
+    try {
+      const url = new URL(authConfig.providerUrl);
+      if (url.protocol !== "https:") {
+        errors.push("Provider URL must use HTTPS protocol");
+      }
+    } catch {
+      errors.push("Provider URL must be a valid URL");
+    }
+  }
+
+  // Resource ID is required when auth is enabled
+  if (!authConfig.resourceId) {
+    errors.push("--auth-resource-id is required when auth is enabled");
+  } else {
+    try {
+      const url = new URL(authConfig.resourceId);
+      if (url.protocol !== "https:" && url.hostname !== "localhost") {
+        errors.push("Resource ID must use HTTPS protocol (except for localhost)");
+      }
+      if (url.hash) {
+        errors.push("Resource ID must not contain URL fragments");
+      }
+    } catch {
+      errors.push("Resource ID must be a valid absolute URL");
+    }
+  }
+
+  // Validate scopes
+  if (authConfig.scopes.length === 0) {
+    errors.push("At least one scope must be specified");
+  } else {
+    const scopeValidation = validateScopeConfiguration(authConfig.scopes);
+    if (!scopeValidation.valid) {
+      errors.push(
+        `Invalid scopes: ${scopeValidation.invalidScopes.join(", ")}. ` +
+          `Supported scopes: ${ALL_SCOPES.join(", ")}`,
+      );
+    }
+  }
+
+  if (errors.length > 0) {
+    throw new Error(`Auth configuration validation failed:\n${errors.join("\n")}`);
+  }
+}
+
+/**
+ * Warns about HTTP usage in production when auth is enabled.
+ */
+export function warnHttpUsage(authConfig: AuthConfig | undefined, port: number): void {
+  if (!authConfig?.enabled) {
+    return;
+  }
+
+  // Check if we're likely running in production (not localhost)
+  const isLocalhost =
+    process.env.NODE_ENV !== "production" ||
+    port === 6280 || // default dev port
+    process.env.HOSTNAME?.includes("localhost");
+
+  if (!isLocalhost) {
+    logger.warn(
+      "⚠️  Authentication is enabled but running over HTTP in production. " +
+        "Consider using HTTPS for security.",
+    );
+  }
+}
