@@ -27,6 +27,7 @@ export class AppServer {
   private mcpServer: McpServer | null = null;
   private authManager: McpAuthManager | null = null;
   private config: AppServerConfig;
+  private cleanupTimer: NodeJS.Timeout | null = null;
 
   constructor(
     private docService: IDocumentManagement,
@@ -82,6 +83,16 @@ export class AppServer {
         host: "0.0.0.0",
       });
 
+      // Update auth metadata with the actual server URL for registration endpoints
+      if (this.config.auth?.enabled && this.authManager) {
+        this.authManager.updateMetadataWithServerUrl(address);
+      }
+
+      // Start periodic cleanup of expired auth sessions
+      if (this.config.auth?.enabled && this.authManager) {
+        this.startSessionCleanup();
+      }
+
       this.logStartupInfo(address);
       return this.server;
     } catch (error) {
@@ -96,6 +107,12 @@ export class AppServer {
    */
   async stop(): Promise<void> {
     try {
+      // Stop cleanup timer
+      if (this.cleanupTimer) {
+        clearInterval(this.cleanupTimer);
+        this.cleanupTimer = null;
+      }
+
       // Stop worker service if enabled
       if (this.config.enableWorker) {
         await stopWorkerService(this.pipeline);
@@ -126,6 +143,21 @@ export class AppServer {
 
     // Register core Fastify plugins
     await this.server.register(formBody);
+
+    // Add request logging middleware for OAuth debugging
+    if (this.config.auth?.enabled) {
+      this.server.addHook("onRequest", async (request) => {
+        if (
+          request.url.includes("/oauth") ||
+          request.url.includes("/auth") ||
+          request.url.includes("/register")
+        ) {
+          logger.debug(
+            `${request.method} ${request.url} - Headers: ${JSON.stringify(request.headers)}`,
+          );
+        }
+      });
+    }
 
     // Add protected resource metadata endpoint for RFC9728 compliance
     if (this.config.auth?.enabled && this.authManager) {
@@ -214,7 +246,7 @@ export class AppServer {
 
     this.authManager = new McpAuthManager(this.config.auth);
     await this.authManager.initialize();
-    logger.debug("🔐 Auth manager initialized");
+    logger.debug("Auth manager initialized");
   }
 
   /**
@@ -230,15 +262,97 @@ export class AppServer {
       return;
     }
 
-    // Register the /.well-known/oauth-protected-resource endpoint
-    this.server.get("/.well-known/oauth-protected-resource", async (_request, reply) => {
+    // Register the /.well-known/oauth-protected-resource endpoint (base resource)
+    // Since VS Code connects to /sse by default, return SSE resource metadata
+    this.server.get("/.well-known/oauth-protected-resource", async (request, reply) => {
+      // Get current metadata and adjust resource field for SSE endpoint (default)
+      const currentMetadata = this.authManager?.getProtectedResourceMetadata();
+      if (currentMetadata) {
+        const sseUrl = `${request.protocol}://${request.headers.host}/sse`;
+        const adjustedMetadata = { ...currentMetadata, resource: sseUrl };
+        return reply
+          .header("Content-Type", "application/json")
+          .header("Cache-Control", "public, max-age=3600") // Cache for 1 hour
+          .send(adjustedMetadata);
+      }
       return reply
         .header("Content-Type", "application/json")
-        .header("Cache-Control", "public, max-age=3600") // Cache for 1 hour
+        .header("Cache-Control", "public, max-age=3600")
         .send(metadata);
     });
 
-    logger.debug("🔐 Protected resource metadata endpoint registered");
+    // Register the /.well-known/oauth-protected-resource/sse endpoint for SSE resource
+    // Per RFC 9728, when resource identifier has path component (/sse),
+    // metadata should be available at /.well-known/oauth-protected-resource/sse
+    this.server.get(
+      "/.well-known/oauth-protected-resource/sse",
+      async (request, reply) => {
+        // Get current metadata and adjust resource field for SSE endpoint
+        const currentMetadata = this.authManager?.getProtectedResourceMetadata();
+        if (currentMetadata) {
+          const sseUrl = `${request.protocol}://${request.headers.host}/sse`;
+          const adjustedMetadata = { ...currentMetadata, resource: sseUrl };
+          return reply
+            .header("Content-Type", "application/json")
+            .header("Cache-Control", "public, max-age=3600") // Cache for 1 hour
+            .send(adjustedMetadata);
+        }
+        return reply
+          .header("Content-Type", "application/json")
+          .header("Cache-Control", "public, max-age=3600")
+          .send(metadata);
+      },
+    );
+
+    // Register the /.well-known/oauth-protected-resource/mcp endpoint for HTTP MCP resource
+    this.server.get(
+      "/.well-known/oauth-protected-resource/mcp",
+      async (request, reply) => {
+        // Get current metadata and adjust resource field for MCP endpoint
+        const currentMetadata = this.authManager?.getProtectedResourceMetadata();
+        if (currentMetadata) {
+          const mcpUrl = `${request.protocol}://${request.headers.host}/mcp`;
+          const adjustedMetadata = { ...currentMetadata, resource: mcpUrl };
+          return reply
+            .header("Content-Type", "application/json")
+            .header("Cache-Control", "public, max-age=3600") // Cache for 1 hour
+            .send(adjustedMetadata);
+        }
+        return reply
+          .header("Content-Type", "application/json")
+          .header("Cache-Control", "public, max-age=3600")
+          .send(metadata);
+      },
+    );
+
+    // Register OIDC configuration endpoint to redirect VS Code to Clerk
+    this.server.get("/.well-known/openid-configuration", async (_request, reply) => {
+      if (!this.config.auth?.issuerUrl) {
+        return reply.status(404).send({ error: "OIDC configuration not available" });
+      }
+
+      // Redirect to Clerk's OIDC configuration
+      const clerkOidcUrl = `${this.config.auth.issuerUrl}/.well-known/openid-configuration`;
+      return reply.status(302).redirect(clerkOidcUrl);
+    });
+
+    // Register OAuth authorization server metadata endpoint (RFC 8414)
+    this.server.get(
+      "/.well-known/oauth-authorization-server",
+      async (_request, reply) => {
+        if (!this.config.auth?.issuerUrl) {
+          return reply
+            .status(404)
+            .send({ error: "Authorization server metadata not available" });
+        }
+
+        // Redirect to Clerk's authorization server metadata
+        const clerkAuthServerUrl = `${this.config.auth.issuerUrl}/.well-known/openid-configuration`;
+        return reply.status(302).redirect(clerkAuthServerUrl);
+      },
+    );
+
+    logger.debug("Protected resource metadata endpoint registered");
   }
 
   /**
@@ -270,5 +384,14 @@ export class AppServer {
     for (const service of enabledServices) {
       logger.info(`   • ${service}`);
     }
+  }
+
+  /**
+   * Start periodic cleanup of expired authentication sessions.
+   */
+  private startSessionCleanup(): void {
+    // Since we removed session management, this method is now a no-op
+    // but kept for compatibility
+    logger.debug("Session cleanup not needed in simplified auth implementation");
   }
 }

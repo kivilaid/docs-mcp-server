@@ -32,12 +32,10 @@ export interface AppServerConfig {
     /** Enable OAuth2/OIDC authentication (disabled by default) */
     enabled: boolean;
     /** Issuer/discovery URL for the OAuth2/OIDC provider */
-    providerUrl?: string;
-    /** Canonical resource identifier (audience) for token validation */
-    resourceId?: string;
+    issuerUrl?: string;
+    /** JWT audience claim (identifies this protected resource) */
+    audience?: string;
     /** Enabled subset of supported scopes */
     scopes: McpScope[];
-    /** Allow anonymous read access when auth is enabled (future feature) */
-    allowAnonymousRead?: boolean;
   };
 }

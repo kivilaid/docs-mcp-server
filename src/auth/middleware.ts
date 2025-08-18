@@ -33,12 +33,33 @@ export function createAuthMiddleware(authManager: McpAuthManager) {
 
     const authorization = request.headers.authorization;
 
+    // Helper function to generate appropriate WWW-Authenticate header based on request path
+    const getWWWAuthenticateHeader = (request: FastifyRequest): string => {
+      const protocol = request.headers["x-forwarded-proto"] || request.protocol;
+      const host = request.headers.host;
+      const baseUrl = `${protocol}://${host}`;
+
+      // Determine appropriate metadata URL based on request path
+      let metadataUrl: string;
+
+      const url = request.url || "";
+      if (url.startsWith("/sse")) {
+        metadataUrl = `${baseUrl}/.well-known/oauth-protected-resource/sse`;
+      } else if (url.startsWith("/mcp")) {
+        metadataUrl = `${baseUrl}/.well-known/oauth-protected-resource/mcp`;
+      } else {
+        metadataUrl = `${baseUrl}/.well-known/oauth-protected-resource`;
+      }
+
+      return `Bearer resource_metadata="${metadataUrl}"`;
+    };
+
     try {
       if (!authorization) {
         // Missing authorization header
         return reply
           .status(401)
-          .header("WWW-Authenticate", authManager.getWWWAuthenticateHeader())
+          .header("WWW-Authenticate", getWWWAuthenticateHeader(request))
           .send({
             error: "unauthorized",
             message: "Authorization header required",
@@ -50,7 +71,7 @@ export function createAuthMiddleware(authManager: McpAuthManager) {
       request.auth = authContext;
 
       logger.debug(
-        `🔐 Authenticated request: subject=${authContext.subject}, scopes=[${Array.from(authContext.scopes).join(", ")}]`,
+        `Authenticated request: subject=${authContext.subject}, scopes=[${Array.from(authContext.scopes).join(", ")}]`,
       );
     } catch (error) {
       // Handle authentication errors
@@ -64,7 +85,7 @@ export function createAuthMiddleware(authManager: McpAuthManager) {
           case AuthErrorType.INVALID_AUDIENCE:
             return reply
               .status(401)
-              .header("WWW-Authenticate", authManager.getWWWAuthenticateHeader())
+              .header("WWW-Authenticate", getWWWAuthenticateHeader(request))
               .send({
                 error: "unauthorized",
                 message: authError.message,
@@ -122,7 +143,7 @@ export function createScopeMiddleware() {
 
     if (!scopeValidation.authorized) {
       logger.debug(
-        `🔐 Access denied for method '${method}': missing scopes [${scopeValidation.missingScopes.join(", ")}]`,
+        `Access denied for method '${method}': missing scopes [${scopeValidation.missingScopes.join(", ")}]`,
       );
 
       // Return JSON-RPC error for insufficient scope
@@ -140,6 +161,6 @@ export function createScopeMiddleware() {
       });
     }
 
-    logger.debug(`🔐 Access granted for method '${method}'`);
+    logger.debug(`Access granted for method '${method}'`);
   };
 }

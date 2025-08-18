@@ -50,7 +50,7 @@ export class ClearCompletedJobsTool {
           ? `Successfully cleared ${clearedCount} completed job${clearedCount === 1 ? "" : "s"} from the queue.`
           : "No completed jobs to clear.";
 
-      logger.debug(`[ClearCompletedJobsTool] ${message}`);
+      logger.debug(message);
 
       return {
         message,
@@ -62,7 +62,7 @@ export class ClearCompletedJobsTool {
         error instanceof Error ? error.message : String(error)
       }`;
 
-      logger.error(`❌ [ClearCompletedJobsTool] ${errorMessage}`);
+      logger.error(`❌ ${errorMessage}`);
 
       return {
         message: errorMessage,

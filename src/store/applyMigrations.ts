@@ -88,7 +88,7 @@ export async function applyMigrations(db: Database): Promise<void> {
         db.exec(sql);
         const insertStmt = db.prepare(`INSERT INTO ${MIGRATIONS_TABLE} (id) VALUES (?)`);
         insertStmt.run(filename);
-        logger.debug(`✅ Applied migration: ${filename}`);
+        logger.debug(`Applied migration: ${filename}`);
         appliedCount++;
       } catch (error) {
         logger.error(`❌ Failed to apply migration: ${filename} - ${error}`);

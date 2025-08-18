@@ -16,16 +16,20 @@ describe("Authentication Middleware", () => {
   beforeEach(() => {
     const authConfig: AuthConfig = {
       enabled: true,
-      providerUrl: "https://example.com/oauth2",
-      resourceId: "https://api.example.com",
+      issuerUrl: "https://example.com/oauth2",
+      audience: "https://api.example.com",
       scopes: ["read:docs"],
     };
 
     mockManager = new McpAuthManager(authConfig);
 
     mockRequest = {
-      headers: {},
+      headers: {
+        host: "localhost:3000",
+      },
       auth: undefined,
+      url: "/mcp",
+      protocol: "http",
     };
 
     mockReply = {
@@ -65,7 +69,10 @@ describe("Authentication Middleware", () => {
     });
 
     it("should handle auth manager initialization errors", async () => {
-      mockRequest.headers = { authorization: "Bearer valid-token" };
+      mockRequest.headers = {
+        authorization: "Bearer valid-token",
+        host: "localhost:3000",
+      };
       const middleware = createAuthMiddleware(mockManager);
 
       await middleware(mockRequest as FastifyRequest, mockReply as FastifyReply);

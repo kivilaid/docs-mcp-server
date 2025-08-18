@@ -10,13 +10,11 @@ export interface AuthConfig {
   /** Enable OAuth2/OIDC authentication */
   enabled: boolean;
   /** Issuer/discovery URL for the OAuth2/OIDC provider */
-  providerUrl?: string;
-  /** Canonical resource identifier (audience) for token validation */
-  resourceId?: string;
+  issuerUrl?: string;
+  /** JWT audience claim (identifies this protected resource) */
+  audience?: string;
   /** Enabled subset of supported scopes */
   scopes: McpScope[];
-  /** Allow anonymous read access when auth is enabled (future feature) */
-  allowAnonymousRead?: boolean;
 }
 
 /** Decoded JWT token payload */
@@ -67,6 +65,8 @@ export interface ProtectedResourceMetadata {
   resource_name: string;
   /** URL to resource documentation */
   resource_documentation?: string;
+  /** Supported bearer token methods (RFC 9728) */
+  bearer_methods_supported?: string[];
 }
 
 /** Error types for authentication failures */
@@ -84,5 +84,4 @@ export enum AuthErrorType {
 export interface AuthError {
   type: AuthErrorType;
   message: string;
-  details?: Record<string, unknown>;
 }

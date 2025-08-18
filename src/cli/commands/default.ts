@@ -55,23 +55,15 @@ export function createDefaultAction(program: Command): Command {
         "Enable OAuth2/OIDC authentication for MCP endpoints",
         false,
       )
+      .option("--auth-issuer-url <url>", "Issuer/discovery URL for OAuth2/OIDC provider")
       .option(
-        "--auth-provider-url <url>",
-        "Issuer/discovery URL for OAuth2/OIDC provider",
-      )
-      .option(
-        "--auth-resource-id <id>",
-        "Canonical resource identifier (audience) for token validation",
+        "--auth-audience <id>",
+        "JWT audience claim (identifies this protected resource)",
       )
       .option(
         "--auth-scopes <scopes>",
         "Comma-separated list of enabled scopes",
         CLI_DEFAULTS.AUTH_SCOPES.join(","),
-      )
-      .option(
-        "--auth-allow-anon-read",
-        "Allow anonymous read access when auth is enabled (future feature)",
-        false,
       )
       .action(
         async (
@@ -81,10 +73,9 @@ export function createDefaultAction(program: Command): Command {
             resume: boolean;
             readOnly: boolean;
             authEnabled?: boolean;
-            authProviderUrl?: string;
-            authResourceId?: string;
+            authIssuerUrl?: string;
+            authAudience?: string;
             authScopes?: string;
-            authAllowAnonymousRead?: boolean;
           },
           command,
         ) => {
@@ -101,10 +92,9 @@ export function createDefaultAction(program: Command): Command {
           // Parse and validate auth configuration
           const authConfig = parseAuthConfig({
             authEnabled: options.authEnabled,
-            authProviderUrl: options.authProviderUrl,
-            authResourceId: options.authResourceId,
+            authIssuerUrl: options.authIssuerUrl,
+            authAudience: options.authAudience,
             authScopes: options.authScopes,
-            authAllowAnonymousRead: options.authAllowAnonymousRead,
           });
 
           if (authConfig) {
@@ -124,7 +114,7 @@ export function createDefaultAction(program: Command): Command {
 
           if (resolvedProtocol === "stdio") {
             // Direct stdio mode - bypass AppServer entirely
-            logger.debug(`🔍 Auto-detected stdio protocol (no TTY)`);
+            logger.debug(`Auto-detected stdio protocol (no TTY)`);
 
             await pipeline.start(); // Start pipeline for stdio mode
             const mcpTools = await initializeTools(docService, pipeline, options.readOnly);
@@ -133,7 +123,7 @@ export function createDefaultAction(program: Command): Command {
             await new Promise(() => {}); // Keep running forever
           } else {
             // HTTP mode - use AppServer
-            logger.debug(`🔍 Auto-detected http protocol (TTY available)`);
+            logger.debug(`Auto-detected http protocol (TTY available)`);
 
             // Configure services based on resolved protocol
             const config = createAppServerConfig({

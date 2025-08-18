@@ -2,11 +2,15 @@
 
 ## Overview
 
-The docs-mcp-server supports optional OAuth2/OIDC authentication for HTTP endpoints, providing enterprise-grade security while maintaining a frictionless local development experience. Authentication is disabled by default and follows RFC 9728 for OAuth2 protected resource specification.
+The Docs MCP Server supports optional OAuth2/OIDC authentication for HTTP endpoints, providing enterprise-grade security while maintaining a frictionless local development experience. Authentication is disabled by default and follows RFC 9728 for OAuth2 protected resource specification.
+
+**Important**: The Docs MCP Server is an **OAuth2 protected resource**, not an OAuth2 authorization server. It relies on external OAuth2/OIDC providers (such as Auth0, Clerk, Keycloak, or Azure AD) for authentication and authorization. The server validates JWT tokens issued by these providers but does not issue tokens itself.
 
 ## Architecture
 
 The authentication system uses a three-tier scope model with inheritance, provider-agnostic OAuth2/OIDC integration, and granular tool-level access control.
+
+**Architecture Overview**: The Docs MCP Server acts as an OAuth2 **protected resource** that validates JWT access tokens issued by external OAuth2/OIDC providers. It does not implement an authorization server - all token issuance, user authentication, and consent flows are handled by your chosen OAuth2 provider (Auth0, Clerk, Keycloak, etc.).
 
 ### Scope Hierarchy
 
@@ -48,36 +52,149 @@ sequenceDiagram
 
 ## Configuration
 
-Authentication is configured through CLI arguments, environment variables, or configuration files with the following precedence: CLI flags > environment variables > defaults.
+Authentication is configured by pointing the Docs MCP Server to your external OAuth2/OIDC provider. Configure through CLI arguments, environment variables, or configuration files with the following precedence: CLI flags > environment variables > defaults.
+
+**Setup Steps**:
+
+1. **Set up your OAuth2 provider** (Auth0, Clerk, Keycloak, etc.) with appropriate scopes and JWT configuration
+2. **Configure the Docs MCP Server** to validate tokens from that provider using the settings below
 
 ### CLI Arguments
 
 ```bash
-# Enable authentication with OAuth2/OIDC provider
+# Configure Docs MCP Server to validate tokens from your OAuth2/OIDC provider
 npx docs-mcp-server \
   --auth-enabled \
-  --auth-provider-url "https://auth.company.com" \
-  --auth-resource-id "https://api.company.com" \
+  --auth-issuer-url "https://auth.company.com" \
+  --auth-audience "https://api.company.com" \
   --auth-scopes read:docs,write:docs
 ```
 
 ### Environment Variables
 
 ```bash
-export MCP_AUTH_ENABLED=true
-export MCP_AUTH_PROVIDER_URL="https://auth.company.com"
-export MCP_AUTH_RESOURCE_ID="https://api.company.com"
-export MCP_AUTH_SCOPES="read:docs,write:docs"
+# Configure Docs MCP Server via environment variables
+export DOCS_MCP_AUTH_ENABLED=true
+export DOCS_MCP_AUTH_ISSUER_URL="https://auth.company.com"
+export DOCS_MCP_AUTH_AUDIENCE="https://api.company.com"
+export DOCS_MCP_AUTH_SCOPES="read:docs,write:docs"
 ```
 
 ### Configuration Options
 
-| Option       | CLI Flag              | Environment Variable    | Description                              |
-| ------------ | --------------------- | ----------------------- | ---------------------------------------- |
-| Enable Auth  | `--auth-enabled`      | `MCP_AUTH_ENABLED`      | Enable OAuth2/OIDC authentication        |
-| Provider URL | `--auth-provider-url` | `MCP_AUTH_PROVIDER_URL` | OAuth2/OIDC discovery endpoint           |
-| Resource ID  | `--auth-resource-id`  | `MCP_AUTH_RESOURCE_ID`  | JWT audience claim (resource identifier) |
-| Scopes       | `--auth-scopes`       | `MCP_AUTH_SCOPES`       | Comma-separated list of enabled scopes   |
+| Option      | CLI Flag            | Environment Variable       | Description                                               |
+| ----------- | ------------------- | -------------------------- | --------------------------------------------------------- |
+| Enable Auth | `--auth-enabled`    | `DOCS_MCP_AUTH_ENABLED`    | Enable OAuth2/OIDC token validation                       |
+| Issuer URL  | `--auth-issuer-url` | `DOCS_MCP_AUTH_ISSUER_URL` | OAuth2/OIDC discovery endpoint of your external provider  |
+| Audience    | `--auth-audience`   | `DOCS_MCP_AUTH_AUDIENCE`   | JWT audience claim (identifies this protected resource)   |
+| Scopes      | `--auth-scopes`     | `DOCS_MCP_AUTH_SCOPES`     | Comma-separated list of scopes this server will recognize |
+
+## OAuth2/OIDC Setup
+
+The Docs MCP Server supports OAuth2/OIDC authentication for securing MCP endpoints. Token validation is handled through standard JWT validation using the provider's public keys.
+
+**Note**: You must configure an external OAuth2/OIDC provider (such as Clerk, Auth0, Keycloak, or Azure AD) before enabling authentication. The Docs MCP Server validates tokens but does not issue them.
+
+### How It Works
+
+OAuth2 authentication follows the standard bearer token pattern:
+
+```mermaid
+sequenceDiagram
+    participant Client as MCP Client
+    participant Server as docs-mcp-server
+    participant Provider as OAuth2 Provider (Clerk)
+
+    Note over Client,Provider: OAuth2 Bearer Token Authentication
+
+    Client->>Provider: 1. Authenticate with OAuth2 provider
+    Provider-->>Client: 2. Return JWT access token
+
+    Client->>Server: 3. MCP request with Authorization: Bearer <token>
+    Server->>Provider: 4. Fetch public keys for JWT validation
+    Provider-->>Server: 5. Return public keys (JWKS)
+    Server->>Server: 6. Validate JWT signature & claims
+
+    alt Valid token with required scopes
+        Server-->>Client: 7. Allow MCP operation
+    else Invalid token or insufficient scopes
+        Server-->>Client: 7. Return 401/403 with WWW-Authenticate header
+    end
+```
+
+### Server Configuration
+
+To enable OAuth2 authentication, configure the Docs MCP Server to connect to your OAuth2 provider:
+
+```bash
+# Configure Docs MCP Server to validate tokens from your OAuth2 provider
+npx docs-mcp-server \
+  --auth-enabled \
+  --auth-issuer-url "https://your-app.clerk.accounts.dev" \
+  --auth-audience "https://docs-api.your-domain.com" \
+  --auth-scopes "read:docs,write:docs"
+```
+
+### OAuth2 Provider Setup
+
+**Prerequisite**: You must first set up an OAuth2/OIDC provider separately. The following examples show how to configure popular providers to work with the Docs MCP Server.
+
+#### Clerk Configuration
+
+**In your Clerk dashboard** (separate setup required):
+
+1. **Create Application** in Clerk dashboard:
+
+   - Application Type: "Web Application" or "Single Page Application"
+
+2. **Configure JWT Template** to include the resource ID in audience claim:
+
+   ```json
+   {
+     "aud": "https://docs-api.your-domain.com",
+     "scope": "{{user.publicMetadata.scopes}}"
+   }
+   ```
+
+3. **Set User Scopes** in user metadata:
+   - Add `scopes` to user's `publicMetadata`
+   - Example: `["read:docs", "write:docs", "admin:jobs"]`
+
+**In your Docs MCP Server configuration**:
+
+```bash
+# Point Docs MCP Server to your Clerk instance
+npx docs-mcp-server \
+  --auth-enabled \
+  --auth-issuer-url "https://your-app.clerk.accounts.dev" \
+  --auth-audience "https://docs-api.your-domain.com" \
+  --auth-scopes "read:docs,write:docs,admin:jobs"
+```
+
+### Protected Resource Metadata
+
+The server exposes RFC 9728 compliant metadata at `/.well-known/oauth-protected-resource`:
+
+```json
+{
+  "resource": "https://docs-api.your-domain.com",
+  "authorization_servers": ["https://your-app.clerk.accounts.dev"],
+  "scopes_supported": ["read:docs", "write:docs", "admin:jobs"],
+  "resource_name": "Documentation MCP Server",
+  "resource_documentation": "https://github.com/arabold/docs-mcp-server#readme",
+  "bearer_methods_supported": ["header"]
+}
+```
+
+### MCP Client Integration
+
+MCP clients can authenticate using standard OAuth2 flows:
+
+1. **Discovery**: Fetch `/.well-known/oauth-protected-resource` for metadata
+2. **Authentication**: Obtain JWT token from the OAuth2 provider
+3. **API Access**: Include `Authorization: Bearer <token>` header in MCP requests
+
+**Dynamic Client Registration**: When using OAuth2 providers that support DCR (like Clerk), MCP clients can automatically register and obtain authorization without manual client configuration. The DCR workflow is handled entirely by the OAuth2 provider - the Docs MCP Server acts as a protected resource that validates the resulting JWT tokens.
 
 ## Tool-to-Scope Mapping
 
@@ -122,19 +239,6 @@ Each MCP tool requires specific scope permissions:
 - **Localhost Bypass**: Local connections work without authentication
 - **Graceful Degradation**: Invalid configuration logs errors but doesn't crash
 
-## Protected Resource Metadata
-
-The server exposes RFC 9728 compliant metadata at `/.well-known/oauth-protected-resource`:
-
-```json
-{
-  "resource_registration_endpoint": null,
-  "scopes_supported": ["read:docs", "write:docs", "admin:jobs"],
-  "bearer_methods_supported": ["header"],
-  "resource_documentation": null
-}
-```
-
 ## Usage Examples
 
 ### Development (No Auth)
@@ -147,12 +251,12 @@ npx docs-mcp-server --port 6280
 ### Production with Auth
 
 ```bash
-# Start with OAuth2/OIDC authentication
+# Configure Docs MCP Server to validate tokens from your OAuth2/OIDC provider
 npx docs-mcp-server \
   --port 6280 \
   --auth-enabled \
-  --auth-provider-url "https://keycloak.company.com/realms/api" \
-  --auth-resource-id "https://docs-api.company.com" \
+  --auth-issuer-url "https://keycloak.company.com/realms/api" \
+  --auth-audience "https://docs-api.company.com" \
   --auth-scopes "read:docs,write:docs,admin:jobs"
 ```
 
@@ -182,7 +286,7 @@ const response = await fetch("http://localhost:6280/mcp", {
 
 ### OAuth2 Providers
 
-The system works with any RFC 6749 compliant OAuth2/OIDC provider:
+The Docs MCP Server works with any RFC 6749 compliant OAuth2/OIDC provider as an external authentication service. You must set up one of these providers separately:
 
 - **Auth0**: Use tenant domain as provider URL
 - **Keycloak**: Use realm-specific issuer URL
@@ -191,14 +295,16 @@ The system works with any RFC 6749 compliant OAuth2/OIDC provider:
 - **Clerk**: Use your Clerk domain for provider URL
 - **Custom**: Any provider supporting JWT access tokens
 
+The Docs MCP Server validates tokens issued by these providers but does not replace them.
+
 #### Clerk Configuration Example
 
 ```bash
 # Clerk setup
 npx docs-mcp-server \
   --auth-enabled \
-  --auth-provider-url "https://your-app.clerk.accounts.dev" \
-  --auth-resource-id "https://docs-api.your-domain.com" \
+  --auth-issuer-url "https://your-app.clerk.accounts.dev" \
+  --auth-audience "https://docs-api.your-domain.com" \
   --auth-scopes "read:docs,write:docs,admin:jobs"
 ```
 
@@ -214,10 +320,11 @@ Configure your JWT template in Clerk dashboard to include the resource ID as aud
 
 **Resource ID Requirements:**
 
-- Must be a valid absolute URL
-- Must use HTTPS protocol (except localhost for development)
+- Must be a valid URI (URL or URN)
+- **URL examples**: `https://docs-api.your-domain.com`, `http://localhost:6280` (dev only)
+- **URN examples**: `urn:docs-mcp-server:api`, `urn:company:service`
 - Used as the JWT audience claim for validation
-- Can be any unique identifier for your API (e.g., `https://docs-api.your-domain.com`)
+- Should be unique and not conflict with your actual server URL
 
 ### API Gateway Integration
 
@@ -256,7 +363,7 @@ When deployed behind an API gateway with authentication:
 Enable debug logging to troubleshoot authentication issues:
 
 ```bash
-DEBUG=mcp:auth npx docs-mcp-server --auth-enabled --auth-provider-url "..."
+DEBUG=mcp:auth npx docs-mcp-server --auth-enabled --auth-issuer-url "..."
 ```
 
 ## Security Considerations

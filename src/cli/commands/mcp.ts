@@ -15,109 +15,146 @@ import {
   CLI_DEFAULTS,
   createAppServerConfig,
   createPipelineWithCallbacks,
+  parseAuthConfig,
   resolveProtocol,
   setupLogging,
+  validateAuthConfig,
   validatePort,
 } from "../utils";
 
 export function createMcpCommand(program: Command): Command {
-  return program
-    .command("mcp")
-    .description("Start MCP server only")
-    .addOption(
-      new Option("--protocol <protocol>", "Protocol for MCP server")
-        .choices(["auto", "stdio", "http"])
-        .default(CLI_DEFAULTS.PROTOCOL),
-    )
-    .addOption(
-      new Option("--port <number>", "Port for the MCP server")
-        .argParser((v) => {
-          const n = Number(v);
-          if (!Number.isInteger(n) || n < 1 || n > 65535) {
-            throw new Error("Port must be an integer between 1 and 65535");
-          }
-          return String(n);
-        })
-        .default(CLI_DEFAULTS.HTTP_PORT.toString()),
-    )
-    .option(
-      "--server-url <url>",
-      "URL of external pipeline worker RPC (e.g., http://localhost:6280/api)",
-    )
-    .option(
-      "--read-only",
-      "Run in read-only mode (only expose read tools, disable write/job tools)",
-      false,
-    )
-    .action(
-      async (
-        cmdOptions: {
-          protocol: string;
-          port: string;
-          serverUrl?: string;
-          readOnly: boolean;
-        },
-        command,
-      ) => {
-        const globalOptions = command.parent?.opts() || {};
-        const port = validatePort(cmdOptions.port);
-        const serverUrl = cmdOptions.serverUrl;
+  return (
+    program
+      .command("mcp")
+      .description("Start MCP server only")
+      .addOption(
+        new Option("--protocol <protocol>", "Protocol for MCP server")
+          .choices(["auto", "stdio", "http"])
+          .default(CLI_DEFAULTS.PROTOCOL),
+      )
+      .addOption(
+        new Option("--port <number>", "Port for the MCP server")
+          .argParser((v) => {
+            const n = Number(v);
+            if (!Number.isInteger(n) || n < 1 || n > 65535) {
+              throw new Error("Port must be an integer between 1 and 65535");
+            }
+            return String(n);
+          })
+          .default(CLI_DEFAULTS.HTTP_PORT.toString()),
+      )
+      .option(
+        "--server-url <url>",
+        "URL of external pipeline worker RPC (e.g., http://localhost:6280/api)",
+      )
+      .option(
+        "--read-only",
+        "Run in read-only mode (only expose read tools, disable write/job tools)",
+        false,
+      )
+      // Auth options
+      .option(
+        "--auth-enabled",
+        "Enable OAuth2/OIDC authentication for MCP endpoints",
+        false,
+      )
+      .option("--auth-issuer-url <url>", "Issuer/discovery URL for OAuth2/OIDC provider")
+      .option(
+        "--auth-audience <id>",
+        "JWT audience claim (identifies this protected resource)",
+      )
+      .option(
+        "--auth-scopes <scopes>",
+        "Comma-separated list of enabled scopes",
+        CLI_DEFAULTS.AUTH_SCOPES.join(","),
+      )
+      .action(
+        async (
+          cmdOptions: {
+            protocol: string;
+            port: string;
+            serverUrl?: string;
+            readOnly: boolean;
+            authEnabled?: boolean;
+            authIssuerUrl?: string;
+            authAudience?: string;
+            authScopes?: string;
+          },
+          command,
+        ) => {
+          const globalOptions = command.parent?.opts() || {};
+          const port = validatePort(cmdOptions.port);
+          const serverUrl = cmdOptions.serverUrl;
 
-        // Resolve protocol using same logic as default action
-        const resolvedProtocol = resolveProtocol(cmdOptions.protocol);
-        setupLogging(globalOptions, resolvedProtocol);
+          // Resolve protocol using same logic as default action
+          const resolvedProtocol = resolveProtocol(cmdOptions.protocol);
+          setupLogging(globalOptions, resolvedProtocol);
 
-        try {
-          const docService: IDocumentManagement = await createDocumentManagement({
-            serverUrl,
+          // Parse and validate auth configuration
+          const authConfig = parseAuthConfig({
+            authEnabled: cmdOptions.authEnabled,
+            authIssuerUrl: cmdOptions.authIssuerUrl,
+            authAudience: cmdOptions.authAudience,
+            authScopes: cmdOptions.authScopes,
           });
-          const pipelineOptions: PipelineOptions = {
-            recoverJobs: false, // MCP command doesn't support job recovery
-            serverUrl,
-            concurrency: 3,
-          };
-          const pipeline = await createPipelineWithCallbacks(
-            serverUrl ? undefined : (docService as unknown as never),
-            pipelineOptions,
-          );
 
-          if (resolvedProtocol === "stdio") {
-            // Direct stdio mode - bypass AppServer entirely
-            logger.debug(`🔍 Auto-detected stdio protocol (no TTY)`);
-            logger.info("🚀 Starting MCP server (stdio mode)");
-
-            await pipeline.start(); // Start pipeline for stdio mode
-            const mcpTools = await initializeTools(
-              docService,
-              pipeline,
-              cmdOptions.readOnly,
-            );
-            await startStdioServer(mcpTools, cmdOptions.readOnly);
-
-            await new Promise(() => {}); // Keep running forever
-          } else {
-            // HTTP mode - use AppServer
-            logger.debug(`🔍 Auto-detected http protocol (TTY available)`);
-            logger.info("🚀 Starting MCP server (http mode)");
-
-            // Configure MCP-only server
-            const config = createAppServerConfig({
-              enableWebInterface: false, // Never enable web interface in mcp command
-              enableMcpServer: true,
-              enableApiServer: false, // Never enable API in mcp command
-              enableWorker: !serverUrl,
-              port,
-              externalWorkerUrl: serverUrl,
-              readOnly: cmdOptions.readOnly,
-            });
-
-            await startAppServer(docService, pipeline, config);
-            await new Promise(() => {}); // Keep running forever
+          if (authConfig) {
+            validateAuthConfig(authConfig);
           }
-        } catch (error) {
-          logger.error(`❌ Failed to start MCP server: ${error}`);
-          process.exit(1);
-        }
-      },
-    );
+
+          try {
+            const docService: IDocumentManagement = await createDocumentManagement({
+              serverUrl,
+            });
+            const pipelineOptions: PipelineOptions = {
+              recoverJobs: false, // MCP command doesn't support job recovery
+              serverUrl,
+              concurrency: 3,
+            };
+            const pipeline = await createPipelineWithCallbacks(
+              serverUrl ? undefined : (docService as unknown as never),
+              pipelineOptions,
+            );
+
+            if (resolvedProtocol === "stdio") {
+              // Direct stdio mode - bypass AppServer entirely
+              logger.debug(`Auto-detected stdio protocol (no TTY)`);
+              logger.info("🚀 Starting MCP server (stdio mode)");
+
+              await pipeline.start(); // Start pipeline for stdio mode
+              const mcpTools = await initializeTools(
+                docService,
+                pipeline,
+                cmdOptions.readOnly,
+              );
+              await startStdioServer(mcpTools, cmdOptions.readOnly);
+
+              await new Promise(() => {}); // Keep running forever
+            } else {
+              // HTTP mode - use AppServer
+              logger.debug(`Auto-detected http protocol (TTY available)`);
+              logger.info("🚀 Starting MCP server (http mode)");
+
+              // Configure MCP-only server
+              const config = createAppServerConfig({
+                enableWebInterface: false, // Never enable web interface in mcp command
+                enableMcpServer: true,
+                enableApiServer: false, // Never enable API in mcp command
+                enableWorker: !serverUrl,
+                port,
+                externalWorkerUrl: serverUrl,
+                readOnly: cmdOptions.readOnly,
+                auth: authConfig,
+              });
+
+              await startAppServer(docService, pipeline, config);
+              await new Promise(() => {}); // Keep running forever
+            }
+          } catch (error) {
+            logger.error(`❌ Failed to start MCP server: ${error}`);
+            process.exit(1);
+          }
+        },
+      )
+  );
 }

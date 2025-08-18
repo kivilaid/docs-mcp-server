@@ -152,7 +152,7 @@ export async function createPipelineWithCallbacks(
       );
     },
     onJobStatusChange: async (job) => {
-      logger.debug(`🔄 Job ${job.id} status changed to: ${job.status}`);
+      logger.debug(`Job ${job.id} status changed to: ${job.status}`);
     },
     onJobError: async (job, error, document) => {
       logger.warn(
@@ -226,10 +226,9 @@ export const CLI_DEFAULTS = {
  */
 export function parseAuthConfig(options: {
   authEnabled?: boolean;
-  authProviderUrl?: string;
-  authResourceId?: string;
+  authIssuerUrl?: string;
+  authAudience?: string;
   authScopes?: string;
-  authAllowAnonymousRead?: boolean;
 }): AuthConfig | undefined {
   // Check CLI flags first, then env vars, then defaults
   const enabled =
@@ -240,18 +239,14 @@ export function parseAuthConfig(options: {
     return undefined;
   }
 
-  const providerUrl = options.authProviderUrl ?? process.env.DOCS_MCP_AUTH_PROVIDER_URL;
+  const issuerUrl = options.authIssuerUrl ?? process.env.DOCS_MCP_AUTH_ISSUER_URL;
 
-  const resourceId = options.authResourceId ?? process.env.DOCS_MCP_AUTH_RESOURCE_ID;
+  const audience = options.authAudience ?? process.env.DOCS_MCP_AUTH_AUDIENCE;
 
   const scopesString =
     options.authScopes ??
     process.env.DOCS_MCP_AUTH_SCOPES ??
     CLI_DEFAULTS.AUTH_SCOPES.join(",");
-
-  const allowAnonymousRead =
-    options.authAllowAnonymousRead ??
-    (process.env.DOCS_MCP_AUTH_ALLOW_ANON_READ?.toLowerCase() === "true" || false);
 
   // Parse scopes from comma-separated string
   const scopes = scopesString
@@ -261,10 +256,9 @@ export function parseAuthConfig(options: {
 
   return {
     enabled,
-    providerUrl,
-    resourceId,
+    issuerUrl,
+    audience,
     scopes,
-    allowAnonymousRead,
   };
 }
 
@@ -278,34 +272,51 @@ export function validateAuthConfig(authConfig: AuthConfig): void {
 
   const errors: string[] = [];
 
-  // Provider URL is required when auth is enabled
-  if (!authConfig.providerUrl) {
-    errors.push("--auth-provider-url is required when auth is enabled");
+  // Issuer URL is required when auth is enabled
+  if (!authConfig.issuerUrl) {
+    errors.push("--auth-issuer-url is required when auth is enabled");
   } else {
     try {
-      const url = new URL(authConfig.providerUrl);
+      const url = new URL(authConfig.issuerUrl);
       if (url.protocol !== "https:") {
-        errors.push("Provider URL must use HTTPS protocol");
+        errors.push("Issuer URL must use HTTPS protocol");
       }
     } catch {
-      errors.push("Provider URL must be a valid URL");
+      errors.push("Issuer URL must be a valid URL");
     }
   }
 
-  // Resource ID is required when auth is enabled
-  if (!authConfig.resourceId) {
-    errors.push("--auth-resource-id is required when auth is enabled");
+  // Audience is required when auth is enabled
+  if (!authConfig.audience) {
+    errors.push("--auth-audience is required when auth is enabled");
   } else {
+    // Audience can be any valid URI (URL or URN)
+    // Examples: https://api.example.com, urn:docs-mcp-server:api, urn:company:service
     try {
-      const url = new URL(authConfig.resourceId);
-      if (url.protocol !== "https:" && url.hostname !== "localhost") {
-        errors.push("Resource ID must use HTTPS protocol (except for localhost)");
+      // Try parsing as URL first (most common case)
+      const url = new URL(authConfig.audience);
+      if (url.protocol === "http:" && url.hostname !== "localhost") {
+        // Warn about HTTP in production but don't fail
+        logger.warn(
+          "⚠️  Audience uses HTTP protocol - consider using HTTPS for production",
+        );
       }
       if (url.hash) {
-        errors.push("Resource ID must not contain URL fragments");
+        errors.push("Audience must not contain URL fragments");
       }
     } catch {
-      errors.push("Resource ID must be a valid absolute URL");
+      // If not a valid URL, check if it's a valid URN
+      if (authConfig.audience.startsWith("urn:")) {
+        // Basic URN validation: urn:namespace:specific-string
+        const urnParts = authConfig.audience.split(":");
+        if (urnParts.length < 3 || !urnParts[1] || !urnParts[2]) {
+          errors.push("URN audience must follow format: urn:namespace:specific-string");
+        }
+      } else {
+        errors.push(
+          "Audience must be a valid absolute URL or URN (e.g., https://api.example.com or urn:company:service)",
+        );
+      }
     }
   }
 
