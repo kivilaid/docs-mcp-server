@@ -232,6 +232,38 @@ describe("McpAuthManager", () => {
         'Bearer resource_metadata="https://api.example.com/.well-known/oauth-protected-resource"',
       );
     });
+
+    it("should return path-specific metadata URLs", async () => {
+      (global.fetch as any).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          issuer: "https://example.clerk.accounts.dev",
+          jwks_uri: "https://example.clerk.accounts.dev/.well-known/jwks.json",
+        }),
+      });
+
+      const manager = new McpAuthManager(authConfig);
+      await manager.initialize();
+      manager.updateMetadataWithServerUrl("https://api.example.com");
+
+      // Test SSE endpoint
+      const sseHeader = manager.getWWWAuthenticateHeader("/sse");
+      expect(sseHeader).toBe(
+        'Bearer resource_metadata="https://api.example.com/.well-known/oauth-protected-resource/sse"',
+      );
+
+      // Test MCP endpoint
+      const mcpHeader = manager.getWWWAuthenticateHeader("/mcp");
+      expect(mcpHeader).toBe(
+        'Bearer resource_metadata="https://api.example.com/.well-known/oauth-protected-resource/mcp"',
+      );
+
+      // Test default endpoint
+      const defaultHeader = manager.getWWWAuthenticateHeader("/other");
+      expect(defaultHeader).toBe(
+        'Bearer resource_metadata="https://api.example.com/.well-known/oauth-protected-resource"',
+      );
+    });
   });
 
   describe("updateMetadataWithServerUrl", () => {
@@ -261,35 +293,6 @@ describe("McpAuthManager", () => {
       expect(() => {
         manager.updateMetadataWithServerUrl("https://api.example.com");
       }).not.toThrow();
-    });
-  });
-
-  describe("getServerConfig", () => {
-    it("should return null before initialization", () => {
-      const manager = new McpAuthManager(authConfig);
-
-      const config = manager.getServerConfig();
-      expect(config).toBeNull();
-    });
-
-    it("should return server config after initialization", async () => {
-      const mockServerConfig = {
-        issuer: "https://example.clerk.accounts.dev",
-        authorization_endpoint: "https://example.clerk.accounts.dev/oauth/authorize",
-        token_endpoint: "https://example.clerk.accounts.dev/oauth/token",
-        jwks_uri: "https://example.clerk.accounts.dev/.well-known/jwks.json",
-      };
-
-      (global.fetch as any).mockResolvedValueOnce({
-        ok: true,
-        json: async () => mockServerConfig,
-      });
-
-      const manager = new McpAuthManager(authConfig);
-      await manager.initialize();
-
-      const config = manager.getServerConfig();
-      expect(config).toEqual(mockServerConfig);
     });
   });
 });

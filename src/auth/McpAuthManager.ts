@@ -191,13 +191,6 @@ export class McpAuthManager {
   }
 
   /**
-   * Gets the server configuration (for internal use).
-   */
-  getServerConfig() {
-    return this.serverConfig;
-  }
-
-  /**
    * Gets the protected resource metadata for RFC9728 compliance.
    */
   getProtectedResourceMetadata(): ProtectedResourceMetadata | null {
@@ -207,14 +200,24 @@ export class McpAuthManager {
   /**
    * Generates WWW-Authenticate header value for 401 responses per RFC9728.
    * Uses resource_metadata parameter as specified in RFC 9728 Section 5.1.
+   * @param requestPath Optional request path to determine appropriate metadata endpoint
    */
-  getWWWAuthenticateHeader(): string {
+  getWWWAuthenticateHeader(requestPath?: string): string {
     if (!this.serverUrl) {
       return "Bearer";
     }
 
-    // Point to our protected resource metadata endpoint per RFC9728
-    const metadataUrl = `${this.serverUrl}/.well-known/oauth-protected-resource`;
+    // Determine appropriate metadata URL based on request path
+    let metadataPath: string;
+    if (requestPath?.startsWith("/sse")) {
+      metadataPath = "/.well-known/oauth-protected-resource/sse";
+    } else if (requestPath?.startsWith("/mcp")) {
+      metadataPath = "/.well-known/oauth-protected-resource/mcp";
+    } else {
+      metadataPath = "/.well-known/oauth-protected-resource";
+    }
+
+    const metadataUrl = `${this.serverUrl}${metadataPath}`;
     return `Bearer resource_metadata="${metadataUrl}"`;
   }
 
