@@ -23,7 +23,7 @@ export async function searchAction(
       library,
       version: options.version,
       query,
-      limit: Number.parseInt(options.limit),
+      limit: Number.parseInt(options.limit, 10),
       exactMatch: options.exactMatch,
     });
     console.log(formatOutput(result.results));

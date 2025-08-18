@@ -71,7 +71,6 @@
     "iconv-lite": "^0.6.3",
     "jsdom": "^26.1.0",
     "langchain": "^0.3.30",
-    "mcp-auth": "^0.2.0-beta.1",
     "mime-types": "^3.0.1",
     "minimatch": "^10.0.1",
     "playwright": "^1.52.0",

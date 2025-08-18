@@ -69,7 +69,7 @@ export class FetchUrlTool {
     const { url, scrapeMode = ScrapeMode.Auto, headers } = options;
 
     const canFetchResults = this.fetchers.map((f) => f.canFetch(url));
-    const fetcherIndex = canFetchResults.findIndex((result) => result === true);
+    const fetcherIndex = canFetchResults.indexOf(true);
     if (fetcherIndex === -1) {
       throw new ToolError(
         `Invalid URL: ${url}. Must be an HTTP/HTTPS URL or a file:// URL.`,

@@ -1,148 +1,152 @@
 /**
- * Express middleware for OAuth2/OIDC bearer token authentication.
- * Handles token validation and scope enforcement for MCP endpoints.
+ * Fastify middleware for OAuth2/OIDC authentication using ProxyAuthManager.
+ * Provides authentication and scope validation for MCP endpoints.
  */
 
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { logger } from "../utils/logger";
-import type { McpAuthManager } from "./McpAuthManager";
+import type { ProxyAuthManager } from "./ProxyAuthManager";
 import { validateToolAccess } from "./ScopeValidator";
-import type { AuthContext, AuthError } from "./types";
-import { AuthErrorType } from "./types";
+import type { AuthContext, McpScope } from "./types";
 
-declare module "fastify" {
-  interface FastifyRequest {
-    /** Authentication context for the request */
-    auth?: AuthContext;
-  }
-}
+// Type for Fastify request with auth context
+type AuthenticatedRequest = FastifyRequest & { auth: AuthContext };
 
 /**
- * Creates bearer token authentication middleware for MCP routes.
+ * Create authentication middleware that validates Bearer tokens using ProxyAuthManager.
  */
-export function createAuthMiddleware(authManager: McpAuthManager) {
+export function createAuthMiddleware(authManager: ProxyAuthManager) {
   return async (request: FastifyRequest, reply: FastifyReply) => {
-    // Skip auth if disabled
-    if (!authManager.isEnabled()) {
-      request.auth = {
-        authenticated: false,
-        scopes: new Set(["read:docs", "write:docs", "admin:jobs"]),
-      };
-      return;
-    }
-
-    const authorization = request.headers.authorization;
-
     try {
-      if (!authorization) {
-        // Missing authorization header
-        return reply
-          .status(401)
-          .header("WWW-Authenticate", authManager.getWWWAuthenticateHeader(request.url))
-          .send({
-            error: "unauthorized",
-            message: "Authorization header required",
-          });
-      }
-
-      // Validate token and get auth context
-      const authContext = await authManager.validateToken(authorization);
-      request.auth = authContext;
-
-      logger.debug(
-        `Authenticated request: subject=${authContext.subject}, scopes=[${Array.from(authContext.scopes).join(", ")}]`,
+      const authContext = await authManager.createAuthContext(
+        request.headers.authorization || "",
       );
-    } catch (error) {
-      // Handle authentication errors
-      const authError = (error as Error & { authError?: AuthError }).authError;
 
-      if (authError) {
-        switch (authError.type) {
-          case AuthErrorType.MISSING_TOKEN:
-          case AuthErrorType.INVALID_TOKEN:
-          case AuthErrorType.EXPIRED_TOKEN:
-          case AuthErrorType.INVALID_AUDIENCE:
-            return reply
-              .status(401)
-              .header(
-                "WWW-Authenticate",
-                authManager.getWWWAuthenticateHeader(request.url),
-              )
-              .send({
-                error: "unauthorized",
-                message: authError.message,
-              });
-          default:
-            logger.error(`🔐 Authentication error: ${authError.message}`);
-            return reply.status(500).send({
-              error: "internal_server_error",
-              message: "Authentication service error",
+      // Always set auth context on request (even for disabled auth)
+      (request as AuthenticatedRequest).auth = authContext;
+
+      // If authentication is disabled, continue without validation
+      if (!authContext.authenticated) {
+        // For disabled auth, this is expected - continue processing
+        // For enabled auth with missing/invalid token, this will be caught below
+        const hasAuthHeader = !!request.headers.authorization;
+
+        if (hasAuthHeader) {
+          // Auth is enabled but token is invalid
+          logger.debug("Token validation failed");
+          reply
+            .status(401)
+            .header(
+              "WWW-Authenticate",
+              'Bearer realm="MCP Server", error="invalid_token"',
+            )
+            .send({
+              error: "invalid_token",
+              error_description: "The access token is invalid",
             });
+          return;
+        }
+
+        // Missing auth header when auth is enabled
+        if (authContext.scopes.size === 0) {
+          logger.debug("Missing authorization header");
+          reply.status(401).header("WWW-Authenticate", 'Bearer realm="MCP Server"').send({
+            error: "unauthorized",
+            error_description: "Authorization header required",
+          });
+          return;
         }
       }
 
-      // Unknown error
-      logger.error(
-        `🔐 Unexpected authentication error: ${error instanceof Error ? error.message : "Unknown error"}`,
+      logger.debug(
+        `Authentication successful for subject: ${authContext.subject || "anonymous"}`,
       );
-      return reply.status(500).send({
-        error: "internal_server_error",
-        message: "Authentication service error",
-      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Authentication failed";
+      logger.debug(`Authentication error: ${message}`);
+
+      reply
+        .status(401)
+        .header("WWW-Authenticate", 'Bearer realm="MCP Server", error="invalid_token"')
+        .send({
+          error: "invalid_token",
+          error_description: "Token validation failed",
+        });
     }
   };
 }
 
 /**
- * Creates middleware to enforce MCP tool scope requirements.
- * Should be used after auth middleware to validate specific tool access.
+ * Create scope validation middleware for specific tool access.
  */
-export function createScopeMiddleware() {
+export function createScopeMiddleware(requiredScopes?: McpScope[]) {
   return async (request: FastifyRequest, reply: FastifyReply) => {
-    if (!request.auth) {
-      // Auth middleware should have set this
-      return reply.status(500).send({
-        error: "internal_server_error",
-        message: "Authentication context missing",
+    const authContext = (request as AuthenticatedRequest).auth;
+
+    if (!authContext) {
+      logger.debug("No auth context found in request");
+      reply.status(401).send({
+        error: "unauthorized",
+        error_description: "Authentication required",
       });
-    }
-
-    // For unauthenticated requests (auth disabled), allow everything
-    if (!request.auth.authenticated) {
       return;
     }
 
-    // Extract MCP method from request body for JSON-RPC
-    const body = request.body as { method?: string; id?: string | number } | undefined;
-    if (!body || typeof body !== "object" || !body.method) {
-      // Not a JSON-RPC request or missing method - let it through
-      // The MCP server will handle invalid requests
+    // If no specific scopes required, allow any authenticated request
+    if (!requiredScopes || requiredScopes.length === 0) {
       return;
     }
 
-    const method = body.method as string;
-    const scopeValidation = validateToolAccess(method, request.auth.scopes);
+    // Check if user has any of the required scopes
+    const hasRequiredScope = requiredScopes.some((scope) =>
+      authContext.scopes.has(scope),
+    );
 
-    if (!scopeValidation.authorized) {
+    if (!hasRequiredScope) {
       logger.debug(
-        `Access denied for method '${method}': missing scopes [${scopeValidation.missingScopes.join(", ")}]`,
+        `Insufficient scopes. Required: ${requiredScopes.join(", ")}, Available: ${Array.from(authContext.scopes).join(", ")}`,
       );
-
-      // Return JSON-RPC error for insufficient scope
-      return reply.status(403).send({
-        jsonrpc: "2.0",
-        id: body.id || null,
-        error: {
-          code: -32001, // JSON-RPC error code for insufficient scope
-          message: "Insufficient scope",
-          data: {
-            required_scopes: scopeValidation.missingScopes,
-            method: method,
-          },
-        },
+      reply.status(403).send({
+        error: "insufficient_scope",
+        error_description: `Required scopes: ${requiredScopes.join(", ")}`,
       });
+      return;
     }
 
-    logger.debug(`Access granted for method '${method}'`);
+    logger.debug(`Scope validation successful for scopes: ${requiredScopes.join(", ")}`);
+  };
+}
+
+/**
+ * Create tool-specific scope validation middleware.
+ */
+export function createToolScopeMiddleware(toolName: string) {
+  return async (request: FastifyRequest, reply: FastifyReply) => {
+    const authContext = (request as AuthenticatedRequest).auth;
+
+    if (!authContext) {
+      logger.debug("No auth context found in request");
+      reply.status(401).send({
+        error: "unauthorized",
+        error_description: "Authentication required",
+      });
+      return;
+    }
+
+    // Validate tool access using the scope validator
+    const validation = validateToolAccess(toolName, authContext.scopes);
+
+    if (!validation.authorized) {
+      logger.debug(
+        `Tool access denied for ${toolName}. Missing scopes: ${validation.missingScopes.join(", ")}`,
+      );
+      reply.status(403).send({
+        error: "insufficient_scope",
+        error_description: `Tool '${toolName}' requires scopes: ${validation.missingScopes.join(", ")}`,
+      });
+      return;
+    }
+
+    logger.debug(`Tool access granted for ${toolName}`);
   };
 }

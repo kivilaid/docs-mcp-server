@@ -7,7 +7,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
-import type { McpAuthManager } from "../auth";
+import type { ProxyAuthManager } from "../auth";
 import { createAuthMiddleware, createScopeMiddleware } from "../auth/middleware";
 import { createMcpServerInstance } from "../mcp/mcpServer";
 import { initializeTools } from "../mcp/tools";
@@ -30,7 +30,7 @@ export async function registerMcpService(
   docService: IDocumentManagement,
   pipeline: IPipeline,
   readOnly = false,
-  authManager?: McpAuthManager,
+  authManager?: ProxyAuthManager,
 ): Promise<McpServer> {
   // Initialize MCP server and tools
   const mcpTools = await initializeTools(docService, pipeline, readOnly);

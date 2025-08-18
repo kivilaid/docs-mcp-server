@@ -5,8 +5,8 @@
  * while keeping local usage frictionless (auth disabled by default).
  */
 
-export { McpAuthManager } from "./McpAuthManager";
 export { createAuthMiddleware, createScopeMiddleware } from "./middleware";
+export { ProxyAuthManager } from "./ProxyAuthManager";
 export {
   ALL_SCOPES,
   expandScopes,

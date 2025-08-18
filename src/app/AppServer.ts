@@ -8,7 +8,7 @@ import formBody from "@fastify/formbody";
 import fastifyStatic from "@fastify/static";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import Fastify, { type FastifyInstance } from "fastify";
-import { McpAuthManager } from "../auth";
+import { ProxyAuthManager } from "../auth";
 import type { IPipeline } from "../pipeline/trpc/interfaces";
 import { cleanupMcpService, registerMcpService } from "../services/mcpService";
 import { registerTrpcService } from "../services/trpcService";
@@ -25,7 +25,7 @@ import type { AppServerConfig } from "./AppServerConfig";
 export class AppServer {
   private server: FastifyInstance;
   private mcpServer: McpServer | null = null;
-  private authManager: McpAuthManager | null = null;
+  private authManager: ProxyAuthManager | null = null;
   private config: AppServerConfig;
   private cleanupTimer: NodeJS.Timeout | null = null;
 
@@ -82,11 +82,6 @@ export class AppServer {
         port: this.config.port,
         host: "0.0.0.0",
       });
-
-      // Update auth metadata with the actual server URL for registration endpoints
-      if (this.config.auth?.enabled && this.authManager) {
-        this.authManager.updateMetadataWithServerUrl(address);
-      }
 
       // Start periodic cleanup of expired auth sessions
       if (this.config.auth?.enabled && this.authManager) {
@@ -244,115 +239,24 @@ export class AppServer {
       return;
     }
 
-    this.authManager = new McpAuthManager(this.config.auth);
+    this.authManager = new ProxyAuthManager(this.config.auth);
     await this.authManager.initialize();
-    logger.debug("Auth manager initialized");
+    logger.debug("Proxy auth manager initialized");
   }
 
   /**
-   * Setup protected resource metadata endpoint for RFC9728 compliance.
+   * Setup OAuth2 endpoints using ProxyAuthManager.
    */
   private async setupAuthMetadataEndpoint(): Promise<void> {
     if (!this.authManager) {
       return;
     }
 
-    const metadata = this.authManager.getProtectedResourceMetadata();
-    if (!metadata) {
-      return;
-    }
+    // ProxyAuthManager handles all OAuth2 endpoints automatically
+    const baseUrl = new URL(`http://localhost:${this.config.port}`);
+    this.authManager.registerRoutes(this.server, baseUrl);
 
-    // Register the /.well-known/oauth-protected-resource endpoint (base resource)
-    // Since VS Code connects to /sse by default, return SSE resource metadata
-    this.server.get("/.well-known/oauth-protected-resource", async (request, reply) => {
-      // Get current metadata and adjust resource field for SSE endpoint (default)
-      const currentMetadata = this.authManager?.getProtectedResourceMetadata();
-      if (currentMetadata) {
-        const sseUrl = `${request.protocol}://${request.headers.host}/sse`;
-        const adjustedMetadata = { ...currentMetadata, resource: sseUrl };
-        return reply
-          .header("Content-Type", "application/json")
-          .header("Cache-Control", "public, max-age=3600") // Cache for 1 hour
-          .send(adjustedMetadata);
-      }
-      return reply
-        .header("Content-Type", "application/json")
-        .header("Cache-Control", "public, max-age=3600")
-        .send(metadata);
-    });
-
-    // Register the /.well-known/oauth-protected-resource/sse endpoint for SSE resource
-    // Per RFC 9728, when resource identifier has path component (/sse),
-    // metadata should be available at /.well-known/oauth-protected-resource/sse
-    this.server.get(
-      "/.well-known/oauth-protected-resource/sse",
-      async (request, reply) => {
-        // Get current metadata and adjust resource field for SSE endpoint
-        const currentMetadata = this.authManager?.getProtectedResourceMetadata();
-        if (currentMetadata) {
-          const sseUrl = `${request.protocol}://${request.headers.host}/sse`;
-          const adjustedMetadata = { ...currentMetadata, resource: sseUrl };
-          return reply
-            .header("Content-Type", "application/json")
-            .header("Cache-Control", "public, max-age=3600") // Cache for 1 hour
-            .send(adjustedMetadata);
-        }
-        return reply
-          .header("Content-Type", "application/json")
-          .header("Cache-Control", "public, max-age=3600")
-          .send(metadata);
-      },
-    );
-
-    // Register the /.well-known/oauth-protected-resource/mcp endpoint for HTTP MCP resource
-    this.server.get(
-      "/.well-known/oauth-protected-resource/mcp",
-      async (request, reply) => {
-        // Get current metadata and adjust resource field for MCP endpoint
-        const currentMetadata = this.authManager?.getProtectedResourceMetadata();
-        if (currentMetadata) {
-          const mcpUrl = `${request.protocol}://${request.headers.host}/mcp`;
-          const adjustedMetadata = { ...currentMetadata, resource: mcpUrl };
-          return reply
-            .header("Content-Type", "application/json")
-            .header("Cache-Control", "public, max-age=3600") // Cache for 1 hour
-            .send(adjustedMetadata);
-        }
-        return reply
-          .header("Content-Type", "application/json")
-          .header("Cache-Control", "public, max-age=3600")
-          .send(metadata);
-      },
-    );
-
-    // Register OIDC configuration endpoint to redirect VS Code to Clerk
-    this.server.get("/.well-known/openid-configuration", async (_request, reply) => {
-      if (!this.config.auth?.issuerUrl) {
-        return reply.status(404).send({ error: "OIDC configuration not available" });
-      }
-
-      // Redirect to Clerk's OIDC configuration
-      const clerkOidcUrl = `${this.config.auth.issuerUrl}/.well-known/openid-configuration`;
-      return reply.status(302).redirect(clerkOidcUrl);
-    });
-
-    // Register OAuth authorization server metadata endpoint (RFC 8414)
-    this.server.get(
-      "/.well-known/oauth-authorization-server",
-      async (_request, reply) => {
-        if (!this.config.auth?.issuerUrl) {
-          return reply
-            .status(404)
-            .send({ error: "Authorization server metadata not available" });
-        }
-
-        // Redirect to Clerk's authorization server metadata
-        const clerkAuthServerUrl = `${this.config.auth.issuerUrl}/.well-known/openid-configuration`;
-        return reply.status(302).redirect(clerkAuthServerUrl);
-      },
-    );
-
-    logger.debug("Protected resource metadata endpoint registered");
+    logger.debug("OAuth2 proxy endpoints registered");
   }
 
   /**
