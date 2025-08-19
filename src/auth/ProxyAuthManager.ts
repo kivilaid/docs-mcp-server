@@ -3,11 +3,12 @@
  * This provides OAuth2 proxy functionality for Fastify, leveraging the SDK's auth logic
  * while maintaining compatibility with the existing Fastify-based architecture.
  * Uses standard OAuth identity scopes with binary authentication (authenticated vs not).
- * Validates tokens using the OAuth provider's userinfo endpoint for universal compatibility.
+ * Supports hybrid token validation: JWT tokens using JWKS, opaque tokens using userinfo endpoint.
  */
 
 import { ProxyOAuthServerProvider } from "@modelcontextprotocol/sdk/server/auth/providers/proxyProvider.js";
 import type { FastifyInstance, FastifyRequest } from "fastify";
+import { createRemoteJWKSet, jwtVerify } from "jose";
 import { logger } from "../utils/logger";
 import type { AuthConfig, AuthContext } from "./types";
 
@@ -18,8 +19,10 @@ export class ProxyAuthManager {
     tokenUrl: string;
     revocationUrl?: string;
     registrationUrl?: string;
+    jwksUri?: string;
     userinfoUrl?: string;
   } | null = null;
+  private jwks: ReturnType<typeof createRemoteJWKSet> | null = null;
 
   constructor(private config: AuthConfig) {}
 
@@ -48,6 +51,25 @@ export class ProxyAuthManager {
 
       // Discover and cache the OAuth endpoints from the provider
       this.discoveredEndpoints = await this.discoverEndpoints();
+
+      // Set up JWKS for JWT token validation if available
+      if (this.discoveredEndpoints.jwksUri) {
+        this.jwks = createRemoteJWKSet(new URL(this.discoveredEndpoints.jwksUri));
+        logger.debug(`JWKS configured from: ${this.discoveredEndpoints.jwksUri}`);
+      }
+
+      // Log validation capabilities
+      const capabilities = [];
+      if (this.discoveredEndpoints.jwksUri) capabilities.push("JWT validation via JWKS");
+      if (this.discoveredEndpoints.userinfoUrl)
+        capabilities.push("opaque token validation via userinfo");
+      logger.debug(`Token validation capabilities: ${capabilities.join(", ")}`);
+
+      if (capabilities.length === 0) {
+        logger.warn(
+          "⚠️ No token validation mechanisms available - authentication may fail",
+        );
+      }
 
       // Create the proxy provider
       this.proxyProvider = new ProxyOAuthServerProvider({
@@ -217,27 +239,76 @@ export class ProxyAuthManager {
   }
 
   /**
-   * Discover OAuth endpoints from the OIDC provider and cache them.
+   * Discover OAuth endpoints from the OAuth2 authorization server.
+   * Uses OAuth2 discovery (RFC 8414) with OIDC discovery fallback.
+   * Supports both JWT and opaque token validation methods.
    */
   private async discoverEndpoints() {
-    const discoveryUrl = `${this.config.issuerUrl}/.well-known/openid-configuration`;
-    const response = await fetch(discoveryUrl);
+    // Try OAuth2 authorization server discovery first (RFC 8414)
+    const oauthDiscoveryUrl = `${this.config.issuerUrl}/.well-known/oauth-authorization-server`;
 
-    if (!response.ok) {
-      throw new Error(`Failed to fetch OIDC configuration: ${response.status}`);
+    try {
+      const oauthResponse = await fetch(oauthDiscoveryUrl);
+      if (oauthResponse.ok) {
+        const config = await oauthResponse.json();
+        logger.debug(
+          `Successfully discovered OAuth2 endpoints from: ${oauthDiscoveryUrl}`,
+        );
+
+        // Try to get userinfo endpoint from OIDC discovery as fallback for opaque tokens
+        const userinfoEndpoint = await this.discoverUserinfoEndpoint();
+        if (userinfoEndpoint) {
+          config.userinfo_endpoint = userinfoEndpoint;
+        }
+
+        return this.buildEndpointsFromConfig(config);
+      }
+    } catch (error) {
+      logger.debug(`OAuth2 discovery failed: ${error}, trying OIDC discovery`);
     }
 
-    const config = await response.json();
+    // Fallback to OIDC discovery
+    const oidcDiscoveryUrl = `${this.config.issuerUrl}/.well-known/openid-configuration`;
+    const oidcResponse = await fetch(oidcDiscoveryUrl);
+    if (!oidcResponse.ok) {
+      throw new Error(
+        `Failed to fetch configuration from both ${oauthDiscoveryUrl} and ${oidcDiscoveryUrl}`,
+      );
+    }
 
+    const config = await oidcResponse.json();
+    logger.debug(`Successfully discovered OIDC endpoints from: ${oidcDiscoveryUrl}`);
+    return this.buildEndpointsFromConfig(config);
+  }
+
+  /**
+   * Try to discover userinfo endpoint for opaque token validation
+   */
+  private async discoverUserinfoEndpoint(): Promise<string | null> {
+    try {
+      const oidcDiscoveryUrl = `${this.config.issuerUrl}/.well-known/openid-configuration`;
+      const response = await fetch(oidcDiscoveryUrl);
+      if (response.ok) {
+        const config = await response.json();
+        return config.userinfo_endpoint || null;
+      }
+    } catch (error) {
+      logger.debug(`Failed to fetch userinfo endpoint: ${error}`);
+    }
+    return null;
+  }
+
+  /**
+   * Build endpoint configuration from discovery response.
+   */
+  private buildEndpointsFromConfig(config: Record<string, unknown>) {
     return {
-      authorizationUrl: config.authorization_endpoint,
-      tokenUrl: config.token_endpoint,
-      revocationUrl: config.revocation_endpoint,
-      // Clerk supports DCR at /oauth/register but doesn't advertise it in discovery
-      registrationUrl:
-        config.registration_endpoint || `${this.config.issuerUrl}/oauth/register`,
-      // Cache userinfo endpoint for token validation
-      userinfoUrl: config.userinfo_endpoint,
+      authorizationUrl: config.authorization_endpoint as string,
+      tokenUrl: config.token_endpoint as string,
+      revocationUrl: config.revocation_endpoint as string | undefined,
+      registrationUrl: config.registration_endpoint as string | undefined,
+      jwksUri: config.jwks_uri as string | undefined,
+      userinfoUrl: config.userinfo_endpoint as string | undefined,
     };
   }
 
@@ -256,63 +327,93 @@ export class ProxyAuthManager {
   }
 
   /**
-   * Verify an access token using the OAuth provider's userinfo endpoint.
-   * This is called by the proxy provider to validate tokens.
-   * Uses binary authentication - if token is valid, user gets full access.
-   * Works with any token format (JWT, opaque, etc.) by delegating validation to the auth server.
+   * Verify an access token using hybrid validation approach.
+   * First tries JWT validation with JWKS, falls back to userinfo endpoint for opaque tokens.
+   * This provides universal compatibility with all OAuth2 providers and token formats.
    */
   private async verifyAccessToken(token: string, request?: FastifyRequest) {
-    try {
-      logger.debug(`Attempting to verify access token: ${token.substring(0, 20)}...`);
+    logger.debug(`Attempting to verify token: ${token.substring(0, 20)}...`);
 
-      if (!this.discoveredEndpoints?.userinfoUrl) {
-        throw new Error("Userinfo endpoint not available");
-      }
+    // Strategy 1: Try JWT validation first (more efficient for JWT tokens)
+    if (this.jwks) {
+      try {
+        logger.debug("Attempting JWT validation with JWKS...");
+        const { payload } = await jwtVerify(token, this.jwks, {
+          issuer: this.config.issuerUrl,
+          audience: this.config.audience,
+        });
 
-      // Call the userinfo endpoint to validate the token and get user information
-      const response = await fetch(this.discoveredEndpoints.userinfoUrl, {
-        method: "GET",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          Accept: "application/json",
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error(
-          `Userinfo request failed: ${response.status} ${response.statusText}`,
+        logger.debug(
+          `JWT validation successful. Subject: ${payload.sub}, Audience: ${payload.aud}`,
         );
+
+        if (!payload.sub) {
+          throw new Error("JWT payload missing subject claim");
+        }
+
+        return {
+          token,
+          clientId: payload.sub,
+          scopes: ["*"], // Full access for all authenticated users
+        };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error";
+        logger.debug(
+          `JWT validation failed: ${errorMessage}, trying userinfo fallback...`,
+        );
+        // Continue to userinfo fallback
       }
-
-      const userinfo = await response.json();
-      logger.debug(
-        `Token validation successful. User: ${userinfo.sub}, Email: ${userinfo.email}`,
-      );
-
-      // Basic validation - ensure we have a subject
-      if (!userinfo.sub) {
-        throw new Error("Userinfo response missing subject");
-      }
-
-      // Optional: Resource validation if MCP Authorization spec requires it
-      // This is simplified - in a real implementation you might want more sophisticated resource validation
-      if (request) {
-        const supportedResources = this.getSupportedResources(request);
-        logger.debug(`Supported resources: ${JSON.stringify(supportedResources)}`);
-        // For now, we allow access if the token is valid - binary authentication
-      }
-
-      // Binary authentication: valid token = full access
-      return {
-        token,
-        clientId: userinfo.sub,
-        scopes: ["*"], // Full access for all authenticated users
-      };
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "Unknown error";
-      logger.debug(`Token validation failed: ${errorMessage}`);
-      throw new Error("Invalid access token");
     }
+
+    // Strategy 2: Fallback to userinfo endpoint validation (works for opaque tokens)
+    if (this.discoveredEndpoints?.userinfoUrl) {
+      try {
+        logger.debug("Attempting userinfo endpoint validation...");
+        const response = await fetch(this.discoveredEndpoints.userinfoUrl, {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Accept: "application/json",
+          },
+        });
+
+        if (!response.ok) {
+          throw new Error(
+            `Userinfo request failed: ${response.status} ${response.statusText}`,
+          );
+        }
+
+        const userinfo = await response.json();
+        logger.debug(
+          `Token validation successful. User: ${userinfo.sub}, Email: ${userinfo.email}`,
+        );
+
+        if (!userinfo.sub) {
+          throw new Error("Userinfo response missing subject");
+        }
+
+        // Optional: Resource validation if MCP Authorization spec requires it
+        if (request) {
+          const supportedResources = this.getSupportedResources(request);
+          logger.debug(`Supported resources: ${JSON.stringify(supportedResources)}`);
+          // For now, we allow access if the token is valid - binary authentication
+        }
+
+        return {
+          token,
+          clientId: userinfo.sub,
+          scopes: ["*"], // Full access for all authenticated users
+        };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error";
+        logger.debug(`Userinfo validation failed: ${errorMessage}`);
+        // Continue to final error
+      }
+    }
+
+    // Both validation strategies failed
+    logger.debug("All token validation strategies exhausted");
+    throw new Error("Invalid access token");
   }
 
   /**

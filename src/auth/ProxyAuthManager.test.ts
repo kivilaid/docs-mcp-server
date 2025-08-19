@@ -3,15 +3,25 @@
  */
 
 import type { FastifyInstance } from "fastify";
+import { jwtVerify } from "jose";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ProxyAuthManager } from "./ProxyAuthManager";
 import type { AuthConfig } from "./types";
+
+// Get the mocked function
+const mockJwtVerify = vi.mocked(jwtVerify);
 
 // Mock the MCP SDK
 vi.mock("@modelcontextprotocol/sdk/server/auth/providers/proxyProvider.js", () => ({
   ProxyOAuthServerProvider: vi.fn().mockImplementation(() => ({
     // Mock implementation
   })),
+}));
+
+// Mock jose library
+vi.mock("jose", () => ({
+  createRemoteJWKSet: vi.fn().mockReturnValue({}),
+  jwtVerify: vi.fn(),
 }));
 
 // Mock fetch globally
@@ -47,7 +57,7 @@ describe("ProxyAuthManager", () => {
       post: vi.fn(),
     } as unknown as FastifyInstance;
 
-    // Mock successful OIDC discovery
+    // Mock successful OAuth2 discovery with JWKS and userinfo endpoints
     mockFetch.mockResolvedValue({
       ok: true,
       json: () =>
@@ -56,6 +66,7 @@ describe("ProxyAuthManager", () => {
           token_endpoint: "https://auth.example.com/oauth/token",
           revocation_endpoint: "https://auth.example.com/oauth/revoke",
           registration_endpoint: "https://auth.example.com/oauth/register",
+          jwks_uri: "https://auth.example.com/.well-known/jwks.json",
           userinfo_endpoint: "https://auth.example.com/oauth/userinfo",
         }),
     });
@@ -74,7 +85,7 @@ describe("ProxyAuthManager", () => {
 
       await expect(authManager.initialize()).resolves.toBeUndefined();
       expect(mockFetch).toHaveBeenCalledWith(
-        "https://auth.example.com/.well-known/openid-configuration",
+        "https://auth.example.com/.well-known/oauth-authorization-server",
       );
     });
 
@@ -96,8 +107,9 @@ describe("ProxyAuthManager", () => {
       );
     });
 
-    it("should handle OIDC discovery failure", async () => {
-      mockFetch.mockResolvedValueOnce({
+    it("should handle OAuth2 discovery failure", async () => {
+      // Mock OAuth2 discovery failure
+      mockFetch.mockResolvedValue({
         ok: false,
         status: 404,
       });
@@ -106,6 +118,11 @@ describe("ProxyAuthManager", () => {
 
       await expect(authManager.initialize()).rejects.toThrow(
         "Proxy authentication initialization failed",
+      );
+
+      // Should try OAuth2 discovery
+      expect(mockFetch).toHaveBeenCalledWith(
+        "https://auth.example.com/.well-known/oauth-authorization-server",
       );
     });
   });
@@ -175,18 +192,20 @@ describe("ProxyAuthManager", () => {
       });
 
       it("should return authenticated context for valid token", async () => {
-        // Mock successful userinfo response
-        mockFetch.mockResolvedValueOnce({
-          ok: true,
-          json: () =>
-            Promise.resolve({
-              sub: "user123",
-              email: "user@example.com",
-              name: "Test User",
-            }),
-        });
+        // Mock successful JWT verification
+        mockJwtVerify.mockResolvedValueOnce({
+          payload: {
+            sub: "user123",
+            aud: "https://mcp.example.com",
+            iss: "https://auth.example.com",
+            exp: Math.floor(Date.now() / 1000) + 3600,
+          },
+          protectedHeader: {
+            alg: "RS256",
+          },
+        } as any);
 
-        const context = await authManager.createAuthContext("Bearer valid-token");
+        const context = await authManager.createAuthContext("Bearer valid-jwt-token");
 
         expect(context).toEqual({
           authenticated: true,
@@ -194,26 +213,20 @@ describe("ProxyAuthManager", () => {
           subject: "user123",
         });
 
-        // Verify userinfo endpoint was called
-        expect(mockFetch).toHaveBeenCalledWith(
-          "https://auth.example.com/oauth/userinfo",
+        // Verify JWT verification was called with correct parameters
+        expect(mockJwtVerify).toHaveBeenCalledWith(
+          "valid-jwt-token",
+          {},
           {
-            method: "GET",
-            headers: {
-              Authorization: "Bearer valid-token",
-              Accept: "application/json",
-            },
+            issuer: "https://auth.example.com",
+            audience: "https://mcp.example.com",
           },
         );
       });
 
       it("should return unauthenticated context for expired/invalid token", async () => {
-        // Mock userinfo endpoint returning 401 Unauthorized (invalid token)
-        mockFetch.mockResolvedValueOnce({
-          ok: false,
-          status: 401,
-          statusText: "Unauthorized",
-        });
+        // Mock JWT verification failure
+        mockJwtVerify.mockRejectedValueOnce(new Error("JWT expired"));
 
         const context = await authManager.createAuthContext("Bearer invalid-token");
 
@@ -232,15 +245,11 @@ describe("ProxyAuthManager", () => {
         });
       });
 
-      it("should return unauthenticated context when userinfo endpoint fails", async () => {
-        // Mock userinfo endpoint returning 500 Server Error
-        mockFetch.mockResolvedValueOnce({
-          ok: false,
-          status: 500,
-          statusText: "Internal Server Error",
-        });
+      it("should return unauthenticated context when JWT validation fails", async () => {
+        // Mock JWT verification failure due to invalid signature
+        mockJwtVerify.mockRejectedValueOnce(new Error("Invalid signature"));
 
-        const context = await authManager.createAuthContext("Bearer some-token");
+        const context = await authManager.createAuthContext("Bearer invalid-jwt");
 
         expect(context).toEqual({
           authenticated: false,
@@ -248,19 +257,126 @@ describe("ProxyAuthManager", () => {
         });
       });
 
-      it("should return unauthenticated context when userinfo response missing subject", async () => {
-        // Mock userinfo response without required 'sub' field
+      it("should return unauthenticated context when JWT payload missing subject", async () => {
+        // Mock JWT verification with payload missing 'sub' field
+        mockJwtVerify.mockResolvedValueOnce({
+          payload: {
+            aud: "https://mcp.example.com",
+            iss: "https://auth.example.com",
+            exp: Math.floor(Date.now() / 1000) + 3600,
+            email: "user@example.com",
+            name: "Test User",
+            // Missing 'sub' field
+          },
+          protectedHeader: {
+            alg: "RS256",
+          },
+        } as any);
+
+        const context = await authManager.createAuthContext("Bearer token-without-sub");
+
+        expect(context).toEqual({
+          authenticated: false,
+          scopes: new Set(),
+        });
+      });
+
+      it("should fall back to userinfo validation when JWT validation fails", async () => {
+        // Mock JWT verification failure (opaque token that can't be parsed as JWT)
+        mockJwtVerify.mockRejectedValueOnce(new Error("Invalid Compact JWS"));
+
+        // Mock successful userinfo response as fallback
         mockFetch.mockResolvedValueOnce({
           ok: true,
           json: () =>
             Promise.resolve({
+              sub: "user456",
               email: "user@example.com",
               name: "Test User",
-              // Missing 'sub' field
             }),
         });
 
-        const context = await authManager.createAuthContext("Bearer token-without-sub");
+        const context = await authManager.createAuthContext(
+          "Bearer oat_opaque_token_123",
+        );
+
+        expect(context).toEqual({
+          authenticated: true,
+          scopes: new Set(["*"]),
+          subject: "user456",
+        });
+
+        // Verify JWT verification was attempted first
+        expect(mockJwtVerify).toHaveBeenCalledWith(
+          "oat_opaque_token_123",
+          {},
+          {
+            issuer: "https://auth.example.com",
+            audience: "https://mcp.example.com",
+          },
+        );
+
+        // Verify userinfo endpoint was called as fallback
+        expect(mockFetch).toHaveBeenCalledWith(
+          "https://auth.example.com/oauth/userinfo",
+          {
+            method: "GET",
+            headers: {
+              Authorization: "Bearer oat_opaque_token_123",
+              Accept: "application/json",
+            },
+          },
+        );
+      });
+
+      it("should fail when both JWT and userinfo validation fail", async () => {
+        // Mock JWT verification failure
+        mockJwtVerify.mockRejectedValueOnce(new Error("Invalid Compact JWS"));
+
+        // Mock userinfo endpoint failure
+        mockFetch.mockResolvedValueOnce({
+          ok: false,
+          status: 401,
+          statusText: "Unauthorized",
+        });
+
+        const context = await authManager.createAuthContext("Bearer invalid_token");
+
+        expect(context).toEqual({
+          authenticated: false,
+          scopes: new Set(),
+        });
+
+        // Verify both validation methods were attempted
+        expect(mockJwtVerify).toHaveBeenCalled();
+        expect(mockFetch).toHaveBeenCalledWith(
+          "https://auth.example.com/oauth/userinfo",
+          expect.objectContaining({
+            method: "GET",
+            headers: expect.objectContaining({
+              Authorization: "Bearer invalid_token",
+            }),
+          }),
+        );
+      });
+
+      it("should fall back to userinfo when userinfo endpoint is missing in JWT scenario", async () => {
+        // Mock JWT verification failure
+        mockJwtVerify.mockRejectedValueOnce(new Error("Invalid Compact JWS"));
+
+        // Mock discovery response without userinfo endpoint
+        mockFetch.mockResolvedValueOnce({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              authorization_endpoint: "https://auth.example.com/oauth/authorize",
+              token_endpoint: "https://auth.example.com/oauth/token",
+              jwks_uri: "https://auth.example.com/.well-known/jwks.json",
+              // No userinfo_endpoint
+            }),
+        });
+
+        const context = await authManager.createAuthContext("Bearer some_token");
 
         expect(context).toEqual({
           authenticated: false,
