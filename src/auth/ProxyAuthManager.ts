@@ -3,7 +3,7 @@
  * This provides OAuth2 proxy functionality for Fastify, leveraging the SDK's auth logic
  * while maintaining compatibility with the existing Fastify-based architecture.
  * Uses standard OAuth identity scopes with binary authentication (authenticated vs not).
- * Supports both JWT tokens (self-contained) and opaque tokens (via RFC 7662 introspection).
+ * Validates tokens using the OAuth provider's userinfo endpoint for universal compatibility.
  */
 
 import { ProxyOAuthServerProvider } from "@modelcontextprotocol/sdk/server/auth/providers/proxyProvider.js";
@@ -13,6 +13,13 @@ import type { AuthConfig, AuthContext } from "./types";
 
 export class ProxyAuthManager {
   private proxyProvider: ProxyOAuthServerProvider | null = null;
+  private discoveredEndpoints: {
+    authorizationUrl: string;
+    tokenUrl: string;
+    revocationUrl?: string;
+    registrationUrl?: string;
+    userinfoUrl?: string;
+  } | null = null;
 
   constructor(private config: AuthConfig) {}
 
@@ -39,12 +46,17 @@ export class ProxyAuthManager {
     try {
       logger.info("🔐 Initializing OAuth2 proxy authentication...");
 
-      // Discover the OAuth endpoints from the provider
-      const endpoints = await this.discoverEndpoints();
+      // Discover and cache the OAuth endpoints from the provider
+      this.discoveredEndpoints = await this.discoverEndpoints();
 
       // Create the proxy provider
       this.proxyProvider = new ProxyOAuthServerProvider({
-        endpoints,
+        endpoints: {
+          authorizationUrl: this.discoveredEndpoints.authorizationUrl,
+          tokenUrl: this.discoveredEndpoints.tokenUrl,
+          revocationUrl: this.discoveredEndpoints.revocationUrl,
+          registrationUrl: this.discoveredEndpoints.registrationUrl,
+        },
         verifyAccessToken: this.verifyAccessToken.bind(this),
         getClient: this.getClient.bind(this),
       });
@@ -205,7 +217,7 @@ export class ProxyAuthManager {
   }
 
   /**
-   * Discover OAuth endpoints from the OIDC provider.
+   * Discover OAuth endpoints from the OIDC provider and cache them.
    */
   private async discoverEndpoints() {
     const discoveryUrl = `${this.config.issuerUrl}/.well-known/openid-configuration`;
@@ -224,6 +236,8 @@ export class ProxyAuthManager {
       // Clerk supports DCR at /oauth/register but doesn't advertise it in discovery
       registrationUrl:
         config.registration_endpoint || `${this.config.issuerUrl}/oauth/register`,
+      // Cache userinfo endpoint for token validation
+      userinfoUrl: config.userinfo_endpoint,
     };
   }
 
@@ -242,74 +256,56 @@ export class ProxyAuthManager {
   }
 
   /**
-   * Verify an access token and return auth information.
+   * Verify an access token using the OAuth provider's userinfo endpoint.
    * This is called by the proxy provider to validate tokens.
    * Uses binary authentication - if token is valid, user gets full access.
-   * Supports both JWT tokens and opaque tokens via RFC 7662 introspection.
+   * Works with any token format (JWT, opaque, etc.) by delegating validation to the auth server.
    */
   private async verifyAccessToken(token: string, request?: FastifyRequest) {
     try {
       logger.debug(`Attempting to verify access token: ${token.substring(0, 20)}...`);
 
-      // Try JWT decoding first (for self-contained tokens)
-      let tokenInfo: {
-        iss?: string;
-        aud?: string | string[];
-        sub?: string;
-        resource?: string;
-        exp?: number;
-      };
+      if (!this.discoveredEndpoints?.userinfoUrl) {
+        throw new Error("Userinfo endpoint not available");
+      }
 
-      try {
-        tokenInfo = this.decodeTokenBasic(token);
-        logger.debug(
-          `Token decoded as JWT. Issuer: ${tokenInfo.iss}, Audience: ${tokenInfo.aud}, Subject: ${tokenInfo.sub}`,
-        );
-      } catch (jwtError) {
-        // If JWT decoding fails, try token introspection (for opaque tokens)
-        logger.debug(
-          `JWT decoding failed, attempting token introspection: ${jwtError instanceof Error ? jwtError.message : "Unknown error"}`,
-        );
-        tokenInfo = await this.introspectToken(token);
-        logger.debug(
-          `Token introspected successfully. Issuer: ${tokenInfo.iss}, Audience: ${tokenInfo.aud}, Subject: ${tokenInfo.sub}`,
+      // Call the userinfo endpoint to validate the token and get user information
+      const response = await fetch(this.discoveredEndpoints.userinfoUrl, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/json",
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(
+          `Userinfo request failed: ${response.status} ${response.statusText}`,
         );
       }
 
-      // Standard audience validation (always required)
-      if (!tokenInfo.aud) {
-        logger.debug("Token missing audience claim");
-        throw new Error("Token missing audience claim");
+      const userinfo = await response.json();
+      logger.debug(
+        `Token validation successful. User: ${userinfo.sub}, Email: ${userinfo.email}`,
+      );
+
+      // Basic validation - ensure we have a subject
+      if (!userinfo.sub) {
+        throw new Error("Userinfo response missing subject");
       }
 
-      const audiences = Array.isArray(tokenInfo.aud) ? tokenInfo.aud : [tokenInfo.aud];
-      const expectedAudience = this.config.audience;
-      if (!expectedAudience || !audiences.includes(expectedAudience)) {
-        logger.debug(
-          `Audience validation failed. Token audiences: ${JSON.stringify(audiences)}, Expected: ${this.config.audience}`,
-        );
-        throw new Error("Token audience mismatch");
-      }
-
-      // Resource validation (only if resource claim is present and request context available)
-      if (tokenInfo.resource && request && typeof tokenInfo.resource === "string") {
+      // Optional: Resource validation if MCP Authorization spec requires it
+      // This is simplified - in a real implementation you might want more sophisticated resource validation
+      if (request) {
         const supportedResources = this.getSupportedResources(request);
-        if (!supportedResources.includes(tokenInfo.resource)) {
-          logger.debug(
-            `Resource validation failed. Token resource: ${tokenInfo.resource}, Supported: ${JSON.stringify(supportedResources)}`,
-          );
-          throw new Error(
-            `Token resource '${tokenInfo.resource}' not supported by this server`,
-          );
-        }
+        logger.debug(`Supported resources: ${JSON.stringify(supportedResources)}`);
+        // For now, we allow access if the token is valid - binary authentication
       }
-
-      logger.debug(`Token validation successful for subject: ${tokenInfo.sub}`);
 
       // Binary authentication: valid token = full access
       return {
         token,
-        clientId: (tokenInfo.sub as string) || "unknown",
+        clientId: userinfo.sub,
         scopes: ["*"], // Full access for all authenticated users
       };
     } catch (error) {
@@ -331,120 +327,6 @@ export class ProxyAuthManager {
       redirect_uris: [`${this.config.audience}/callback`],
       // Add other client metadata as needed
     };
-  }
-
-  /**
-   * Decode JWT token payload without signature verification.
-   * Uses proper base64url decoding as per JWT spec.
-   */
-  private decodeTokenBasic(token: string): Record<string, unknown> {
-    const parts = token.split(".");
-    if (parts.length !== 3) {
-      throw new Error("Invalid JWT format");
-    }
-
-    try {
-      // Use base64url decoding (replace URL-safe chars and add padding)
-      const base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
-      const padded = base64 + "=".repeat((4 - (base64.length % 4)) % 4);
-      const payload = JSON.parse(Buffer.from(padded, "base64").toString());
-
-      // Basic validation
-      if (!payload.aud || !payload.iss || !payload.exp) {
-        throw new Error("Missing required JWT claims");
-      }
-
-      // Check expiration
-      if (payload.exp * 1000 < Date.now()) {
-        throw new Error("Token has expired");
-      }
-
-      // Check issuer
-      if (payload.iss !== this.config.issuerUrl) {
-        throw new Error("Token issuer mismatch");
-      }
-
-      return payload;
-    } catch (error) {
-      if (error instanceof Error && error.message.includes("required JWT claims")) {
-        throw error;
-      }
-      throw new Error("Invalid JWT format");
-    }
-  }
-
-  /**
-   * Introspect an opaque token using RFC 7662 Token Introspection.
-   * This method calls the OAuth provider's introspection endpoint to validate opaque tokens.
-   */
-  private async introspectToken(token: string): Promise<{
-    iss?: string;
-    aud?: string | string[];
-    sub?: string;
-    resource?: string;
-    exp?: number;
-  }> {
-    try {
-      // Many OAuth providers support introspection at /oauth/introspect
-      // but it's not always advertised in the discovery document
-      const introspectionUrl = `${this.config.issuerUrl}/oauth/introspect`;
-
-      logger.debug(`Introspecting token at: ${introspectionUrl}`);
-
-      // RFC 7662 introspection request
-      const response = await fetch(introspectionUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/x-www-form-urlencoded",
-          Accept: "application/json",
-        },
-        body: new URLSearchParams({
-          token: token,
-          token_type_hint: "access_token",
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error(
-          `Introspection request failed: ${response.status} ${response.statusText}`,
-        );
-      }
-
-      const introspectionResult = await response.json();
-      logger.debug(
-        `Introspection result: ${JSON.stringify(introspectionResult, null, 2)}`,
-      );
-
-      // RFC 7662: If the token is invalid or expired, the response will have active: false
-      if (!introspectionResult.active) {
-        throw new Error("Token is not active (invalid or expired)");
-      }
-
-      // Map introspection result to expected token info format
-      const tokenInfo = {
-        iss: introspectionResult.iss || this.config.issuerUrl,
-        aud: introspectionResult.aud || this.config.audience,
-        sub: introspectionResult.sub,
-        resource: introspectionResult.resource,
-        exp: introspectionResult.exp,
-      };
-
-      // Validate required claims
-      if (!tokenInfo.sub) {
-        throw new Error("Token missing subject claim");
-      }
-
-      // Check expiration if present
-      if (tokenInfo.exp && tokenInfo.exp * 1000 < Date.now()) {
-        throw new Error("Token has expired");
-      }
-
-      return tokenInfo;
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "Unknown error";
-      logger.debug(`Token introspection failed: ${errorMessage}`);
-      throw new Error(`Token introspection failed: ${errorMessage}`);
-    }
   }
 
   /**

@@ -31,12 +31,14 @@ describe("ProxyAuthManager", () => {
       enabled: true,
       issuerUrl: "https://auth.example.com",
       audience: "https://mcp.example.com",
+      scopes: ["profile", "email"],
     };
 
     disabledAuthConfig = {
       enabled: false,
       issuerUrl: undefined,
       audience: undefined,
+      scopes: [],
     };
 
     // Mock Fastify server
@@ -54,6 +56,7 @@ describe("ProxyAuthManager", () => {
           token_endpoint: "https://auth.example.com/oauth/token",
           revocation_endpoint: "https://auth.example.com/oauth/revoke",
           registration_endpoint: "https://auth.example.com/oauth/register",
+          userinfo_endpoint: "https://auth.example.com/oauth/userinfo",
         }),
     });
   });
@@ -172,68 +175,47 @@ describe("ProxyAuthManager", () => {
       });
 
       it("should return authenticated context for valid token", async () => {
-        // Create a valid JWT token (base64 encoded)
-        const payload = {
-          iss: "https://auth.example.com",
-          aud: "https://mcp.example.com",
-          sub: "user123",
-          exp: Math.floor(Date.now() / 1000) + 3600, // 1 hour from now
-        };
-        const token = createMockJWT(payload);
+        // Mock successful userinfo response
+        mockFetch.mockResolvedValueOnce({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              sub: "user123",
+              email: "user@example.com",
+              name: "Test User",
+            }),
+        });
 
-        const context = await authManager.createAuthContext(`Bearer ${token}`);
+        const context = await authManager.createAuthContext("Bearer valid-token");
 
         expect(context).toEqual({
           authenticated: true,
           scopes: new Set(["*"]),
           subject: "user123",
         });
+
+        // Verify userinfo endpoint was called
+        expect(mockFetch).toHaveBeenCalledWith(
+          "https://auth.example.com/oauth/userinfo",
+          {
+            method: "GET",
+            headers: {
+              Authorization: "Bearer valid-token",
+              Accept: "application/json",
+            },
+          },
+        );
       });
 
-      it("should return unauthenticated context for expired token", async () => {
-        const payload = {
-          iss: "https://auth.example.com",
-          aud: "https://mcp.example.com",
-          sub: "user123",
-          exp: Math.floor(Date.now() / 1000) - 3600, // 1 hour ago
-        };
-        const token = createMockJWT(payload);
-
-        const context = await authManager.createAuthContext(`Bearer ${token}`);
-
-        expect(context).toEqual({
-          authenticated: false,
-          scopes: new Set(),
+      it("should return unauthenticated context for expired/invalid token", async () => {
+        // Mock userinfo endpoint returning 401 Unauthorized (invalid token)
+        mockFetch.mockResolvedValueOnce({
+          ok: false,
+          status: 401,
+          statusText: "Unauthorized",
         });
-      });
 
-      it("should return unauthenticated context for token with wrong audience", async () => {
-        const payload = {
-          iss: "https://auth.example.com",
-          aud: "https://wrong-audience.com",
-          sub: "user123",
-          exp: Math.floor(Date.now() / 1000) + 3600,
-        };
-        const token = createMockJWT(payload);
-
-        const context = await authManager.createAuthContext(`Bearer ${token}`);
-
-        expect(context).toEqual({
-          authenticated: false,
-          scopes: new Set(),
-        });
-      });
-
-      it("should return unauthenticated context for token with wrong issuer", async () => {
-        const payload = {
-          iss: "https://wrong-issuer.com",
-          aud: "https://mcp.example.com",
-          sub: "user123",
-          exp: Math.floor(Date.now() / 1000) + 3600,
-        };
-        const token = createMockJWT(payload);
-
-        const context = await authManager.createAuthContext(`Bearer ${token}`);
+        const context = await authManager.createAuthContext("Bearer invalid-token");
 
         expect(context).toEqual({
           authenticated: false,
@@ -250,8 +232,15 @@ describe("ProxyAuthManager", () => {
         });
       });
 
-      it("should return unauthenticated context for malformed JWT", async () => {
-        const context = await authManager.createAuthContext("Bearer invalid.jwt.token");
+      it("should return unauthenticated context when userinfo endpoint fails", async () => {
+        // Mock userinfo endpoint returning 500 Server Error
+        mockFetch.mockResolvedValueOnce({
+          ok: false,
+          status: 500,
+          statusText: "Internal Server Error",
+        });
+
+        const context = await authManager.createAuthContext("Bearer some-token");
 
         expect(context).toEqual({
           authenticated: false,
@@ -259,35 +248,25 @@ describe("ProxyAuthManager", () => {
         });
       });
 
-      it("should handle token with array audience", async () => {
-        const payload = {
-          iss: "https://auth.example.com",
-          aud: ["https://mcp.example.com", "https://other.example.com"],
-          sub: "user123",
-          exp: Math.floor(Date.now() / 1000) + 3600,
-        };
-        const token = createMockJWT(payload);
+      it("should return unauthenticated context when userinfo response missing subject", async () => {
+        // Mock userinfo response without required 'sub' field
+        mockFetch.mockResolvedValueOnce({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              email: "user@example.com",
+              name: "Test User",
+              // Missing 'sub' field
+            }),
+        });
 
-        const context = await authManager.createAuthContext(`Bearer ${token}`);
+        const context = await authManager.createAuthContext("Bearer token-without-sub");
 
         expect(context).toEqual({
-          authenticated: true,
-          scopes: new Set(["*"]),
-          subject: "user123",
+          authenticated: false,
+          scopes: new Set(),
         });
       });
     });
   });
 });
-
-/**
- * Helper function to create a mock JWT token for testing
- */
-function createMockJWT(payload: Record<string, unknown>): string {
-  const header = { alg: "HS256", typ: "JWT" };
-  const encodedHeader = Buffer.from(JSON.stringify(header)).toString("base64");
-  const encodedPayload = Buffer.from(JSON.stringify(payload)).toString("base64");
-  const signature = "mock-signature";
-
-  return `${encodedHeader}.${encodedPayload}.${signature}`;
-}
