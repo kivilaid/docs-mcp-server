@@ -14,9 +14,9 @@ describe("defaultPatterns", () => {
     });
 
     it("should include sample common documentation files", () => {
-      expect(DEFAULT_FILE_EXCLUSIONS).toContain("CHANGELOG.md");
-      expect(DEFAULT_FILE_EXCLUSIONS).toContain("LICENSE");
-      expect(DEFAULT_FILE_EXCLUSIONS).toContain("CODE_OF_CONDUCT.md");
+      expect(DEFAULT_FILE_EXCLUSIONS).toContain("**/CHANGELOG.md");
+      expect(DEFAULT_FILE_EXCLUSIONS).toContain("**/LICENSE");
+      expect(DEFAULT_FILE_EXCLUSIONS).toContain("**/CODE_OF_CONDUCT.md");
     });
   });
 

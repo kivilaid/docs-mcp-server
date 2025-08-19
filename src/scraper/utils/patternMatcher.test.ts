@@ -171,8 +171,8 @@ describe("patternMatcher", () => {
   describe("default patterns behavior verification", () => {
     it("should have expected default exclusion patterns", () => {
       expect(DEFAULT_EXCLUSION_PATTERNS.length).toBeGreaterThan(0);
-      expect(DEFAULT_EXCLUSION_PATTERNS).toContain("CHANGELOG.md");
-      expect(DEFAULT_EXCLUSION_PATTERNS).toContain("LICENSE");
+      expect(DEFAULT_EXCLUSION_PATTERNS).toContain("**/CHANGELOG.md");
+      expect(DEFAULT_EXCLUSION_PATTERNS).toContain("**/LICENSE");
       expect(DEFAULT_EXCLUSION_PATTERNS).toContain("**/archive/**");
       expect(DEFAULT_EXCLUSION_PATTERNS).toContain("**/i18n/zh*/**");
     });
