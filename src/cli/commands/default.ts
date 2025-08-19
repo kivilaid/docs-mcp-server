@@ -60,11 +60,6 @@ export function createDefaultAction(program: Command): Command {
         "--auth-audience <id>",
         "JWT audience claim (identifies this protected resource)",
       )
-      .option(
-        "--auth-scopes <scopes>",
-        "Comma-separated list of enabled scopes",
-        CLI_DEFAULTS.AUTH_SCOPES.join(","),
-      )
       .action(
         async (
           options: {
@@ -75,7 +70,6 @@ export function createDefaultAction(program: Command): Command {
             authEnabled?: boolean;
             authIssuerUrl?: string;
             authAudience?: string;
-            authScopes?: string;
           },
           command,
         ) => {
@@ -94,7 +88,6 @@ export function createDefaultAction(program: Command): Command {
             authEnabled: options.authEnabled,
             authIssuerUrl: options.authIssuerUrl,
             authAudience: options.authAudience,
-            authScopes: options.authScopes,
           });
 
           if (authConfig) {

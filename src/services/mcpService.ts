@@ -8,7 +8,7 @@ import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { ProxyAuthManager } from "../auth";
-import { createAuthMiddleware, createScopeMiddleware } from "../auth/middleware";
+import { createAuthMiddleware } from "../auth/middleware";
 import { createMcpServerInstance } from "../mcp/mcpServer";
 import { initializeTools } from "../mcp/tools";
 import type { IPipeline } from "../pipeline/trpc/interfaces";
@@ -38,7 +38,6 @@ export async function registerMcpService(
 
   // Setup auth middleware if auth manager is provided
   const authMiddleware = authManager ? createAuthMiddleware(authManager) : null;
-  const scopeMiddleware = authManager ? createScopeMiddleware() : null;
 
   // Track SSE transports for cleanup
   const sseTransports: Record<string, SSEServerTransport> = {};
@@ -97,8 +96,7 @@ export async function registerMcpService(
   server.route({
     method: "POST",
     url: "/mcp",
-    preHandler:
-      authMiddleware && scopeMiddleware ? [authMiddleware, scopeMiddleware] : undefined,
+    preHandler: authMiddleware ? [authMiddleware] : undefined,
     handler: async (request: FastifyRequest, reply: FastifyReply) => {
       try {
         // In stateless mode, create a new instance of server and transport for each request

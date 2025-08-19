@@ -218,7 +218,6 @@ ${r.content}\n`,
   );
 
   // Find version tool
-  // @ts-expect-error TypeScript has issues with deep Zod inference in MCP SDK
   server.tool(
     "find_version",
     "Find the best matching version for a library. Use to identify available or closest versions.",

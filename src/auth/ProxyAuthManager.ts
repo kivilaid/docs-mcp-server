@@ -2,13 +2,13 @@
  * Simplified MCP Authentication Manager using the MCP SDK's ProxyOAuthServerProvider.
  * This provides OAuth2 proxy functionality for Fastify, leveraging the SDK's auth logic
  * while maintaining compatibility with the existing Fastify-based architecture.
+ * Uses standard OAuth identity scopes with binary authentication (authenticated vs not).
  */
 
 import { ProxyOAuthServerProvider } from "@modelcontextprotocol/sdk/server/auth/providers/proxyProvider.js";
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyRequest } from "fastify";
 import { logger } from "../utils/logger";
-import { expandScopes } from "./ScopeValidator";
-import type { AuthConfig, AuthContext, McpScope } from "./types";
+import type { AuthConfig, AuthContext } from "./types";
 
 export class ProxyAuthManager {
   private proxyProvider: ProxyOAuthServerProvider | null = null;
@@ -66,7 +66,7 @@ export class ProxyAuthManager {
         token_endpoint: `${baseUrl.origin}/oauth/token`,
         revocation_endpoint: `${baseUrl.origin}/oauth/revoke`,
         registration_endpoint: `${baseUrl.origin}/oauth/register`,
-        scopes_supported: this.config.scopes,
+        scopes_supported: ["profile", "email"],
         response_types_supported: ["code"],
         grant_types_supported: ["authorization_code", "refresh_token"],
         token_endpoint_auth_methods_supported: [
@@ -82,14 +82,31 @@ export class ProxyAuthManager {
 
     // OAuth2 Protected Resource Metadata (RFC 9728)
     server.get("/.well-known/oauth-protected-resource", async (request, reply) => {
-      const resourceUrl = `${request.protocol}://${request.headers.host}/sse`;
+      const baseUrl = `${request.protocol}://${request.headers.host}`;
       const metadata = {
-        resource: resourceUrl,
+        resource: `${baseUrl}/sse`,
         authorization_servers: [this.config.issuerUrl],
-        scopes_supported: this.config.scopes,
+        scopes_supported: ["profile", "email"],
         bearer_methods_supported: ["header"],
         resource_name: "Documentation MCP Server",
         resource_documentation: "https://github.com/arabold/docs-mcp-server#readme",
+        // Enhanced metadata for better discoverability
+        resource_server_metadata_url: `${baseUrl}/.well-known/oauth-protected-resource`,
+        authorization_server_metadata_url: `${this.config.issuerUrl}/.well-known/openid-configuration`,
+        jwks_uri: `${this.config.issuerUrl}/.well-known/jwks.json`,
+        // Supported MCP transports
+        mcp_transports: [
+          {
+            transport: "sse",
+            endpoint: `${baseUrl}/sse`,
+            description: "Server-Sent Events transport",
+          },
+          {
+            transport: "http",
+            endpoint: `${baseUrl}/mcp`,
+            description: "Streaming HTTP transport",
+          },
+        ],
       };
 
       reply.type("application/json").send(metadata);
@@ -100,8 +117,14 @@ export class ProxyAuthManager {
       // In a proxy setup, redirect to the upstream authorization server
       const endpoints = await this.discoverEndpoints();
       const params = new URLSearchParams(request.query as Record<string, string>);
-      const redirectUrl = `${endpoints.authorizationUrl}?${params.toString()}`;
 
+      // Add resource parameter (RFC 8707) for token binding
+      if (!params.has("resource")) {
+        const resourceUrl = `${request.protocol}://${request.headers.host}/sse`;
+        params.set("resource", resourceUrl);
+      }
+
+      const redirectUrl = `${endpoints.authorizationUrl}?${params.toString()}`;
       reply.redirect(redirectUrl);
     });
 
@@ -110,12 +133,21 @@ export class ProxyAuthManager {
       // Proxy token requests to the upstream server
       const endpoints = await this.discoverEndpoints();
 
+      // Prepare token request body, preserving resource parameter if present
+      const tokenBody = new URLSearchParams(request.body as Record<string, string>);
+
+      // Add resource parameter if not already present (for backward compatibility)
+      if (!tokenBody.has("resource")) {
+        const resourceUrl = `${request.protocol}://${request.headers.host}/sse`;
+        tokenBody.set("resource", resourceUrl);
+      }
+
       const response = await fetch(endpoints.tokenUrl, {
         method: "POST",
         headers: {
           "Content-Type": "application/x-www-form-urlencoded",
         },
-        body: new URLSearchParams(request.body as Record<string, string>).toString(),
+        body: tokenBody.toString(),
       });
 
       const data = await response.json();
@@ -188,22 +220,50 @@ export class ProxyAuthManager {
   }
 
   /**
+   * Get supported resource URLs for this MCP server instance.
+   * This enables self-discovering resource validation.
+   */
+  private getSupportedResources(request: FastifyRequest): string[] {
+    const baseUrl = `${request.protocol}://${request.headers.host}`;
+
+    return [
+      `${baseUrl}/sse`, // SSE transport
+      `${baseUrl}/mcp`, // Streaming HTTP transport
+      `${baseUrl}`, // Server root
+    ];
+  }
+
+  /**
    * Verify an access token and return auth information.
    * This is called by the proxy provider to validate tokens.
+   * Uses binary authentication - if token is valid, user gets full access.
    */
-  private async verifyAccessToken(token: string) {
+  private async verifyAccessToken(token: string, request?: FastifyRequest) {
     try {
-      // For now, use the simple token validation from the current implementation
-      // In production, you'd want proper JWT verification
+      // Basic token validation (expiry, issuer, audience)
       const decoded = this.decodeTokenBasic(token);
 
-      // Extract scopes from the token
-      const scopes = this.extractScopes(decoded);
+      // Standard audience validation (always required)
+      const audiences = Array.isArray(decoded.aud) ? decoded.aud : [decoded.aud];
+      if (!audiences.includes(this.config.audience)) {
+        throw new Error("Token audience mismatch");
+      }
 
+      // Resource validation (only if resource claim is present and request context available)
+      if (decoded.resource && request && typeof decoded.resource === "string") {
+        const supportedResources = this.getSupportedResources(request);
+        if (!supportedResources.includes(decoded.resource)) {
+          throw new Error(
+            `Token resource '${decoded.resource}' not supported by this server`,
+          );
+        }
+      }
+
+      // Binary authentication: valid token = full access
       return {
         token,
         clientId: (decoded.sub as string) || "unknown",
-        scopes: Array.from(scopes),
+        scopes: ["*"], // Full access for all authenticated users
       };
     } catch (error) {
       logger.debug(`Token validation failed: ${error}`);
@@ -247,12 +307,6 @@ export class ProxyAuthManager {
       throw new Error("Token has expired");
     }
 
-    // Check audience
-    const audiences = Array.isArray(payload.aud) ? payload.aud : [payload.aud];
-    if (!audiences.includes(this.config.audience)) {
-      throw new Error("Token audience mismatch");
-    }
-
     // Check issuer
     if (payload.iss !== this.config.issuerUrl) {
       throw new Error("Token issuer mismatch");
@@ -262,45 +316,14 @@ export class ProxyAuthManager {
   }
 
   /**
-   * Extract scopes from a decoded JWT token.
-   */
-  private extractScopes(decoded: Record<string, unknown>): Set<string> {
-    const scopes = new Set<string>();
-
-    // Handle space-separated scope string (standard OAuth2)
-    if (typeof decoded.scope === "string") {
-      for (const scope of decoded.scope.split(" ")) {
-        if (scope.trim()) {
-          scopes.add(scope.trim());
-        }
-      }
-    }
-
-    // Handle scope array (some providers use this format)
-    if (Array.isArray(decoded.scopes)) {
-      for (const scope of decoded.scopes) {
-        if (typeof scope === "string" && scope.trim()) {
-          scopes.add(scope.trim());
-        }
-      }
-    }
-
-    // If no scopes found, return configured scopes for development
-    if (scopes.size === 0) {
-      return new Set(this.config.scopes);
-    }
-
-    return scopes;
-  }
-
-  /**
    * Create an authentication context from a token (for compatibility with existing middleware).
+   * Uses binary authentication - valid token grants full access.
    */
   async createAuthContext(authorization: string): Promise<AuthContext> {
     if (!this.config.enabled) {
       return {
         authenticated: false,
-        scopes: new Set(this.config.scopes),
+        scopes: new Set(),
       };
     }
 
@@ -313,15 +336,10 @@ export class ProxyAuthManager {
       const token = match[1];
       const authInfo = await this.verifyAccessToken(token);
 
-      // Convert string scopes to McpScope and expand them
-      const validScopes = authInfo.scopes.filter((scope): scope is McpScope =>
-        this.config.scopes.includes(scope as McpScope),
-      );
-      const expandedScopes = expandScopes(validScopes);
-
+      // Binary authentication: valid token = full access
       return {
         authenticated: true,
-        scopes: expandedScopes,
+        scopes: new Set(["*"]), // Full access for authenticated users
         subject: authInfo.clientId,
       };
     } catch (error) {

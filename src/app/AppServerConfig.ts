@@ -3,8 +3,6 @@
  * Defines which services should be enabled and their configuration options.
  */
 
-import type { McpScope } from "../auth/types";
-
 export interface AppServerConfig {
   /** Enable web interface routes and static file serving */
   enableWebInterface: boolean;
@@ -35,7 +33,7 @@ export interface AppServerConfig {
     issuerUrl?: string;
     /** JWT audience claim (identifies this protected resource) */
     audience?: string;
-    /** Enabled subset of supported scopes */
-    scopes: McpScope[];
+    /** Standard OAuth2 scopes (e.g., "openid", "profile", "email") */
+    scopes: string[];
   };
 }

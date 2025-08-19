@@ -1,13 +1,12 @@
 /**
  * Fastify middleware for OAuth2/OIDC authentication using ProxyAuthManager.
- * Provides authentication and scope validation for MCP endpoints.
+ * Provides binary authentication (authenticated vs not authenticated) for MCP endpoints.
  */
 
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { logger } from "../utils/logger";
 import type { ProxyAuthManager } from "./ProxyAuthManager";
-import { validateToolAccess } from "./ScopeValidator";
-import type { AuthContext, McpScope } from "./types";
+import type { AuthContext } from "./types";
 
 // Type for Fastify request with auth context
 type AuthenticatedRequest = FastifyRequest & { auth: AuthContext };
@@ -73,80 +72,5 @@ export function createAuthMiddleware(authManager: ProxyAuthManager) {
           error_description: "Token validation failed",
         });
     }
-  };
-}
-
-/**
- * Create scope validation middleware for specific tool access.
- */
-export function createScopeMiddleware(requiredScopes?: McpScope[]) {
-  return async (request: FastifyRequest, reply: FastifyReply) => {
-    const authContext = (request as AuthenticatedRequest).auth;
-
-    if (!authContext) {
-      logger.debug("No auth context found in request");
-      reply.status(401).send({
-        error: "unauthorized",
-        error_description: "Authentication required",
-      });
-      return;
-    }
-
-    // If no specific scopes required, allow any authenticated request
-    if (!requiredScopes || requiredScopes.length === 0) {
-      return;
-    }
-
-    // Check if user has any of the required scopes
-    const hasRequiredScope = requiredScopes.some((scope) =>
-      authContext.scopes.has(scope),
-    );
-
-    if (!hasRequiredScope) {
-      logger.debug(
-        `Insufficient scopes. Required: ${requiredScopes.join(", ")}, Available: ${Array.from(authContext.scopes).join(", ")}`,
-      );
-      reply.status(403).send({
-        error: "insufficient_scope",
-        error_description: `Required scopes: ${requiredScopes.join(", ")}`,
-      });
-      return;
-    }
-
-    logger.debug(`Scope validation successful for scopes: ${requiredScopes.join(", ")}`);
-  };
-}
-
-/**
- * Create tool-specific scope validation middleware.
- */
-export function createToolScopeMiddleware(toolName: string) {
-  return async (request: FastifyRequest, reply: FastifyReply) => {
-    const authContext = (request as AuthenticatedRequest).auth;
-
-    if (!authContext) {
-      logger.debug("No auth context found in request");
-      reply.status(401).send({
-        error: "unauthorized",
-        error_description: "Authentication required",
-      });
-      return;
-    }
-
-    // Validate tool access using the scope validator
-    const validation = validateToolAccess(toolName, authContext.scopes);
-
-    if (!validation.authorized) {
-      logger.debug(
-        `Tool access denied for ${toolName}. Missing scopes: ${validation.missingScopes.join(", ")}`,
-      );
-      reply.status(403).send({
-        error: "insufficient_scope",
-        error_description: `Tool '${toolName}' requires scopes: ${validation.missingScopes.join(", ")}`,
-      });
-      return;
-    }
-
-    logger.debug(`Tool access granted for ${toolName}`);
   };
 }

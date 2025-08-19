@@ -5,24 +5,12 @@
  * while keeping local usage frictionless (auth disabled by default).
  */
 
-export { createAuthMiddleware, createScopeMiddleware } from "./middleware";
+export { createAuthMiddleware } from "./middleware";
 export { ProxyAuthManager } from "./ProxyAuthManager";
-export {
-  ALL_SCOPES,
-  expandScopes,
-  isValidScope,
-  TOOL_SCOPE_MAP,
-  validateScopeConfiguration,
-  validateScopes,
-  validateToolAccess,
-} from "./ScopeValidator";
 export type {
   AuthConfig,
   AuthContext,
   AuthError,
-  DecodedToken,
   McpScope,
-  ProtectedResourceMetadata,
-  ScopeValidationResult,
 } from "./types";
 export { AuthErrorType } from "./types";

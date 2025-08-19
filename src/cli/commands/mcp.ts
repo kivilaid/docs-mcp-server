@@ -63,11 +63,6 @@ export function createMcpCommand(program: Command): Command {
         "--auth-audience <id>",
         "JWT audience claim (identifies this protected resource)",
       )
-      .option(
-        "--auth-scopes <scopes>",
-        "Comma-separated list of enabled scopes",
-        CLI_DEFAULTS.AUTH_SCOPES.join(","),
-      )
       .action(
         async (
           cmdOptions: {
@@ -78,7 +73,6 @@ export function createMcpCommand(program: Command): Command {
             authEnabled?: boolean;
             authIssuerUrl?: string;
             authAudience?: string;
-            authScopes?: string;
           },
           command,
         ) => {
@@ -95,7 +89,6 @@ export function createMcpCommand(program: Command): Command {
             authEnabled: cmdOptions.authEnabled,
             authIssuerUrl: cmdOptions.authIssuerUrl,
             authAudience: cmdOptions.authAudience,
-            authScopes: cmdOptions.authScopes,
           });
 
           if (authConfig) {

@@ -6,8 +6,7 @@ import { execSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { chromium } from "playwright";
 import type { AppServerConfig } from "../app";
-import { ALL_SCOPES, validateScopeConfiguration } from "../auth/ScopeValidator";
-import type { AuthConfig, McpScope } from "../auth/types";
+import type { AuthConfig } from "../auth/types";
 import type { IPipeline, PipelineOptions } from "../pipeline";
 import { PipelineFactory } from "../pipeline";
 import type { DocumentManagementService } from "../store";
@@ -217,7 +216,6 @@ export const CLI_DEFAULTS = {
   HTTP_PORT: DEFAULT_HTTP_PORT,
   WEB_PORT: DEFAULT_WEB_PORT,
   MAX_CONCURRENCY: DEFAULT_MAX_CONCURRENCY,
-  AUTH_SCOPES: ["read:docs", "write:docs", "admin:jobs"] as const,
 } as const;
 
 /**
@@ -228,7 +226,6 @@ export function parseAuthConfig(options: {
   authEnabled?: boolean;
   authIssuerUrl?: string;
   authAudience?: string;
-  authScopes?: string;
 }): AuthConfig | undefined {
   // Check CLI flags first, then env vars, then defaults
   const enabled =
@@ -243,22 +240,11 @@ export function parseAuthConfig(options: {
 
   const audience = options.authAudience ?? process.env.DOCS_MCP_AUTH_AUDIENCE;
 
-  const scopesString =
-    options.authScopes ??
-    process.env.DOCS_MCP_AUTH_SCOPES ??
-    CLI_DEFAULTS.AUTH_SCOPES.join(",");
-
-  // Parse scopes from comma-separated string
-  const scopes = scopesString
-    .split(",")
-    .map((s) => s.trim())
-    .filter((s) => s.length > 0) as McpScope[];
-
   return {
     enabled,
     issuerUrl,
     audience,
-    scopes,
+    scopes: [], // Legacy field, not used in binary authentication
   };
 }
 
@@ -320,18 +306,8 @@ export function validateAuthConfig(authConfig: AuthConfig): void {
     }
   }
 
-  // Validate scopes
-  if (authConfig.scopes.length === 0) {
-    errors.push("At least one scope must be specified");
-  } else {
-    const scopeValidation = validateScopeConfiguration(authConfig.scopes);
-    if (!scopeValidation.valid) {
-      errors.push(
-        `Invalid scopes: ${scopeValidation.invalidScopes.join(", ")}. ` +
-          `Supported scopes: ${ALL_SCOPES.join(", ")}`,
-      );
-    }
-  }
+  // Scopes are not validated in binary authentication mode
+  // They're handled internally by the OAuth proxy
 
   if (errors.length > 0) {
     throw new Error(`Auth configuration validation failed:\n${errors.join("\n")}`);
