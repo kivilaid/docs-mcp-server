@@ -159,6 +159,7 @@ export class AppServer {
       this.server,
       this.docService,
       this.pipeline,
+      this.config.readOnly,
     );
     logger.debug("MCP server service enabled");
   }

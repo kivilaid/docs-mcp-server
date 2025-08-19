@@ -10,9 +10,13 @@ import { createError, createResponse } from "./utils";
 /**
  * Creates and configures an instance of the MCP server with registered tools, prompts, and resources.
  * @param tools The shared tool instances to use for server operations.
+ * @param readOnly Whether to run in read-only mode (only expose read tools).
  * @returns A configured McpServer instance.
  */
-export function createMcpServerInstance(tools: McpServerTools): McpServer {
+export function createMcpServerInstance(
+  tools: McpServerTools,
+  readOnly = false,
+): McpServer {
   const server = new McpServer(
     {
       name: "docs-mcp-server",
@@ -29,77 +33,80 @@ export function createMcpServerInstance(tools: McpServerTools): McpServer {
 
   // --- Tool Definitions ---
 
-  // Scrape docs tool - suppress deep inference issues
-  // @ts-ignore TypeScript has issues with deep Zod inference in MCP SDK
-  server.tool(
-    "scrape_docs",
-    "Scrape and index documentation from a URL for a library. Use this tool to index a new library or a new version.",
-    {
-      url: z.string().url().describe("Documentation root URL to scrape."),
-      library: z.string().describe("Library name."),
-      version: z.string().optional().describe("Library version (optional)."),
-      maxPages: z
-        .number()
-        .optional()
-        .default(DEFAULT_MAX_PAGES)
-        .describe(`Maximum number of pages to scrape (default: ${DEFAULT_MAX_PAGES}).`),
-      maxDepth: z
-        .number()
-        .optional()
-        .default(DEFAULT_MAX_DEPTH)
-        .describe(`Maximum navigation depth (default: ${DEFAULT_MAX_DEPTH}).`),
-      scope: z
-        .enum(["subpages", "hostname", "domain"])
-        .optional()
-        .default("subpages")
-        .describe("Crawling boundary: 'subpages', 'hostname', or 'domain'."),
-      followRedirects: z
-        .boolean()
-        .optional()
-        .default(true)
-        .describe("Follow HTTP redirects (3xx responses)."),
-    },
-    {
-      title: "Scrape New Library Documentation",
-      destructiveHint: true, // replaces existing docs
-      openWorldHint: true, // requires internet access
-    },
-    async ({ url, library, version, maxPages, maxDepth, scope, followRedirects }) => {
-      try {
-        // Execute scrape tool without waiting and without progress callback
-        const result = await tools.scrape.execute({
-          url,
-          library,
-          version,
-          waitForCompletion: false, // Don't wait for completion
-          // onProgress: undefined, // Explicitly undefined or omitted
-          options: {
-            maxPages,
-            maxDepth,
-            scope,
-            followRedirects,
-          },
-        });
+  // Only register write/job tools if not in read-only mode
+  if (!readOnly) {
+    // Scrape docs tool - suppress deep inference issues
+    // @ts-ignore TypeScript has issues with deep Zod inference in MCP SDK
+    server.tool(
+      "scrape_docs",
+      "Scrape and index documentation from a URL for a library. Use this tool to index a new library or a new version.",
+      {
+        url: z.string().url().describe("Documentation root URL to scrape."),
+        library: z.string().describe("Library name."),
+        version: z.string().optional().describe("Library version (optional)."),
+        maxPages: z
+          .number()
+          .optional()
+          .default(DEFAULT_MAX_PAGES)
+          .describe(`Maximum number of pages to scrape (default: ${DEFAULT_MAX_PAGES}).`),
+        maxDepth: z
+          .number()
+          .optional()
+          .default(DEFAULT_MAX_DEPTH)
+          .describe(`Maximum navigation depth (default: ${DEFAULT_MAX_DEPTH}).`),
+        scope: z
+          .enum(["subpages", "hostname", "domain"])
+          .optional()
+          .default("subpages")
+          .describe("Crawling boundary: 'subpages', 'hostname', or 'domain'."),
+        followRedirects: z
+          .boolean()
+          .optional()
+          .default(true)
+          .describe("Follow HTTP redirects (3xx responses)."),
+      },
+      {
+        title: "Scrape New Library Documentation",
+        destructiveHint: true, // replaces existing docs
+        openWorldHint: true, // requires internet access
+      },
+      async ({ url, library, version, maxPages, maxDepth, scope, followRedirects }) => {
+        try {
+          // Execute scrape tool without waiting and without progress callback
+          const result = await tools.scrape.execute({
+            url,
+            library,
+            version,
+            waitForCompletion: false, // Don't wait for completion
+            // onProgress: undefined, // Explicitly undefined or omitted
+            options: {
+              maxPages,
+              maxDepth,
+              scope,
+              followRedirects,
+            },
+          });
 
-        // Check the type of result
-        if ("jobId" in result) {
-          // If we got a jobId back, report that
-          return createResponse(`🚀 Scraping job started with ID: ${result.jobId}.`);
+          // Check the type of result
+          if ("jobId" in result) {
+            // If we got a jobId back, report that
+            return createResponse(`🚀 Scraping job started with ID: ${result.jobId}.`);
+          }
+          // This case shouldn't happen if waitForCompletion is false, but handle defensively
+          return createResponse(
+            `Scraping finished immediately (unexpectedly) with ${result.pagesScraped} pages.`,
+          );
+        } catch (error) {
+          // Handle errors during job *enqueueing* or initial setup
+          return createError(
+            `Failed to scrape documentation: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+          );
         }
-        // This case shouldn't happen if waitForCompletion is false, but handle defensively
-        return createResponse(
-          `Scraping finished immediately (unexpectedly) with ${result.pagesScraped} pages.`,
-        );
-      } catch (error) {
-        // Handle errors during job *enqueueing* or initial setup
-        return createError(
-          `Failed to scrape documentation: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
-        );
-      }
-    },
-  );
+      },
+    );
+  }
 
   // Search docs tool
   server.tool(
@@ -249,140 +256,145 @@ ${r.content}\n`,
     },
   );
 
-  // List jobs tool - suppress deep inference issues
-  // @ts-expect-error TypeScript has issues with deep Zod inference in MCP SDK
-  server.tool(
-    "list_jobs",
-    "List all indexing jobs. Optionally filter by status.",
-    {
-      status: z
-        .enum(["queued", "running", "completed", "failed", "cancelling", "cancelled"])
-        .optional()
-        .describe("Filter jobs by status (optional)."),
-    },
-    {
-      title: "List Indexing Jobs",
-      readOnlyHint: true,
-      destructiveHint: false,
-    },
-    async ({ status }) => {
-      try {
-        const result = await tools.listJobs.execute({
-          status: status as PipelineJobStatus | undefined,
-        });
-        // Format the simplified job list for display
-        const formattedJobs = result.jobs
-          .map(
-            (job: JobInfo) =>
-              `- ID: ${job.id}\n  Status: ${job.status}\n  Library: ${job.library}\n  Version: ${job.version}\n  Created: ${job.createdAt}${job.startedAt ? `\n  Started: ${job.startedAt}` : ""}${job.finishedAt ? `\n  Finished: ${job.finishedAt}` : ""}${job.error ? `\n  Error: ${job.error}` : ""}`,
-          )
-          .join("\n\n");
-        return createResponse(
-          result.jobs.length > 0 ? `Current Jobs:\n\n${formattedJobs}` : "No jobs found.",
-        );
-      } catch (error) {
-        return createError(
-          `Failed to list jobs: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
-        );
-      }
-    },
-  );
-
-  // Get job info tool
-  server.tool(
-    "get_job_info",
-    "Get details for a specific indexing job. Use the 'list_jobs' tool to find the job ID.",
-    {
-      jobId: z.string().uuid().describe("Job ID to query."),
-    },
-    {
-      title: "Get Indexing Job Info",
-      readOnlyHint: true,
-      destructiveHint: false,
-    },
-    async ({ jobId }) => {
-      try {
-        const result = await tools.getJobInfo.execute({ jobId });
-        if (!result.job) {
-          return createError(`Job with ID ${jobId} not found.`);
+  // Job and write tools - only available when not in read-only mode
+  if (!readOnly) {
+    // List jobs tool - suppress deep inference issues
+    // @ts-expect-error TypeScript has issues with deep Zod inference in MCP SDK
+    server.tool(
+      "list_jobs",
+      "List all indexing jobs. Optionally filter by status.",
+      {
+        status: z
+          .enum(["queued", "running", "completed", "failed", "cancelling", "cancelled"])
+          .optional()
+          .describe("Filter jobs by status (optional)."),
+      },
+      {
+        title: "List Indexing Jobs",
+        readOnlyHint: true,
+        destructiveHint: false,
+      },
+      async ({ status }) => {
+        try {
+          const result = await tools.listJobs.execute({
+            status: status as PipelineJobStatus | undefined,
+          });
+          // Format the simplified job list for display
+          const formattedJobs = result.jobs
+            .map(
+              (job: JobInfo) =>
+                `- ID: ${job.id}\n  Status: ${job.status}\n  Library: ${job.library}\n  Version: ${job.version}\n  Created: ${job.createdAt}${job.startedAt ? `\n  Started: ${job.startedAt}` : ""}${job.finishedAt ? `\n  Finished: ${job.finishedAt}` : ""}${job.error ? `\n  Error: ${job.error}` : ""}`,
+            )
+            .join("\n\n");
+          return createResponse(
+            result.jobs.length > 0
+              ? `Current Jobs:\n\n${formattedJobs}`
+              : "No jobs found.",
+          );
+        } catch (error) {
+          return createError(
+            `Failed to list jobs: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+          );
         }
-        const job = result.job;
-        const formattedJob = `- ID: ${job.id}\n  Status: ${job.status}\n  Library: ${job.library}@${job.version}\n  Created: ${job.createdAt}${job.startedAt ? `\n  Started: ${job.startedAt}` : ""}${job.finishedAt ? `\n  Finished: ${job.finishedAt}` : ""}${job.error ? `\n  Error: ${job.error}` : ""}`;
-        return createResponse(`Job Info:\n\n${formattedJob}`);
-      } catch (error) {
-        return createError(
-          `Failed to get job info for ${jobId}: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
-        );
-      }
-    },
-  );
+      },
+    );
 
-  // Cancel job tool
-  server.tool(
-    "cancel_job",
-    "Cancel a queued or running indexing job. Use the 'list_jobs' tool to find the job ID.",
-    {
-      jobId: z.string().uuid().describe("Job ID to cancel."),
-    },
-    {
-      title: "Cancel Indexing Job",
-      destructiveHint: true,
-    },
-    async ({ jobId }) => {
-      try {
-        const result = await tools.cancelJob.execute({ jobId });
-        // Use the message and success status from the tool's result
-        if (result.success) {
+    // Get job info tool
+    server.tool(
+      "get_job_info",
+      "Get details for a specific indexing job. Use the 'list_jobs' tool to find the job ID.",
+      {
+        jobId: z.string().uuid().describe("Job ID to query."),
+      },
+      {
+        title: "Get Indexing Job Info",
+        readOnlyHint: true,
+        destructiveHint: false,
+      },
+      async ({ jobId }) => {
+        try {
+          const result = await tools.getJobInfo.execute({ jobId });
+          if (!result.job) {
+            return createError(`Job with ID ${jobId} not found.`);
+          }
+          const job = result.job;
+          const formattedJob = `- ID: ${job.id}\n  Status: ${job.status}\n  Library: ${job.library}@${job.version}\n  Created: ${job.createdAt}${job.startedAt ? `\n  Started: ${job.startedAt}` : ""}${job.finishedAt ? `\n  Finished: ${job.finishedAt}` : ""}${job.error ? `\n  Error: ${job.error}` : ""}`;
+          return createResponse(`Job Info:\n\n${formattedJob}`);
+        } catch (error) {
+          return createError(
+            `Failed to get job info for ${jobId}: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+          );
+        }
+      },
+    );
+
+    // Cancel job tool
+    server.tool(
+      "cancel_job",
+      "Cancel a queued or running indexing job. Use the 'list_jobs' tool to find the job ID.",
+      {
+        jobId: z.string().uuid().describe("Job ID to cancel."),
+      },
+      {
+        title: "Cancel Indexing Job",
+        destructiveHint: true,
+      },
+      async ({ jobId }) => {
+        try {
+          const result = await tools.cancelJob.execute({ jobId });
+          // Use the message and success status from the tool's result
+          if (result.success) {
+            return createResponse(result.message);
+          }
+          // If not successful according to the tool, treat it as an error in MCP
+          return createError(result.message);
+        } catch (error) {
+          // Catch any unexpected errors during the tool execution itself
+          return createError(
+            `Failed to cancel job ${jobId}: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+          );
+        }
+      },
+    );
+
+    // Remove docs tool
+    server.tool(
+      "remove_docs",
+      "Remove indexed documentation for a library version. Use only if explicitly instructed.",
+      {
+        library: z.string().describe("Library name."),
+        version: z
+          .string()
+          .optional()
+          .describe("Library version (optional, removes unversioned if omitted)."),
+      },
+      {
+        title: "Remove Library Documentation",
+        destructiveHint: true,
+      },
+      async ({ library, version }) => {
+        try {
+          // Execute the remove tool logic
+          const result = await tools.remove.execute({ library, version });
+          // Use the message from the tool's successful execution
           return createResponse(result.message);
+        } catch (error) {
+          // Catch errors thrown by the RemoveTool's execute method
+          return createError(
+            `Failed to remove documents: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+          );
         }
-        // If not successful according to the tool, treat it as an error in MCP
-        return createError(result.message);
-      } catch (error) {
-        // Catch any unexpected errors during the tool execution itself
-        return createError(
-          `Failed to cancel job ${jobId}: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
-        );
-      }
-    },
-  );
-
-  // Remove docs tool
-  server.tool(
-    "remove_docs",
-    "Remove indexed documentation for a library version. Use only if explicitly instructed.",
-    {
-      library: z.string().describe("Library name."),
-      version: z
-        .string()
-        .optional()
-        .describe("Library version (optional, removes unversioned if omitted)."),
-    },
-    {
-      title: "Remove Library Documentation",
-      destructiveHint: true,
-    },
-    async ({ library, version }) => {
-      try {
-        // Execute the remove tool logic
-        const result = await tools.remove.execute({ library, version });
-        // Use the message from the tool's successful execution
-        return createResponse(result.message);
-      } catch (error) {
-        // Catch errors thrown by the RemoveTool's execute method
-        return createError(
-          `Failed to remove documents: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
-        );
-      }
-    },
-  );
+      },
+    );
+  }
 
   // Fetch URL tool
   server.tool(
@@ -457,100 +469,103 @@ ${r.content}\n`,
     },
   );
 
-  /**
-   * Resource handler for listing pipeline jobs.
-   * Supports filtering by status via a query parameter (e.g., ?status=running).
-   * URI: docs://jobs[?status=<status>]
-   */
-  server.resource(
-    "jobs",
-    "docs://jobs",
-    {
-      description: "List indexing jobs, optionally filtering by status.",
-      mimeType: "application/json",
-    },
-    async (uri: URL) => {
-      const statusParam = uri.searchParams.get("status");
-      let statusFilter: PipelineJobStatus | undefined;
+  // Job-related resources - only available when not in read-only mode
+  if (!readOnly) {
+    /**
+     * Resource handler for listing pipeline jobs.
+     * Supports filtering by status via a query parameter (e.g., ?status=running).
+     * URI: docs://jobs[?status=<status>]
+     */
+    server.resource(
+      "jobs",
+      "docs://jobs",
+      {
+        description: "List indexing jobs, optionally filtering by status.",
+        mimeType: "application/json",
+      },
+      async (uri: URL) => {
+        const statusParam = uri.searchParams.get("status");
+        let statusFilter: PipelineJobStatus | undefined;
 
-      // Validate status parameter if provided
-      if (statusParam) {
-        const validation = z.nativeEnum(PipelineJobStatus).safeParse(statusParam);
-        if (validation.success) {
-          statusFilter = validation.data;
-        } else {
-          // Handle invalid status - perhaps return an error or ignore?
-          // For simplicity, let's ignore invalid status for now and return all jobs.
-          // Alternatively, could throw an McpError or return specific error content.
-          logger.warn(`⚠️  Invalid status parameter received: ${statusParam}`);
+        // Validate status parameter if provided
+        if (statusParam) {
+          const validation = z.nativeEnum(PipelineJobStatus).safeParse(statusParam);
+          if (validation.success) {
+            statusFilter = validation.data;
+          } else {
+            // Handle invalid status - perhaps return an error or ignore?
+            // For simplicity, let's ignore invalid status for now and return all jobs.
+            // Alternatively, could throw an McpError or return specific error content.
+            logger.warn(`⚠️  Invalid status parameter received: ${statusParam}`);
+          }
         }
-      }
 
-      // Fetch simplified jobs using the ListJobsTool
-      const result = await tools.listJobs.execute({ status: statusFilter });
+        // Fetch simplified jobs using the ListJobsTool
+        const result = await tools.listJobs.execute({ status: statusFilter });
 
-      return {
-        contents: result.jobs.map((job) => ({
-          uri: new URL(job.id, uri).href,
-          mimeType: "application/json",
-          text: JSON.stringify({
-            id: job.id,
-            library: job.library,
-            version: job.version,
-            status: job.status,
-            error: job.error || undefined,
-          }),
-        })),
-      };
-    },
-  );
-
-  /**
-   * Resource handler for retrieving a specific pipeline job by its ID.
-   * URI Template: docs://jobs/{jobId}
-   */
-  server.resource(
-    "job", // A distinct name for this specific resource type
-    new ResourceTemplate("docs://jobs/{jobId}", { list: undefined }),
-    {
-      description: "Get details for a specific indexing job by ID.",
-      mimeType: "application/json",
-    },
-    async (uri: URL, { jobId }) => {
-      // Validate jobId format if necessary (basic check)
-      if (typeof jobId !== "string" || jobId.length === 0) {
-        // Handle invalid jobId format - return empty or error
-        logger.warn(`⚠️  Invalid jobId received in URI: ${jobId}`);
-        return { contents: [] }; // Return empty content for invalid ID format
-      }
-
-      // Fetch the simplified job info using GetJobInfoTool
-      const result = await tools.getJobInfo.execute({ jobId });
-
-      // result.job is either the simplified job object or null
-      if (!result.job) {
-        // Job not found, return empty content
-        return { contents: [] };
-      }
-
-      // Job found, return its simplified details as JSON
-      return {
-        contents: [
-          {
-            uri: uri.href,
+        return {
+          contents: result.jobs.map((job) => ({
+            uri: new URL(job.id, uri).href,
             mimeType: "application/json",
             text: JSON.stringify({
-              id: result.job.id,
-              library: result.job.library,
-              version: result.job.version,
-              status: result.job.status,
-              error: result.job.error || undefined,
+              id: job.id,
+              library: job.library,
+              version: job.version,
+              status: job.status,
+              error: job.error || undefined,
             }),
-          },
-        ],
-      };
-    },
-  );
+          })),
+        };
+      },
+    );
+
+    /**
+     * Resource handler for retrieving a specific pipeline job by its ID.
+     * URI Template: docs://jobs/{jobId}
+     */
+    server.resource(
+      "job", // A distinct name for this specific resource type
+      new ResourceTemplate("docs://jobs/{jobId}", { list: undefined }),
+      {
+        description: "Get details for a specific indexing job by ID.",
+        mimeType: "application/json",
+      },
+      async (uri: URL, { jobId }) => {
+        // Validate jobId format if necessary (basic check)
+        if (typeof jobId !== "string" || jobId.length === 0) {
+          // Handle invalid jobId format - return empty or error
+          logger.warn(`⚠️  Invalid jobId received in URI: ${jobId}`);
+          return { contents: [] }; // Return empty content for invalid ID format
+        }
+
+        // Fetch the simplified job info using GetJobInfoTool
+        const result = await tools.getJobInfo.execute({ jobId });
+
+        // result.job is either the simplified job object or null
+        if (!result.job) {
+          // Job not found, return empty content
+          return { contents: [] };
+        }
+
+        // Job found, return its simplified details as JSON
+        return {
+          contents: [
+            {
+              uri: uri.href,
+              mimeType: "application/json",
+              text: JSON.stringify({
+                id: result.job.id,
+                library: result.job.library,
+                version: result.job.version,
+                status: result.job.status,
+                error: result.job.error || undefined,
+              }),
+            },
+          ],
+        };
+      },
+    );
+  }
 
   return server;
 }

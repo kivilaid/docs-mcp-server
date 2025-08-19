@@ -33,11 +33,13 @@ export interface McpServerTools {
  * This should be called after initializeServices has completed.
  * @param docService The initialized DocumentManagementService instance.
  * @param pipeline The initialized pipeline instance.
+ * @param readOnly Whether to run in read-only mode (for future optimizations).
  * @returns An object containing all instantiated tool instances.
  */
 export async function initializeTools(
   docService: IDocumentManagement,
   pipeline: IPipeline,
+  readOnly = false,
 ): Promise<McpServerTools> {
   const tools: McpServerTools = {
     listLibraries: new ListLibrariesTool(docService),

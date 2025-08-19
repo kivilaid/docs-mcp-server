@@ -172,6 +172,7 @@ export function createAppServerConfig(options: {
   enableWorker?: boolean;
   port: number;
   externalWorkerUrl?: string;
+  readOnly?: boolean;
 }): AppServerConfig {
   return {
     enableWebInterface: options.enableWebInterface ?? false,
@@ -180,6 +181,7 @@ export function createAppServerConfig(options: {
     enableWorker: options.enableWorker ?? true,
     port: options.port,
     externalWorkerUrl: options.externalWorkerUrl,
+    readOnly: options.readOnly ?? false,
   };
 }
 

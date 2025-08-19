@@ -44,12 +44,18 @@ export function createMcpCommand(program: Command): Command {
       "--server-url <url>",
       "URL of external pipeline worker RPC (e.g., http://localhost:6280/api)",
     )
+    .option(
+      "--read-only",
+      "Run in read-only mode (only expose read tools, disable write/job tools)",
+      false,
+    )
     .action(
       async (
         cmdOptions: {
           protocol: string;
           port: string;
           serverUrl?: string;
+          readOnly: boolean;
         },
         command,
       ) => {
@@ -81,8 +87,12 @@ export function createMcpCommand(program: Command): Command {
             logger.info("🚀 Starting MCP server (stdio mode)");
 
             await pipeline.start(); // Start pipeline for stdio mode
-            const mcpTools = await initializeTools(docService, pipeline);
-            await startStdioServer(mcpTools);
+            const mcpTools = await initializeTools(
+              docService,
+              pipeline,
+              cmdOptions.readOnly,
+            );
+            await startStdioServer(mcpTools, cmdOptions.readOnly);
 
             await new Promise(() => {}); // Keep running forever
           } else {
@@ -98,6 +108,7 @@ export function createMcpCommand(program: Command): Command {
               enableWorker: !serverUrl,
               port,
               externalWorkerUrl: serverUrl,
+              readOnly: cmdOptions.readOnly,
             });
 
             await startAppServer(docService, pipeline, config);

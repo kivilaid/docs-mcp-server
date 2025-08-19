@@ -74,6 +74,7 @@ describe("CLI Command Arguments Matrix", () => {
       hasServerUrl: false, // Default action doesn't have server-url
       hasProtocol: true,
       hasResume: true,
+      hasReadOnly: true,
     },
     mcp: {
       hasVerboseSilent: true,
@@ -81,6 +82,7 @@ describe("CLI Command Arguments Matrix", () => {
       hasServerUrl: true,
       hasProtocol: true,
       hasResume: false,
+      hasReadOnly: true,
     },
     web: {
       hasVerboseSilent: true,
@@ -88,6 +90,7 @@ describe("CLI Command Arguments Matrix", () => {
       hasServerUrl: true,
       hasProtocol: false,
       hasResume: false,
+      hasReadOnly: false,
     },
     worker: {
       hasVerboseSilent: true,
@@ -95,6 +98,7 @@ describe("CLI Command Arguments Matrix", () => {
       hasServerUrl: false,
       hasProtocol: false,
       hasResume: true,
+      hasReadOnly: false,
     },
     scrape: {
       hasVerboseSilent: true,
@@ -102,6 +106,7 @@ describe("CLI Command Arguments Matrix", () => {
       hasServerUrl: true,
       hasProtocol: false,
       hasResume: false,
+      hasReadOnly: false,
     },
     search: {
       hasVerboseSilent: true,
@@ -109,6 +114,7 @@ describe("CLI Command Arguments Matrix", () => {
       hasServerUrl: true,
       hasProtocol: false,
       hasResume: false,
+      hasReadOnly: false,
     },
     list: {
       hasVerboseSilent: true,
@@ -116,6 +122,7 @@ describe("CLI Command Arguments Matrix", () => {
       hasServerUrl: true,
       hasProtocol: false,
       hasResume: false,
+      hasReadOnly: false,
     },
     remove: {
       hasVerboseSilent: true,
@@ -123,6 +130,7 @@ describe("CLI Command Arguments Matrix", () => {
       hasServerUrl: true,
       hasProtocol: false,
       hasResume: false,
+      hasReadOnly: false,
     },
     "find-version": {
       hasVerboseSilent: true,
@@ -130,6 +138,7 @@ describe("CLI Command Arguments Matrix", () => {
       hasServerUrl: true,
       hasProtocol: false,
       hasResume: false,
+      hasReadOnly: false,
     },
     "fetch-url": {
       hasVerboseSilent: true,
@@ -137,6 +146,7 @@ describe("CLI Command Arguments Matrix", () => {
       hasServerUrl: false,
       hasProtocol: false,
       hasResume: false,
+      hasReadOnly: false,
     },
   };
 
@@ -181,6 +191,12 @@ describe("CLI Command Arguments Matrix", () => {
         expect(options).toContain("--resume");
       } else {
         expect(options).not.toContain("--resume");
+      }
+
+      if (expectedOptions.hasReadOnly) {
+        expect(options).toContain("--read-only");
+      } else {
+        expect(options).not.toContain("--read-only");
       }
     });
   });

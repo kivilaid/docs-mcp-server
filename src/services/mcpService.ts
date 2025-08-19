@@ -17,16 +17,21 @@ import { logger } from "../utils/logger";
  * Register MCP protocol routes on a Fastify server instance.
  * This includes SSE endpoints for persistent connections and HTTP endpoints for stateless requests.
  *
+ * @param server The Fastify server instance
+ * @param docService The document management service
+ * @param pipeline The pipeline instance
+ * @param readOnly Whether to run in read-only mode
  * @returns The McpServer instance for cleanup
  */
 export async function registerMcpService(
   server: FastifyInstance,
   docService: IDocumentManagement,
   pipeline: IPipeline,
+  readOnly = false,
 ): Promise<McpServer> {
   // Initialize MCP server and tools
-  const mcpTools = await initializeTools(docService, pipeline);
-  const mcpServer = createMcpServerInstance(mcpTools);
+  const mcpTools = await initializeTools(docService, pipeline, readOnly);
+  const mcpServer = createMcpServerInstance(mcpTools, readOnly);
 
   // Track SSE transports for cleanup
   const sseTransports: Record<string, SSEServerTransport> = {};
@@ -87,7 +92,7 @@ export async function registerMcpService(
     handler: async (request: FastifyRequest, reply: FastifyReply) => {
       try {
         // In stateless mode, create a new instance of server and transport for each request
-        const requestServer = createMcpServerInstance(mcpTools);
+        const requestServer = createMcpServerInstance(mcpTools, readOnly);
         const requestTransport = new StreamableHTTPServerTransport({
           sessionIdGenerator: undefined,
         });
