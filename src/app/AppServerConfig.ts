@@ -3,6 +3,8 @@
  * Defines which services should be enabled and their configuration options.
  */
 
+import type { AuthConfig } from "../auth/types";
+
 export interface AppServerConfig {
   /** Enable web interface routes and static file serving */
   enableWebInterface: boolean;
@@ -26,14 +28,5 @@ export interface AppServerConfig {
   readOnly?: boolean;
 
   /** Optional OAuth2/OIDC authentication configuration for MCP endpoints */
-  auth?: {
-    /** Enable OAuth2/OIDC authentication (disabled by default) */
-    enabled: boolean;
-    /** Issuer/discovery URL for the OAuth2/OIDC provider */
-    issuerUrl?: string;
-    /** JWT audience claim (identifies this protected resource) */
-    audience?: string;
-    /** Standard OAuth2 scopes (e.g., "openid", "profile", "email") */
-    scopes: string[];
-  };
+  auth?: AuthConfig;
 }

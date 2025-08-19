@@ -244,7 +244,7 @@ export function parseAuthConfig(options: {
     enabled,
     issuerUrl,
     audience,
-    scopes: [], // Legacy field, not used in binary authentication
+    scopes: ["openid", "profile"], // Default scopes for OAuth2/OIDC
   };
 }
 

@@ -31,14 +31,12 @@ describe("ProxyAuthManager", () => {
       enabled: true,
       issuerUrl: "https://auth.example.com",
       audience: "https://mcp.example.com",
-      scopes: [], // Legacy field, not used
     };
 
     disabledAuthConfig = {
       enabled: false,
       issuerUrl: undefined,
       audience: undefined,
-      scopes: [], // Legacy field, not used
     };
 
     // Mock Fastify server

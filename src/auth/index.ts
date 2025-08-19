@@ -10,7 +10,4 @@ export { ProxyAuthManager } from "./ProxyAuthManager";
 export type {
   AuthConfig,
   AuthContext,
-  AuthError,
-  McpScope,
 } from "./types";
-export { AuthErrorType } from "./types";

@@ -19,15 +19,23 @@ export function createAuthMiddleware(authManager: ProxyAuthManager) {
     try {
       const authContext = await authManager.createAuthContext(
         request.headers.authorization || "",
+        request,
       );
 
-      // Always set auth context on request (even for disabled auth)
+      // Always set auth context on request
       (request as AuthenticatedRequest).auth = authContext;
 
-      // If authentication is disabled, continue without validation
+      // Check if authentication is enabled by looking at the config
+      const isAuthEnabled = authManager.authConfig.enabled;
+
+      if (!isAuthEnabled) {
+        // Auth is disabled - allow all requests through
+        logger.debug("Authentication disabled, allowing request");
+        return;
+      }
+
+      // Auth is enabled - validate authentication
       if (!authContext.authenticated) {
-        // For disabled auth, this is expected - continue processing
-        // For enabled auth with missing/invalid token, this will be caught below
         const hasAuthHeader = !!request.headers.authorization;
 
         if (hasAuthHeader) {
@@ -44,10 +52,8 @@ export function createAuthMiddleware(authManager: ProxyAuthManager) {
               error_description: "The access token is invalid",
             });
           return;
-        }
-
-        // Missing auth header when auth is enabled
-        if (authContext.scopes.size === 0) {
+        } else {
+          // Auth is enabled but no authorization header provided
           logger.debug("Missing authorization header");
           reply.status(401).header("WWW-Authenticate", 'Bearer realm="MCP Server"').send({
             error: "unauthorized",
@@ -57,6 +63,7 @@ export function createAuthMiddleware(authManager: ProxyAuthManager) {
         }
       }
 
+      // Authentication successful
       logger.debug(
         `Authentication successful for subject: ${authContext.subject || "anonymous"}`,
       );

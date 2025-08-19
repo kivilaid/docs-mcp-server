@@ -27,7 +27,6 @@ export class AppServer {
   private mcpServer: McpServer | null = null;
   private authManager: ProxyAuthManager | null = null;
   private config: AppServerConfig;
-  private cleanupTimer: NodeJS.Timeout | null = null;
 
   constructor(
     private docService: IDocumentManagement,
@@ -83,11 +82,6 @@ export class AppServer {
         host: "0.0.0.0",
       });
 
-      // Start periodic cleanup of expired auth sessions
-      if (this.config.auth?.enabled && this.authManager) {
-        this.startSessionCleanup();
-      }
-
       this.logStartupInfo(address);
       return this.server;
     } catch (error) {
@@ -102,12 +96,6 @@ export class AppServer {
    */
   async stop(): Promise<void> {
     try {
-      // Stop cleanup timer
-      if (this.cleanupTimer) {
-        clearInterval(this.cleanupTimer);
-        this.cleanupTimer = null;
-      }
-
       // Stop worker service if enabled
       if (this.config.enableWorker) {
         await stopWorkerService(this.pipeline);
@@ -288,14 +276,5 @@ export class AppServer {
     for (const service of enabledServices) {
       logger.info(`   • ${service}`);
     }
-  }
-
-  /**
-   * Start periodic cleanup of expired authentication sessions.
-   */
-  private startSessionCleanup(): void {
-    // Since we removed session management, this method is now a no-op
-    // but kept for compatibility
-    logger.debug("Session cleanup not needed in simplified auth implementation");
   }
 }
