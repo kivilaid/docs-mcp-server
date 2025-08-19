@@ -1,8 +1,13 @@
 import { minimatch } from "minimatch";
+import { getEffectiveExclusionPatterns } from "./defaultPatterns";
 
 /**
  * Utility functions for pattern matching (glob and regex) for URL filtering.
  * Supports auto-detection and conversion of glob patterns to RegExp.
+ *
+ * Default exclusion patterns are applied when no user-provided exclude patterns are specified.
+ * This includes common documentation files (CHANGELOG.md, LICENSE, etc.) and folders
+ * (archive directories, non-English locales, etc.).
  *
  * Patterns starting and ending with '/' are treated as regex, otherwise as glob (minimatch syntax).
  * Glob wildcards supported: '*' (any chars except '/'), '**' (any chars, including '/').
@@ -64,6 +69,10 @@ export function extractPathAndQuery(url: string): string {
 /**
  * Determines if a URL should be included based on include/exclude patterns.
  * Exclude patterns take precedence. If no include patterns, all are included by default.
+ *
+ * If no user exclude patterns are provided, default exclusion patterns are automatically applied.
+ * These defaults exclude common documentation files (CHANGELOG.md, LICENSE, etc.) and folders
+ * (archives, non-English locales, etc.).
  */
 export function shouldIncludeUrl(
   url: string,
@@ -84,10 +93,14 @@ export function shouldIncludeUrl(
   // Helper to strip leading slash from patterns for basename matching
   const stripSlash = (patterns?: string[]) =>
     patterns?.map((p) => (p.startsWith("/") ? p.slice(1) : p));
+
+  // Get effective exclusion patterns (merges defaults with user patterns)
+  const effectiveExcludePatterns = getEffectiveExclusionPatterns(excludePatterns);
+
   // Exclude patterns take precedence
   if (
-    matchesAnyPattern(normalizedPath, excludePatterns) ||
-    (basename && matchesAnyPattern(basename, stripSlash(excludePatterns)))
+    matchesAnyPattern(normalizedPath, effectiveExcludePatterns) ||
+    (basename && matchesAnyPattern(basename, stripSlash(effectiveExcludePatterns)))
   )
     return false;
   if (!includePatterns || includePatterns.length === 0) return true;

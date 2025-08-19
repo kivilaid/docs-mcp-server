@@ -45,6 +45,8 @@ export interface ScrapeToolOptions {
     includePatterns?: string[];
     /**
      * Patterns for excluding URLs during scraping. Exclude takes precedence over include.
+     * If not specified, default patterns exclude common files (CHANGELOG.md, LICENSE, etc.)
+     * and folders (archive, deprecated, i18n locales, etc.).
      * Regex patterns must be wrapped in slashes, e.g. /pattern/.
      */
     excludePatterns?: string[];
