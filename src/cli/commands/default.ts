@@ -40,12 +40,18 @@ export function createDefaultAction(program: Command): Command {
     )
     .option("--resume", "Resume interrupted jobs on startup", false)
     .option("--no-resume", "Do not resume jobs on startup")
+    .option(
+      "--read-only",
+      "Run in read-only mode (only expose read tools, disable write/job tools)",
+      false,
+    )
     .action(
       async (
         options: {
           protocol: string;
           port: string;
           resume: boolean;
+          readOnly: boolean;
         },
         command,
       ) => {
@@ -74,8 +80,8 @@ export function createDefaultAction(program: Command): Command {
           logger.debug(`🔍 Auto-detected stdio protocol (no TTY)`);
 
           await pipeline.start(); // Start pipeline for stdio mode
-          const mcpTools = await initializeTools(docService, pipeline);
-          await startStdioServer(mcpTools);
+          const mcpTools = await initializeTools(docService, pipeline, options.readOnly);
+          await startStdioServer(mcpTools, options.readOnly);
 
           await new Promise(() => {}); // Keep running forever
         } else {
@@ -89,6 +95,7 @@ export function createDefaultAction(program: Command): Command {
             enableApiServer: true, // Enable API (tRPC) in http mode
             enableWorker: true, // Always enable in-process worker for unified server
             port,
+            readOnly: options.readOnly,
           });
 
           await startAppServer(docService, pipeline, config);

@@ -21,4 +21,7 @@ export interface AppServerConfig {
 
   /** URL of external worker server (if using external worker instead of embedded) */
   externalWorkerUrl?: string;
+
+  /** Whether to run MCP server in read-only mode */
+  readOnly?: boolean;
 }
