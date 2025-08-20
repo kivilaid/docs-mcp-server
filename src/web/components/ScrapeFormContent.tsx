@@ -2,11 +2,19 @@ import { ScrapeMode } from "../../scraper/types"; // Adjusted import path
 import Alert from "./Alert";
 import Tooltip from "./Tooltip";
 
+interface ScrapeFormContentProps {
+  defaultExcludePatterns?: string[];
+}
+
 /**
  * Renders the form fields for queuing a new scrape job.
  * Includes basic fields (URL, Library, Version) and advanced options.
  */
-const ScrapeFormContent = () => (
+const ScrapeFormContent = ({ defaultExcludePatterns }: ScrapeFormContentProps) => {
+  // Format default patterns for display in textarea (one per line)
+  const defaultExcludePatternsText = defaultExcludePatterns?.join('\n') || '';
+
+  return (
   <div class="mt-4 p-4 bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-300 dark:border-gray-600">
     <h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-2">
       Queue New Scrape Job
@@ -223,15 +231,17 @@ const ScrapeFormContent = () => (
               >
                 Exclude Patterns
               </label>
-              <Tooltip text="Glob or regex patterns for URLs to exclude. One per line or comma-separated. Exclude takes precedence over include. Regex patterns must be wrapped in slashes, e.g. /pattern/." />
+              <Tooltip text="Glob or regex patterns for URLs to exclude. One per line or comma-separated. Exclude takes precedence over include. Regex patterns must be wrapped in slashes, e.g. /pattern/. Edit or clear this field to customize exclusions." />
             </div>
             <textarea
               name="excludePatterns"
               id="excludePatterns"
-              rows="2"
-              placeholder="e.g. private/* or /internal/"
-              class="mt-0.5 block w-full max-w-sm px-2 py-1 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-            ></textarea>
+              rows="5"
+              class="mt-0.5 block w-full max-w-sm px-2 py-1 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white font-mono text-xs"
+            >{defaultExcludePatternsText}</textarea>
+            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              Default patterns are pre-filled. Edit to customize or clear to exclude nothing.
+            </p>
           </div>
           <div>
             <div class="flex items-center">
@@ -366,5 +376,6 @@ const ScrapeFormContent = () => (
     <div id="job-response" class="mt-2 text-sm"></div>
   </div>
 );
+};
 
 export default ScrapeFormContent;

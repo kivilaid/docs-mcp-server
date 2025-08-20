@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { DEFAULT_EXCLUSION_PATTERNS } from "./defaultPatterns";
 import {
   extractPathAndQuery,
   isRegexPattern,
@@ -33,15 +34,148 @@ describe("patternMatcher", () => {
     expect(extractPathAndQuery("/foo/bar?x=1")).toBe("/foo/bar?x=1");
   });
 
-  it("shouldIncludeUrl applies exclude over include", () => {
-    // Exclude wins
-    expect(shouldIncludeUrl("https://x.com/foo", ["foo*"], ["/foo/"])).toBe(false);
-    // Include only
-    expect(shouldIncludeUrl("https://x.com/foo", ["foo*"], undefined)).toBe(true);
-    // No include/exclude
-    expect(shouldIncludeUrl("https://x.com/foo", undefined, undefined)).toBe(true);
-    // Exclude only
-    expect(shouldIncludeUrl("https://x.com/foo", undefined, ["foo*"])).toBe(false);
+  describe("shouldIncludeUrl with explicit patterns", () => {
+    it("should apply exclude over include when patterns are explicitly provided", () => {
+      // Exclude wins
+      expect(shouldIncludeUrl("https://x.com/foo", ["foo*"], ["/foo/"])).toBe(false);
+      // Include only
+      expect(shouldIncludeUrl("https://x.com/foo", ["foo*"], [])).toBe(true);
+      // Exclude only
+      expect(shouldIncludeUrl("https://x.com/foo", undefined, ["foo*"])).toBe(false);
+    });
+
+    it("should respect user's choice to have no exclusions", () => {
+      // When user explicitly provides empty array, no defaults should be applied
+      expect(shouldIncludeUrl("https://example.com/CHANGELOG.md", undefined, [])).toBe(
+        true,
+      );
+      expect(shouldIncludeUrl("https://example.com/LICENSE", undefined, [])).toBe(true);
+    });
+  });
+
+  describe("shouldIncludeUrl with default patterns", () => {
+    it("should apply default exclusions when no user exclude patterns provided", () => {
+      // Default patterns should exclude common documentation files
+      expect(
+        shouldIncludeUrl("https://example.com/CHANGELOG.md", undefined, undefined),
+      ).toBe(false);
+      expect(
+        shouldIncludeUrl("https://example.com/changelog.md", undefined, undefined),
+      ).toBe(false);
+      expect(shouldIncludeUrl("https://example.com/LICENSE", undefined, undefined)).toBe(
+        false,
+      );
+      expect(
+        shouldIncludeUrl("https://example.com/LICENSE.md", undefined, undefined),
+      ).toBe(false);
+      expect(
+        shouldIncludeUrl("https://example.com/CODE_OF_CONDUCT.md", undefined, undefined),
+      ).toBe(false);
+    });
+
+    it("should apply default folder exclusions", () => {
+      // Archive folders
+      expect(
+        shouldIncludeUrl("https://example.com/archive/old-docs.md", undefined, undefined),
+      ).toBe(false);
+      expect(
+        shouldIncludeUrl("https://example.com/archived/legacy.md", undefined, undefined),
+      ).toBe(false);
+      expect(
+        shouldIncludeUrl("https://example.com/old/stuff.md", undefined, undefined),
+      ).toBe(false);
+      expect(
+        shouldIncludeUrl("https://example.com/docs/old/readme.md", undefined, undefined),
+      ).toBe(false);
+
+      // Deprecated/legacy folders
+      expect(
+        shouldIncludeUrl("https://example.com/deprecated/api.md", undefined, undefined),
+      ).toBe(false);
+      expect(
+        shouldIncludeUrl("https://example.com/legacy/guide.md", undefined, undefined),
+      ).toBe(false);
+      expect(
+        shouldIncludeUrl("https://example.com/previous/version.md", undefined, undefined),
+      ).toBe(false);
+
+      // i18n folders
+      expect(
+        shouldIncludeUrl("https://example.com/i18n/zh-cn/guide.md", undefined, undefined),
+      ).toBe(false);
+      expect(
+        shouldIncludeUrl("https://example.com/i18n/es/tutorial.md", undefined, undefined),
+      ).toBe(false);
+      expect(
+        shouldIncludeUrl("https://example.com/i18n/fr/docs.md", undefined, undefined),
+      ).toBe(false);
+
+      // Locale folders
+      expect(
+        shouldIncludeUrl(
+          "https://example.com/zh-cn/documentation.md",
+          undefined,
+          undefined,
+        ),
+      ).toBe(false);
+      expect(
+        shouldIncludeUrl("https://example.com/zh-tw/guide.md", undefined, undefined),
+      ).toBe(false);
+    });
+
+    it("should include normal documentation files when using defaults", () => {
+      expect(
+        shouldIncludeUrl("https://example.com/docs/guide.md", undefined, undefined),
+      ).toBe(true);
+      expect(
+        shouldIncludeUrl("https://example.com/api/reference.md", undefined, undefined),
+      ).toBe(true);
+      expect(
+        shouldIncludeUrl("https://example.com/tutorials/basic.md", undefined, undefined),
+      ).toBe(true);
+      expect(
+        shouldIncludeUrl("https://example.com/README.md", undefined, undefined),
+      ).toBe(true);
+    });
+
+    it("should work with file:// URLs and basename matching", () => {
+      // Should exclude based on basename for file:// URLs
+      expect(
+        shouldIncludeUrl("file:///docs/subdir/CHANGELOG.md", undefined, undefined),
+      ).toBe(false);
+      expect(shouldIncludeUrl("file:///project/LICENSE", undefined, undefined)).toBe(
+        false,
+      );
+
+      // Should include normal files
+      expect(shouldIncludeUrl("file:///docs/README.md", undefined, undefined)).toBe(true);
+      expect(shouldIncludeUrl("file:///guide/tutorial.md", undefined, undefined)).toBe(
+        true,
+      );
+    });
+
+    it("should apply defaults correctly with include patterns", () => {
+      // Include docs/* but still exclude defaults
+      expect(
+        shouldIncludeUrl("https://example.com/docs/guide.md", ["docs/*"], undefined),
+      ).toBe(true);
+      expect(
+        shouldIncludeUrl("https://example.com/docs/CHANGELOG.md", ["docs/*"], undefined),
+      ).toBe(false);
+      expect(
+        shouldIncludeUrl("https://example.com/other/guide.md", ["docs/*"], undefined),
+      ).toBe(false);
+    });
+  });
+
+  describe("default patterns behavior verification", () => {
+    it("should have expected default exclusion patterns", () => {
+      expect(DEFAULT_EXCLUSION_PATTERNS.length).toBeGreaterThan(0);
+      expect(DEFAULT_EXCLUSION_PATTERNS).toContain("**/CHANGELOG.md");
+      expect(DEFAULT_EXCLUSION_PATTERNS).toContain("**/LICENSE");
+      expect(DEFAULT_EXCLUSION_PATTERNS).toContain("**/archive/**");
+      expect(DEFAULT_EXCLUSION_PATTERNS).toContain("**/i18n/zh*/**");
+    });
   });
 
   describe("double asterisk (**) pattern matching", () => {

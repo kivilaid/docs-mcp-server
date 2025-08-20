@@ -5,6 +5,7 @@ import { logger } from "../../../utils/logger"; // Adjusted import path
 import ScrapeForm from "../../components/ScrapeForm"; // Import extracted component
 import Alert from "../../components/Alert"; // Import Alert component
 import ScrapeFormContent from "../../components/ScrapeFormContent"; // Import for OOB swap
+import { DEFAULT_EXCLUSION_PATTERNS } from "../../../scraper/utils/defaultPatterns"; // Import default patterns
 
 /**
  * Registers the API routes for creating new jobs.
@@ -18,7 +19,7 @@ export function registerNewJobRoutes(
   // GET /web/jobs/new - Return the form component wrapped in its container
   server.get("/web/jobs/new", async () => {
     // Return the wrapper component which includes the container div
-    return <ScrapeForm />;
+    return <ScrapeForm defaultExcludePatterns={DEFAULT_EXCLUSION_PATTERNS} />;
   });
 
   // POST /web/jobs/scrape - Queue a new scrape job
@@ -129,7 +130,7 @@ export function registerNewJobRoutes(
               />
               {/* OOB target response - contains only the inner form content */}
               <div id="scrape-form-container" hx-swap-oob="innerHTML">
-                <ScrapeFormContent />
+                <ScrapeFormContent defaultExcludePatterns={DEFAULT_EXCLUSION_PATTERNS} />
               </div>
             </>
           );
