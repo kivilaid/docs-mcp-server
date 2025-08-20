@@ -115,11 +115,7 @@ export function createMcpCommand(program: Command): Command {
               logger.info("🚀 Starting MCP server (stdio mode)");
 
               await pipeline.start(); // Start pipeline for stdio mode
-              const mcpTools = await initializeTools(
-                docService,
-                pipeline,
-                cmdOptions.readOnly,
-              );
+              const mcpTools = await initializeTools(docService, pipeline);
               await startStdioServer(mcpTools, cmdOptions.readOnly);
 
               await new Promise(() => {}); // Keep running forever

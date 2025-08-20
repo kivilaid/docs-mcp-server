@@ -33,7 +33,7 @@ export async function registerMcpService(
   authManager?: ProxyAuthManager,
 ): Promise<McpServer> {
   // Initialize MCP server and tools
-  const mcpTools = await initializeTools(docService, pipeline, readOnly);
+  const mcpTools = await initializeTools(docService, pipeline);
   const mcpServer = createMcpServerInstance(mcpTools, readOnly);
 
   // Setup auth middleware if auth manager is provided

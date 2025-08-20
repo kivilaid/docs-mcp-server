@@ -110,7 +110,7 @@ export function createDefaultAction(program: Command): Command {
             logger.debug(`Auto-detected stdio protocol (no TTY)`);
 
             await pipeline.start(); // Start pipeline for stdio mode
-            const mcpTools = await initializeTools(docService, pipeline, options.readOnly);
+            const mcpTools = await initializeTools(docService, pipeline);
             await startStdioServer(mcpTools, options.readOnly);
 
             await new Promise(() => {}); // Keep running forever
