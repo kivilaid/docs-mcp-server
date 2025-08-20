@@ -68,9 +68,9 @@ describe("HtmlPlaywrightMiddleware", () => {
   afterEach(() => {
     // Reset the browser instance after each test
     // This ensures a clean state for each test
-    // @ts-ignore
+    // @ts-expect-error
     playwrightMiddleware.browser?.close();
-    // @ts-ignore
+    // @ts-expect-error
     playwrightMiddleware.browser = null;
   });
 

@@ -26,6 +26,7 @@ LLM-assisted coding promises speed and efficiency, but often falls short due to:
 - **Broad Source Compatibility:** Scrapes documentation from websites, GitHub repos, package manager sites (npm, PyPI), and local file directories.
 - **Advanced Search & Processing:** Intelligently chunks documentation semantically, generates embeddings, and combines vector similarity with full-text search.
 - **Flexible Embedding Models:** Supports various providers including OpenAI (and compatible APIs), Google Gemini/Vertex AI, Azure OpenAI, and AWS Bedrock.
+- **Enterprise Authentication:** Optional OAuth2/OIDC authentication with dynamic client registration for secure deployments.
 - **Web Interface:** Easy-to-use web interface for searching and managing documentation.
 - **Local & Private:** Runs entirely on your machine, ensuring data and queries remain private.
 - **Free & Open Source:** Community-driven and freely available.
@@ -407,6 +408,8 @@ npx @arabold/docs-mcp-server@latest
 ```
 
 For more architectural details, see the [ARCHITECTURE.md](ARCHITECTURE.md).
+
+For enterprise authentication and security features, see the [Authentication Guide](docs/authentication.md).
 
 ## Development
 

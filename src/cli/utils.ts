@@ -6,6 +6,7 @@ import { execSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { chromium } from "playwright";
 import type { AppServerConfig } from "../app";
+import type { AuthConfig } from "../auth/types";
 import type { IPipeline, PipelineOptions } from "../pipeline";
 import { PipelineFactory } from "../pipeline";
 import type { DocumentManagementService } from "../store";
@@ -150,7 +151,7 @@ export async function createPipelineWithCallbacks(
       );
     },
     onJobStatusChange: async (job) => {
-      logger.debug(`🔄 Job ${job.id} status changed to: ${job.status}`);
+      logger.debug(`Job ${job.id} status changed to: ${job.status}`);
     },
     onJobError: async (job, error, document) => {
       logger.warn(
@@ -173,6 +174,7 @@ export function createAppServerConfig(options: {
   port: number;
   externalWorkerUrl?: string;
   readOnly?: boolean;
+  auth?: AuthConfig;
 }): AppServerConfig {
   return {
     enableWebInterface: options.enableWebInterface ?? false,
@@ -182,6 +184,7 @@ export function createAppServerConfig(options: {
     port: options.port,
     externalWorkerUrl: options.externalWorkerUrl,
     readOnly: options.readOnly ?? false,
+    auth: options.auth,
   };
 }
 
@@ -214,3 +217,121 @@ export const CLI_DEFAULTS = {
   WEB_PORT: DEFAULT_WEB_PORT,
   MAX_CONCURRENCY: DEFAULT_MAX_CONCURRENCY,
 } as const;
+
+/**
+ * Parses auth configuration from CLI options and environment variables.
+ * Precedence: CLI flags > env vars > defaults
+ */
+export function parseAuthConfig(options: {
+  authEnabled?: boolean;
+  authIssuerUrl?: string;
+  authAudience?: string;
+}): AuthConfig | undefined {
+  // Check CLI flags first, then env vars, then defaults
+  const enabled =
+    options.authEnabled ??
+    (process.env.DOCS_MCP_AUTH_ENABLED?.toLowerCase() === "true" || false);
+
+  if (!enabled) {
+    return undefined;
+  }
+
+  const issuerUrl = options.authIssuerUrl ?? process.env.DOCS_MCP_AUTH_ISSUER_URL;
+
+  const audience = options.authAudience ?? process.env.DOCS_MCP_AUTH_AUDIENCE;
+
+  return {
+    enabled,
+    issuerUrl,
+    audience,
+    scopes: ["openid", "profile"], // Default scopes for OAuth2/OIDC
+  };
+}
+
+/**
+ * Validates auth configuration when auth is enabled.
+ */
+export function validateAuthConfig(authConfig: AuthConfig): void {
+  if (!authConfig.enabled) {
+    return;
+  }
+
+  const errors: string[] = [];
+
+  // Issuer URL is required when auth is enabled
+  if (!authConfig.issuerUrl) {
+    errors.push("--auth-issuer-url is required when auth is enabled");
+  } else {
+    try {
+      const url = new URL(authConfig.issuerUrl);
+      if (url.protocol !== "https:") {
+        errors.push("Issuer URL must use HTTPS protocol");
+      }
+    } catch {
+      errors.push("Issuer URL must be a valid URL");
+    }
+  }
+
+  // Audience is required when auth is enabled
+  if (!authConfig.audience) {
+    errors.push("--auth-audience is required when auth is enabled");
+  } else {
+    // Audience can be any valid URI (URL or URN)
+    // Examples: https://api.example.com, urn:docs-mcp-server:api, urn:company:service
+    try {
+      // Try parsing as URL first (most common case)
+      const url = new URL(authConfig.audience);
+      if (url.protocol === "http:" && url.hostname !== "localhost") {
+        // Warn about HTTP in production but don't fail
+        logger.warn(
+          "⚠️  Audience uses HTTP protocol - consider using HTTPS for production",
+        );
+      }
+      if (url.hash) {
+        errors.push("Audience must not contain URL fragments");
+      }
+    } catch {
+      // If not a valid URL, check if it's a valid URN
+      if (authConfig.audience.startsWith("urn:")) {
+        // Basic URN validation: urn:namespace:specific-string
+        const urnParts = authConfig.audience.split(":");
+        if (urnParts.length < 3 || !urnParts[1] || !urnParts[2]) {
+          errors.push("URN audience must follow format: urn:namespace:specific-string");
+        }
+      } else {
+        errors.push(
+          "Audience must be a valid absolute URL or URN (e.g., https://api.example.com or urn:company:service)",
+        );
+      }
+    }
+  }
+
+  // Scopes are not validated in binary authentication mode
+  // They're handled internally by the OAuth proxy
+
+  if (errors.length > 0) {
+    throw new Error(`Auth configuration validation failed:\n${errors.join("\n")}`);
+  }
+}
+
+/**
+ * Warns about HTTP usage in production when auth is enabled.
+ */
+export function warnHttpUsage(authConfig: AuthConfig | undefined, port: number): void {
+  if (!authConfig?.enabled) {
+    return;
+  }
+
+  // Check if we're likely running in production (not localhost)
+  const isLocalhost =
+    process.env.NODE_ENV !== "production" ||
+    port === 6280 || // default dev port
+    process.env.HOSTNAME?.includes("localhost");
+
+  if (!isLocalhost) {
+    logger.warn(
+      "⚠️  Authentication is enabled but running over HTTP in production. " +
+        "Consider using HTTPS for security.",
+    );
+  }
+}

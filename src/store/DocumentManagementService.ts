@@ -54,7 +54,7 @@ export class DocumentManagementService {
     if (envStorePath) {
       dbDir = envStorePath;
       dbPath = path.join(dbDir, "documents.db");
-      logger.debug(`💾 Using database directory from DOCS_MCP_STORE_PATH: ${dbDir}`);
+      logger.debug(`Using database directory from DOCS_MCP_STORE_PATH: ${dbDir}`);
     } else {
       // 2. Check Old Local Path
       const projectRoot = getProjectRoot();
@@ -65,13 +65,13 @@ export class DocumentManagementService {
       if (oldDbExists) {
         dbPath = oldDbPath;
         dbDir = oldDbDir;
-        logger.debug(`💾 Using legacy database path: ${dbPath}`);
+        logger.debug(`Using legacy database path: ${dbPath}`);
       } else {
         // 3. Use Standard Path
         const standardPaths = envPaths("docs-mcp-server", { suffix: "" });
         dbDir = standardPaths.data;
         dbPath = path.join(dbDir, "documents.db");
-        logger.debug(`💾 Using standard database directory: ${dbDir}`);
+        logger.debug(`Using standard database directory: ${dbDir}`);
       }
     }
 

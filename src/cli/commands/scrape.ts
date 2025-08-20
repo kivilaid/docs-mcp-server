@@ -63,9 +63,9 @@ export async function scrapeAction(
       library,
       version: options.version,
       options: {
-        maxPages: Number.parseInt(options.maxPages),
-        maxDepth: Number.parseInt(options.maxDepth),
-        maxConcurrency: Number.parseInt(options.maxConcurrency),
+        maxPages: Number.parseInt(options.maxPages, 10),
+        maxDepth: Number.parseInt(options.maxDepth, 10),
+        maxConcurrency: Number.parseInt(options.maxConcurrency, 10),
         ignoreErrors: options.ignoreErrors,
         scope: options.scope as "subpages" | "hostname" | "domain",
         followRedirects: options.followRedirects,

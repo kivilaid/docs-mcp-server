@@ -8,6 +8,7 @@ import formBody from "@fastify/formbody";
 import fastifyStatic from "@fastify/static";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import Fastify, { type FastifyInstance } from "fastify";
+import { ProxyAuthManager } from "../auth";
 import type { IPipeline } from "../pipeline/trpc/interfaces";
 import { cleanupMcpService, registerMcpService } from "../services/mcpService";
 import { registerTrpcService } from "../services/trpcService";
@@ -24,6 +25,7 @@ import type { AppServerConfig } from "./AppServerConfig";
 export class AppServer {
   private server: FastifyInstance;
   private mcpServer: McpServer | null = null;
+  private authManager: ProxyAuthManager | null = null;
   private config: AppServerConfig;
 
   constructor(
@@ -117,8 +119,33 @@ export class AppServer {
    * Setup the server with plugins and conditionally enabled services.
    */
   private async setupServer(): Promise<void> {
+    // Initialize authentication if enabled
+    if (this.config.auth?.enabled) {
+      await this.initializeAuth();
+    }
+
     // Register core Fastify plugins
     await this.server.register(formBody);
+
+    // Add request logging middleware for OAuth debugging
+    if (this.config.auth?.enabled) {
+      this.server.addHook("onRequest", async (request) => {
+        if (
+          request.url.includes("/oauth") ||
+          request.url.includes("/auth") ||
+          request.url.includes("/register")
+        ) {
+          logger.debug(
+            `${request.method} ${request.url} - Headers: ${JSON.stringify(request.headers)}`,
+          );
+        }
+      });
+    }
+
+    // Add protected resource metadata endpoint for RFC9728 compliance
+    if (this.config.auth?.enabled && this.authManager) {
+      await this.setupAuthMetadataEndpoint();
+    }
 
     // Conditionally enable services based on configuration
     if (this.config.enableWebInterface) {
@@ -160,6 +187,7 @@ export class AppServer {
       this.docService,
       this.pipeline,
       this.config.readOnly,
+      this.authManager || undefined,
     );
     logger.debug("MCP server service enabled");
   }
@@ -189,6 +217,34 @@ export class AppServer {
       prefix: "/",
       index: false,
     });
+  }
+
+  /**
+   * Initialize OAuth2/OIDC authentication manager.
+   */
+  private async initializeAuth(): Promise<void> {
+    if (!this.config.auth) {
+      return;
+    }
+
+    this.authManager = new ProxyAuthManager(this.config.auth);
+    await this.authManager.initialize();
+    logger.debug("Proxy auth manager initialized");
+  }
+
+  /**
+   * Setup OAuth2 endpoints using ProxyAuthManager.
+   */
+  private async setupAuthMetadataEndpoint(): Promise<void> {
+    if (!this.authManager) {
+      return;
+    }
+
+    // ProxyAuthManager handles all OAuth2 endpoints automatically
+    const baseUrl = new URL(`http://localhost:${this.config.port}`);
+    this.authManager.registerRoutes(this.server, baseUrl);
+
+    logger.debug("OAuth2 proxy endpoints registered");
   }
 
   /**

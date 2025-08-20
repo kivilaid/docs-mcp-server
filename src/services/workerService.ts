@@ -15,11 +15,11 @@ export async function registerWorkerService(pipeline: IPipeline): Promise<void> 
   pipeline.setCallbacks({
     onJobProgress: async (job, progress) => {
       logger.debug(
-        `📊 Job ${job.id} progress: ${progress.pagesScraped}/${progress.totalPages} pages`,
+        `Job ${job.id} progress: ${progress.pagesScraped}/${progress.totalPages} pages`,
       );
     },
     onJobStatusChange: async (job) => {
-      logger.debug(`🔄 Job ${job.id} status changed to: ${job.status}`);
+      logger.debug(`Job ${job.id} status changed to: ${job.status}`);
     },
     onJobError: async (job, error, document) => {
       logger.warn(

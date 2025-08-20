@@ -36,7 +36,7 @@ export function createMcpServerInstance(
   // Only register write/job tools if not in read-only mode
   if (!readOnly) {
     // Scrape docs tool - suppress deep inference issues
-    // @ts-ignore TypeScript has issues with deep Zod inference in MCP SDK
+    // @ts-expect-error TypeScript has issues with deep Zod inference in MCP SDK
     server.tool(
       "scrape_docs",
       "Scrape and index documentation from a URL for a library. Use this tool to index a new library or a new version.",
@@ -218,7 +218,6 @@ ${r.content}\n`,
   );
 
   // Find version tool
-  // @ts-ignore TypeScript has issues with deep Zod inference in MCP SDK
   server.tool(
     "find_version",
     "Find the best matching version for a library. Use to identify available or closest versions.",

@@ -7,6 +7,8 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
+import type { ProxyAuthManager } from "../auth";
+import { createAuthMiddleware } from "../auth/middleware";
 import { createMcpServerInstance } from "../mcp/mcpServer";
 import { initializeTools } from "../mcp/tools";
 import type { IPipeline } from "../pipeline/trpc/interfaces";
@@ -28,10 +30,14 @@ export async function registerMcpService(
   docService: IDocumentManagement,
   pipeline: IPipeline,
   readOnly = false,
+  authManager?: ProxyAuthManager,
 ): Promise<McpServer> {
   // Initialize MCP server and tools
-  const mcpTools = await initializeTools(docService, pipeline, readOnly);
+  const mcpTools = await initializeTools(docService, pipeline);
   const mcpServer = createMcpServerInstance(mcpTools, readOnly);
+
+  // Setup auth middleware if auth manager is provided
+  const authMiddleware = authManager ? createAuthMiddleware(authManager) : null;
 
   // Track SSE transports for cleanup
   const sseTransports: Record<string, SSEServerTransport> = {};
@@ -40,6 +46,7 @@ export async function registerMcpService(
   server.route({
     method: "GET",
     url: "/sse",
+    preHandler: authMiddleware ? [authMiddleware] : undefined,
     handler: async (_request: FastifyRequest, reply: FastifyReply) => {
       try {
         // Handle SSE connection using raw response
@@ -89,6 +96,7 @@ export async function registerMcpService(
   server.route({
     method: "POST",
     url: "/mcp",
+    preHandler: authMiddleware ? [authMiddleware] : undefined,
     handler: async (request: FastifyRequest, reply: FastifyReply) => {
       try {
         // In stateless mode, create a new instance of server and transport for each request

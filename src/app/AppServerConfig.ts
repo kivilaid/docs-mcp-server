@@ -3,6 +3,8 @@
  * Defines which services should be enabled and their configuration options.
  */
 
+import type { AuthConfig } from "../auth/types";
+
 export interface AppServerConfig {
   /** Enable web interface routes and static file serving */
   enableWebInterface: boolean;
@@ -24,4 +26,7 @@ export interface AppServerConfig {
 
   /** Whether to run MCP server in read-only mode */
   readOnly?: boolean;
+
+  /** Optional OAuth2/OIDC authentication configuration for MCP endpoints */
+  auth?: AuthConfig;
 }

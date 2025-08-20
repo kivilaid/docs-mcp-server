@@ -107,7 +107,7 @@ describe("CLI Flag Validation", () => {
     it("should validate port numbers correctly", () => {
       // This tests actual port validation logic
       const validatePort = (portString: string) => {
-        const port = Number.parseInt(portString);
+        const port = Number.parseInt(portString, 10);
         if (Number.isNaN(port) || port < 1 || port > 65535) {
           throw new Error("Invalid port number");
         }

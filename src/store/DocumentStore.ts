@@ -792,7 +792,7 @@ export class DocumentStore {
       for (const url of urls) {
         const deletedCount = await this.deleteDocumentsByUrl(library, version, url);
         if (deletedCount > 0) {
-          logger.debug(`🗑️ Deleted ${deletedCount} existing documents for URL: ${url}`);
+          logger.debug(`Deleted ${deletedCount} existing documents for URL: ${url}`);
         }
       }
 
