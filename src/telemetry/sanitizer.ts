@@ -4,18 +4,18 @@
  */
 
 /**
- * Extracts domain from URL for aggregated analytics without exposing paths.
+ * Extracts hostname from URL for aggregated analytics without exposing paths.
  * Examples:
  * - https://docs.python.org/3/library/os.html -> docs.python.org
  * - https://github.com/owner/repo -> github.com
  * - http://localhost:3000/api -> localhost
  */
-export function extractDomain(url: string): string {
+export function extractHostname(url: string): string {
   try {
     const parsed = new URL(url);
     return parsed.hostname;
   } catch {
-    return "invalid-domain";
+    return "invalid-hostname";
   }
 }
 

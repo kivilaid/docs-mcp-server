@@ -13,10 +13,8 @@ export class PostHogClient {
   private client?: PostHog;
   private enabled: boolean;
 
-  // PostHog configuration - hardcoded for user tracking
+  // PostHog configuration
   private static readonly CONFIG = {
-    apiKey:
-      process.env.POSTHOG_API_KEY || "phc_zDlR5l4GXHohqiJTYpH6Lc8TztgtP0GDmwIlCmyOLOs",
     host: "https://app.posthog.com",
 
     // Performance optimizations
@@ -35,9 +33,16 @@ export class PostHogClient {
   constructor(enabled: boolean) {
     this.enabled = enabled;
 
-    if (this.enabled && PostHogClient.CONFIG.apiKey) {
+    // Check if API key was injected at build time
+    if (!__POSTHOG_API_KEY__) {
+      logger.debug("PostHog API key not provided - analytics disabled");
+      this.enabled = false;
+      return;
+    }
+
+    if (this.enabled) {
       try {
-        this.client = new PostHog(PostHogClient.CONFIG.apiKey, {
+        this.client = new PostHog(__POSTHOG_API_KEY__, {
           host: PostHogClient.CONFIG.host,
           flushAt: PostHogClient.CONFIG.flushAt,
           flushInterval: PostHogClient.CONFIG.flushInterval,

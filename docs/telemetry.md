@@ -164,7 +164,7 @@ The system ensures privacy through essential data sanitization:
 
 **URL and Path Sanitization**
 
-- Domain extraction without paths or parameters (`extractDomain`)
+- Hostname extraction without paths or parameters (`extractHostname`)
 - Protocol identification for file and web URLs (`extractProtocol`)
 - Error message sanitization removing sensitive paths and tokens (`sanitizeErrorMessage`)
 

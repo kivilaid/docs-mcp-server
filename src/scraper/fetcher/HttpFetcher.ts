@@ -1,6 +1,6 @@
 import axios, { type AxiosError, type AxiosRequestConfig } from "axios";
 import { CancellationError } from "../../pipeline/errors";
-import { analytics, extractProtocol } from "../../telemetry";
+import { analytics, extractHostname, extractProtocol } from "../../telemetry";
 import { FETCHER_BASE_DELAY, FETCHER_MAX_RETRIES } from "../../utils/config";
 import { RedirectError, ScraperError } from "../../utils/errors";
 import { logger } from "../../utils/logger";
@@ -26,15 +26,6 @@ export class HttpFetcher implements ContentFetcher {
 
   constructor() {
     this.fingerprintGenerator = new FingerprintGenerator();
-  }
-
-  private extractDomain(url: string): string {
-    try {
-      const parsed = new URL(url);
-      return parsed.hostname;
-    } catch {
-      return "invalid-domain";
-    }
   }
 
   canFetch(source: string): boolean {
@@ -65,7 +56,7 @@ export class HttpFetcher implements ContentFetcher {
       const duration = performance.now() - startTime;
       analytics.track("http_request_completed", {
         success: true,
-        domain: this.extractDomain(source),
+        hostname: extractHostname(source),
         protocol: extractProtocol(source),
         duration_ms: Math.round(duration),
         content_size_bytes: result.content.length,
@@ -84,7 +75,7 @@ export class HttpFetcher implements ContentFetcher {
 
       analytics.track("http_request_completed", {
         success: false,
-        domain: this.extractDomain(source),
+        hostname: extractHostname(source),
         protocol: extractProtocol(source),
         duration_ms: Math.round(duration),
         status_code: status,

@@ -95,6 +95,34 @@ export function hasSameDomain(urlA: URL, urlB: URL): boolean {
 }
 
 /**
+ * Extracts the primary/registrable domain from a hostname using the public suffix list.
+ * This properly handles complex TLDs like .co.uk, .com.au, etc.
+ *
+ * Examples:
+ * - docs.python.org -> python.org
+ * - api.github.com -> github.com
+ * - example.co.uk -> example.co.uk
+ * - user.github.io -> user.github.io (special case for GitHub Pages)
+ * - localhost -> localhost
+ * - 192.168.1.1 -> 192.168.1.1 (IP addresses returned as-is)
+ */
+export function extractPrimaryDomain(hostname: string): string {
+  // Handle IP addresses - return as-is
+  if (/^\d+\.\d+\.\d+\.\d+$/.test(hostname) || /^[0-9a-fA-F:]+$/.test(hostname)) {
+    return hostname;
+  }
+
+  // Handle localhost and other single-part hostnames
+  if (!hostname.includes(".")) {
+    return hostname;
+  }
+
+  // Use public suffix list for accurate domain extraction
+  const domain = psl.get(hostname.toLowerCase());
+  return domain || hostname; // Fallback to original hostname if psl fails
+}
+
+/**
  * Checks if a target URL is under the same path as the base URL
  * Example: base = https://example.com/docs/
  *          target = https://example.com/docs/getting-started

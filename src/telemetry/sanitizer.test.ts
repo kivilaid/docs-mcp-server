@@ -2,19 +2,19 @@ import { describe, expect, it } from "vitest";
 import {
   analyzeSearchQuery,
   extractCliFlags,
-  extractDomain,
+  extractHostname,
   extractProtocol,
   sanitizeError,
   sanitizeErrorMessage,
 } from "./sanitizer";
 
-describe("extractDomain", () => {
-  it("should extract domain from various URL formats", () => {
-    expect(extractDomain("https://example.com/path")).toBe("example.com");
-    expect(extractDomain("http://subdomain.example.com")).toBe("subdomain.example.com");
-    expect(extractDomain("https://docs.example.com/api/v1")).toBe("docs.example.com");
-    expect(extractDomain("invalid-url")).toBe("invalid-domain");
-    expect(extractDomain("")).toBe("invalid-domain");
+describe("extractHostname", () => {
+  it("should extract hostname from various URL formats", () => {
+    expect(extractHostname("https://example.com/path")).toBe("example.com");
+    expect(extractHostname("http://subdomain.example.com")).toBe("subdomain.example.com");
+    expect(extractHostname("https://docs.example.com/api/v1")).toBe("docs.example.com");
+    expect(extractHostname("invalid-url")).toBe("invalid-hostname");
+    expect(extractHostname("")).toBe("invalid-hostname");
   });
 });
 

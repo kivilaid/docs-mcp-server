@@ -7,7 +7,7 @@ import semver from "semver";
 import type { ScraperOptions } from "../scraper/types";
 import { GreedySplitter, SemanticMarkdownSplitter } from "../splitter";
 import type { ContentChunk, DocumentSplitter } from "../splitter/types";
-import { analytics, extractDomain, TelemetryEvent } from "../telemetry";
+import { analytics, extractHostname, TelemetryEvent } from "../telemetry";
 import { LibraryNotFoundError, VersionNotFoundError } from "../tools";
 import {
   SPLITTER_MAX_CHUNK_SIZE,
@@ -421,7 +421,7 @@ export class DocumentManagementService {
         // Document characteristics
         hasTitle: !!document.metadata.title,
         hasDescription: !!document.metadata.description,
-        urlDomain: extractDomain(url),
+        urlDomain: extractHostname(url),
         depth: document.metadata.depth,
 
         // Library context
