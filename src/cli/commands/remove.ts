@@ -4,8 +4,7 @@
 
 import type { Command } from "commander";
 import { createDocumentManagement } from "../../store";
-import { trackTool } from "../../utils/analytics";
-import { extractCliFlags } from "../../utils/dataSanitizer";
+import { extractCliFlags, trackTool } from "../../telemetry";
 import { setupLogging } from "../utils";
 
 export async function removeAction(

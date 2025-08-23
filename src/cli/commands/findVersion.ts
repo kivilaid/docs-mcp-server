@@ -4,9 +4,8 @@
 
 import type { Command } from "commander";
 import { createDocumentManagement } from "../../store";
+import { extractCliFlags, trackTool } from "../../telemetry";
 import { FindVersionTool } from "../../tools";
-import { trackTool } from "../../utils/analytics";
-import { extractCliFlags } from "../../utils/dataSanitizer";
 import { setupLogging } from "../utils";
 
 export async function findVersionAction(
@@ -29,7 +28,7 @@ export async function findVersionAction(
           library,
           targetVersion: options.version,
         }),
-      (versionInfo) => ({
+      (versionInfo: string) => ({
         library: library, // Safe: library names are public
         has_target_version: !!options.version,
         result_type: typeof versionInfo, // 'string'

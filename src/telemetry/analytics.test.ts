@@ -3,7 +3,7 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { Analytics, trackTool } from "./analytics";
+import { Analytics, trackTool } from "../utils/analytics";
 
 // Mock PostHog
 vi.mock("posthog-node", () => ({

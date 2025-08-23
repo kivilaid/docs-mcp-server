@@ -4,9 +4,9 @@
 
 import type { Command } from "commander";
 import { createDocumentManagement } from "../../store";
+import { analyzeSearchQuery, extractCliFlags, trackTool } from "../../telemetry";
+import type { SearchToolResult } from "../../tools";
 import { SearchTool } from "../../tools";
-import { trackTool } from "../../utils/analytics";
-import { analyzeSearchQuery, extractCliFlags } from "../../utils/dataSanitizer";
 import { formatOutput, setupLogging } from "../utils";
 
 export async function searchAction(
@@ -34,7 +34,7 @@ export async function searchAction(
           limit: Number.parseInt(options.limit, 10),
           exactMatch: options.exactMatch,
         }),
-      (result) => ({
+      (result: SearchToolResult) => ({
         library: library, // Safe: library names are public
         query_analysis: analyzeSearchQuery(query), // Analyzed, not raw query
         result_count: result.results.length,

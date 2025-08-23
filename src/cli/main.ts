@@ -5,7 +5,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { IPipeline } from "../pipeline";
 import type { IDocumentManagement } from "../store/trpc/interfaces";
-import { analytics } from "../utils/analytics";
+import { analytics } from "../telemetry";
 import { logger } from "../utils/logger";
 import { createCliProgram } from "./index";
 

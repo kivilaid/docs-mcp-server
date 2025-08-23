@@ -13,9 +13,8 @@ import { createMcpServerInstance } from "../mcp/mcpServer";
 import { initializeTools } from "../mcp/tools";
 import type { IPipeline } from "../pipeline/trpc/interfaces";
 import type { IDocumentManagement } from "../store/trpc/interfaces";
-import { analytics } from "../utils/analytics";
+import { analytics, createMcpSession } from "../telemetry";
 import { logger } from "../utils/logger";
-import { createMcpSession } from "../utils/sessionManager";
 
 /**
  * Register MCP protocol routes on a Fastify server instance.
@@ -63,7 +62,6 @@ export async function registerMcpService(
             authEnabled: !!authManager,
             readOnly,
             servicesEnabled: ["mcp"],
-            sessionId: transport.sessionId,
           });
           analytics.startSession(session);
         }

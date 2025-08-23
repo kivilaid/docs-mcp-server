@@ -4,12 +4,13 @@
  */
 
 import type { IPipeline } from "../pipeline/trpc/interfaces";
-import { analytics, TelemetryEvent } from "../utils/analytics";
 import {
+  analytics,
   categorizeError,
   isRecoverableError,
   sanitizeJobId,
-} from "../utils/dataSanitizer";
+  TelemetryEvent,
+} from "../telemetry";
 import { logger } from "../utils/logger";
 
 /**

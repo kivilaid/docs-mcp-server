@@ -1,8 +1,7 @@
 import axios, { type AxiosError, type AxiosRequestConfig } from "axios";
 import { CancellationError } from "../../pipeline/errors";
-import { analytics } from "../../utils/analytics";
+import { analytics, extractProtocol } from "../../telemetry";
 import { FETCHER_BASE_DELAY, FETCHER_MAX_RETRIES } from "../../utils/config";
-import { extractProtocol } from "../../utils/dataSanitizer";
 import { RedirectError, ScraperError } from "../../utils/errors";
 import { logger } from "../../utils/logger";
 import { MimeTypeUtils } from "../../utils/mimeTypeUtils";

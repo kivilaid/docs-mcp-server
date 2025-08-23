@@ -5,9 +5,8 @@
 import type { Command } from "commander";
 import { FileFetcher, HttpFetcher } from "../../scraper/fetcher";
 import { ScrapeMode } from "../../scraper/types";
+import { extractCliFlags, extractProtocol, trackTool } from "../../telemetry";
 import { FetchUrlTool } from "../../tools";
-import { trackTool } from "../../utils/analytics";
-import { extractCliFlags, extractProtocol } from "../../utils/dataSanitizer";
 import { parseHeaders, setupLogging } from "../utils";
 
 export async function fetchUrlAction(
@@ -31,7 +30,7 @@ export async function fetchUrlAction(
         scrapeMode: options.scrapeMode,
         headers: Object.keys(headers).length > 0 ? headers : undefined,
       }),
-    (content) => ({
+    (content: string) => ({
       url_protocol: extractProtocol(url), // Safe: only protocol, not full URL
       follow_redirects: options.followRedirects,
       scrape_mode: options.scrapeMode,

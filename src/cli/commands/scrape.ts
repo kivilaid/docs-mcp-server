@@ -8,14 +8,14 @@ import type { IPipeline } from "../../pipeline/trpc/interfaces";
 import { ScrapeMode } from "../../scraper/types";
 import { createDocumentManagement } from "../../store";
 import type { IDocumentManagement } from "../../store/trpc/interfaces";
+import { extractCliFlags, extractProtocol, trackTool } from "../../telemetry";
+import type { ScrapeExecuteResult } from "../../tools";
 import { ScrapeTool } from "../../tools";
-import { trackTool } from "../../utils/analytics";
 import {
   DEFAULT_MAX_CONCURRENCY,
   DEFAULT_MAX_DEPTH,
   DEFAULT_MAX_PAGES,
 } from "../../utils/config";
-import { extractCliFlags, extractProtocol } from "../../utils/dataSanitizer";
 import { createPipelineWithCallbacks, parseHeaders, setupLogging } from "../utils";
 
 export async function scrapeAction(
@@ -87,7 +87,7 @@ export async function scrapeAction(
             headers: Object.keys(headers).length > 0 ? headers : undefined,
           },
         }),
-      (result) => ({
+      (result: ScrapeExecuteResult) => ({
         library: library, // Safe: library names are public
         url_protocol: extractProtocol(url), // Safe: only protocol, not full URL
         max_pages: Number.parseInt(options.maxPages, 10),

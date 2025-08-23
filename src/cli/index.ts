@@ -4,10 +4,13 @@
 
 import { Command, Option } from "commander";
 import packageJson from "../../package.json";
-import { analytics } from "../utils/analytics";
+import {
+  analytics,
+  createCliSession,
+  shouldEnableTelemetry,
+  TelemetryConfig,
+} from "../telemetry";
 import { LogLevel, setLogLevel } from "../utils/logger";
-import { createCliSession, shouldEnableTelemetry } from "../utils/sessionManager";
-import { TelemetryConfig } from "../utils/telemetryConfig";
 import { createDefaultAction } from "./commands/default";
 import { createFetchUrlCommand } from "./commands/fetchUrl";
 import { createFindVersionCommand } from "./commands/findVersion";
@@ -50,7 +53,7 @@ export function createCliProgram(): Command {
     else if (globalOptions.verbose) setLogLevel(LogLevel.DEBUG);
 
     // Initialize telemetry if enabled
-    if (shouldEnableTelemetry(undefined, globalOptions)) {
+    if (shouldEnableTelemetry()) {
       const commandName = actionCommand.name();
       const session = createCliSession(commandName, {
         authEnabled: false, // CLI doesn't use auth

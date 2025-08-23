@@ -11,7 +11,7 @@ import {
   sanitizeError,
   sanitizeJobId,
   sanitizeUrl,
-} from "./dataSanitizer";
+} from "../utils/dataSanitizer";
 
 describe("Data Sanitization", () => {
   describe("sanitizeUrl", () => {

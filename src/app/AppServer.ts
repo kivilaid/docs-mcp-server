@@ -3,6 +3,8 @@
  * This replaces the separate server implementations with a single, modular approach.
  */
 
+import fs from "node:fs";
+import { cpus } from "node:os";
 import path from "node:path";
 import formBody from "@fastify/formbody";
 import fastifyStatic from "@fastify/static";
@@ -15,11 +17,14 @@ import { registerTrpcService } from "../services/trpcService";
 import { registerWebService } from "../services/webService";
 import { registerWorkerService, stopWorkerService } from "../services/workerService";
 import type { IDocumentManagement } from "../store/trpc/interfaces";
-import { analytics, TelemetryEvent } from "../utils/analytics";
+import {
+  analytics,
+  shouldEnableTelemetry,
+  TelemetryConfig,
+  TelemetryEvent,
+} from "../telemetry";
 import { logger } from "../utils/logger";
 import { getProjectRoot } from "../utils/paths";
-import { shouldEnableTelemetry } from "../utils/sessionManager";
-import { TelemetryConfig } from "../utils/telemetryConfig";
 import type { AppServerConfig } from "./AppServerConfig";
 
 /**
@@ -165,7 +170,7 @@ export class AppServer {
    * Initialize telemetry based on configuration
    */
   private initializeTelemetry(): void {
-    if (shouldEnableTelemetry(this.config)) {
+    if (shouldEnableTelemetry()) {
       // Track detailed app startup with environment info
       analytics.track(TelemetryEvent.APP_STARTED, {
         services_enabled: [
@@ -183,7 +188,7 @@ export class AppServer {
         node_version: process.version,
         arch: process.arch,
         memory_total_mb: Math.round(process.memoryUsage().heapTotal / 1024 / 1024),
-        cpu_count: require("node:os").cpus().length,
+        cpu_count: cpus().length,
         is_docker: this.isRunningInDocker(),
         is_development: process.env.NODE_ENV === "development",
         // Runtime configuration
@@ -278,7 +283,6 @@ export class AppServer {
    */
   private isRunningInDocker(): boolean {
     try {
-      const fs = require("node:fs");
       return (
         fs.existsSync("/.dockerenv") ||
         fs.readFileSync("/proc/self/cgroup", "utf8").includes("docker")
