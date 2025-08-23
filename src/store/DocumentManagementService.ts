@@ -365,6 +365,33 @@ export class DocumentManagementService {
   }
 
   /**
+   * Completely removes a library version and all associated documents.
+   * Also removes the library if no other versions remain.
+   * @param library Library name
+   * @param version Version string (null/undefined for unversioned)
+   */
+  async removeVersion(library: string, version?: string | null): Promise<void> {
+    const normalizedVersion = this.normalizeVersion(version);
+    logger.info(`🗑️ Removing version: ${library}@${normalizedVersion || "[no version]"}`);
+
+    const result = await this.store.removeVersion(library, normalizedVersion, true);
+
+    logger.info(
+      `🗑️ Removed ${result.documentsDeleted} documents, version: ${result.versionDeleted}, library: ${result.libraryDeleted}`,
+    );
+
+    if (result.versionDeleted && result.libraryDeleted) {
+      logger.info(`✅ Completely removed library ${library} (was last version)`);
+    } else if (result.versionDeleted) {
+      logger.info(`✅ Removed version ${library}@${normalizedVersion || "[no version]"}`);
+    } else {
+      logger.warn(
+        `⚠️ Version ${library}@${normalizedVersion || "[no version]"} not found`,
+      );
+    }
+  }
+
+  /**
    * Adds a document to the store, splitting it into smaller chunks for better search results.
    * Uses SemanticMarkdownSplitter to maintain markdown structure and content types during splitting.
    * Preserves hierarchical structure of documents and distinguishes between text and code segments.
