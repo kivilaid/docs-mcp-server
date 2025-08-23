@@ -360,7 +360,7 @@ export class DocumentManagementService {
       `🗑️ Removing all documents from ${library}@${normalizedVersion || "[no version]"} store`,
     );
     const count = await this.store.deleteDocuments(library, normalizedVersion);
-    logger.info(`📊 Deleted ${count} documents`);
+    logger.info(`🗑️ Deleted ${count} documents`);
   }
 
   /**

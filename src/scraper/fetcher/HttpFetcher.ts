@@ -1,6 +1,8 @@
 import axios, { type AxiosError, type AxiosRequestConfig } from "axios";
 import { CancellationError } from "../../pipeline/errors";
+import { analytics } from "../../utils/analytics";
 import { FETCHER_BASE_DELAY, FETCHER_MAX_RETRIES } from "../../utils/config";
+import { extractProtocol } from "../../utils/dataSanitizer";
 import { RedirectError, ScraperError } from "../../utils/errors";
 import { logger } from "../../utils/logger";
 import { MimeTypeUtils } from "../../utils/mimeTypeUtils";
@@ -27,6 +29,15 @@ export class HttpFetcher implements ContentFetcher {
     this.fingerprintGenerator = new FingerprintGenerator();
   }
 
+  private extractDomain(url: string): string {
+    try {
+      const parsed = new URL(url);
+      return parsed.hostname;
+    } catch {
+      return "invalid-domain";
+    }
+  }
+
   canFetch(source: string): boolean {
     return source.startsWith("http://") || source.startsWith("https://");
   }
@@ -36,11 +47,71 @@ export class HttpFetcher implements ContentFetcher {
   }
 
   async fetch(source: string, options?: FetchOptions): Promise<RawContent> {
+    const startTime = performance.now();
     const maxRetries = options?.maxRetries ?? FETCHER_MAX_RETRIES;
     const baseDelay = options?.retryDelay ?? FETCHER_BASE_DELAY;
     // Default to following redirects if not specified
     const followRedirects = options?.followRedirects ?? true;
 
+    try {
+      const result = await this.performFetch(
+        source,
+        options,
+        maxRetries,
+        baseDelay,
+        followRedirects,
+      );
+
+      // Track successful HTTP request
+      const duration = performance.now() - startTime;
+      analytics.track("http_request_completed", {
+        success: true,
+        domain: this.extractDomain(source),
+        protocol: extractProtocol(source),
+        duration_ms: Math.round(duration),
+        content_size_bytes: result.content.length,
+        mime_type: result.mimeType,
+        has_encoding: !!result.encoding,
+        follow_redirects: followRedirects,
+        had_redirects: result.source !== source,
+      });
+
+      return result;
+    } catch (error) {
+      // Track failed HTTP request
+      const duration = performance.now() - startTime;
+      const axiosError = error as AxiosError;
+      const status = axiosError.response?.status;
+
+      analytics.track("http_request_completed", {
+        success: false,
+        domain: this.extractDomain(source),
+        protocol: extractProtocol(source),
+        duration_ms: Math.round(duration),
+        status_code: status,
+        error_type:
+          error instanceof CancellationError
+            ? "cancellation"
+            : error instanceof RedirectError
+              ? "redirect"
+              : error instanceof ScraperError
+                ? "scraper"
+                : "unknown",
+        error_code: axiosError.code,
+        follow_redirects: followRedirects,
+      });
+
+      throw error;
+    }
+  }
+
+  private async performFetch(
+    source: string,
+    options?: FetchOptions,
+    maxRetries = FETCHER_MAX_RETRIES,
+    baseDelay = FETCHER_BASE_DELAY,
+    followRedirects = true,
+  ): Promise<RawContent> {
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       try {
         const fingerprint = this.fingerprintGenerator.generateHeaders();

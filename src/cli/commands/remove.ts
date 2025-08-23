@@ -4,6 +4,8 @@
 
 import type { Command } from "commander";
 import { createDocumentManagement } from "../../store";
+import { trackTool } from "../../utils/analytics";
+import { extractCliFlags } from "../../utils/dataSanitizer";
 import { setupLogging } from "../utils";
 
 export async function removeAction(
@@ -17,7 +19,18 @@ export async function removeAction(
   const docService = await createDocumentManagement({ serverUrl });
   const { version } = options;
   try {
-    await docService.removeAllDocuments(library, version);
+    // Track command execution with privacy-safe analytics
+    await trackTool(
+      "remove_documents",
+      () => docService.removeAllDocuments(library, version),
+      () => ({
+        library: library, // Safe: library names are public
+        has_version: !!version,
+        using_remote_server: !!serverUrl,
+        cli_flags: extractCliFlags(process.argv),
+      }),
+    );
+
     console.log(
       `✅ Successfully removed documents for ${library}${version ? `@${version}` : " (unversioned)"}.`,
     );

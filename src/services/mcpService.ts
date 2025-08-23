@@ -13,7 +13,9 @@ import { createMcpServerInstance } from "../mcp/mcpServer";
 import { initializeTools } from "../mcp/tools";
 import type { IPipeline } from "../pipeline/trpc/interfaces";
 import type { IDocumentManagement } from "../store/trpc/interfaces";
+import { analytics } from "../utils/analytics";
 import { logger } from "../utils/logger";
+import { createMcpSession } from "../utils/sessionManager";
 
 /**
  * Register MCP protocol routes on a Fastify server instance.
@@ -53,9 +55,26 @@ export async function registerMcpService(
         const transport = new SSEServerTransport("/messages", reply.raw);
         sseTransports[transport.sessionId] = transport;
 
+        // Track MCP session for analytics
+        if (analytics.isEnabled()) {
+          const session = createMcpSession({
+            protocol: "http",
+            transport: "sse",
+            authEnabled: !!authManager,
+            readOnly,
+            servicesEnabled: ["mcp"],
+            sessionId: transport.sessionId,
+          });
+          analytics.startSession(session);
+        }
+
         reply.raw.on("close", () => {
           delete sseTransports[transport.sessionId];
           transport.close();
+          // End telemetry session when connection closes
+          if (analytics.isEnabled()) {
+            analytics.endSession();
+          }
         });
 
         await mcpServer.connect(transport);
@@ -105,10 +124,26 @@ export async function registerMcpService(
           sessionIdGenerator: undefined,
         });
 
+        // Track MCP session for analytics (per-request session)
+        if (analytics.isEnabled()) {
+          const session = createMcpSession({
+            protocol: "http",
+            transport: "streamable",
+            authEnabled: !!authManager,
+            readOnly,
+            servicesEnabled: ["mcp"],
+          });
+          analytics.startSession(session);
+        }
+
         reply.raw.on("close", () => {
           logger.debug("Streamable HTTP request closed");
           requestTransport.close();
           requestServer.close(); // Close the per-request server instance
+          // End telemetry session when request completes
+          if (analytics.isEnabled()) {
+            analytics.endSession();
+          }
         });
 
         await requestServer.connect(requestTransport);

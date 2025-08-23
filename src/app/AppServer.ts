@@ -15,8 +15,11 @@ import { registerTrpcService } from "../services/trpcService";
 import { registerWebService } from "../services/webService";
 import { registerWorkerService, stopWorkerService } from "../services/workerService";
 import type { IDocumentManagement } from "../store/trpc/interfaces";
+import { analytics, TelemetryEvent } from "../utils/analytics";
 import { logger } from "../utils/logger";
 import { getProjectRoot } from "../utils/paths";
+import { shouldEnableTelemetry } from "../utils/sessionManager";
+import { TelemetryConfig } from "../utils/telemetryConfig";
 import type { AppServerConfig } from "./AppServerConfig";
 
 /**
@@ -77,14 +80,35 @@ export class AppServer {
     await this.setupServer();
 
     try {
+      const startupStartTime = performance.now();
       const address = await this.server.listen({
         port: this.config.port,
         host: "0.0.0.0",
       });
 
+      // Track successful startup
+      const startupDuration = performance.now() - startupStartTime;
+      if (analytics.isEnabled()) {
+        analytics.track(TelemetryEvent.APP_STARTED, {
+          startup_success: true,
+          startup_duration_ms: Math.round(startupDuration),
+          listen_address: address,
+          active_services: this.getActiveServicesList(),
+        });
+      }
+
       this.logStartupInfo(address);
       return this.server;
     } catch (error) {
+      // Track failed startup
+      if (analytics.isEnabled()) {
+        analytics.track(TelemetryEvent.APP_STARTED, {
+          startup_success: false,
+          error_type: error instanceof Error ? error.constructor.name : "UnknownError",
+          error_message: error instanceof Error ? error.message : String(error),
+        });
+      }
+
       logger.error(`❌ Failed to start AppServer: ${error}`);
       await this.server.close();
       throw error;
@@ -96,6 +120,13 @@ export class AppServer {
    */
   async stop(): Promise<void> {
     try {
+      // Track app shutdown
+      if (analytics.isEnabled()) {
+        analytics.track(TelemetryEvent.APP_SHUTDOWN, {
+          graceful: true,
+        });
+      }
+
       // Stop worker service if enabled
       if (this.config.enableWorker) {
         await stopWorkerService(this.pipeline);
@@ -106,12 +137,154 @@ export class AppServer {
         await cleanupMcpService(this.mcpServer);
       }
 
+      // Shutdown analytics
+      if (analytics.isEnabled()) {
+        await analytics.shutdown();
+      }
+
       // Close Fastify server
       await this.server.close();
       logger.info("🛑 AppServer stopped");
     } catch (error) {
       logger.error(`❌ Failed to stop AppServer gracefully: ${error}`);
+
+      // Track ungraceful shutdown
+      if (analytics.isEnabled()) {
+        analytics.track(TelemetryEvent.APP_SHUTDOWN, {
+          graceful: false,
+          error: error instanceof Error ? error.constructor.name : "UnknownError",
+        });
+        await analytics.shutdown();
+      }
+
       throw error;
+    }
+  }
+
+  /**
+   * Initialize telemetry based on configuration
+   */
+  private initializeTelemetry(): void {
+    if (shouldEnableTelemetry(this.config)) {
+      // Track detailed app startup with environment info
+      analytics.track(TelemetryEvent.APP_STARTED, {
+        services_enabled: [
+          this.config.enableMcpServer && "mcp",
+          this.config.enableWebInterface && "web",
+          this.config.enableApiServer && "api",
+          this.config.enableWorker && "worker",
+        ].filter(Boolean),
+        auth_enabled: !!this.config.auth?.enabled,
+        read_only: !!this.config.readOnly,
+        port: this.config.port,
+        has_external_worker: !!this.config.externalWorkerUrl,
+        // Environment detection
+        platform: process.platform,
+        node_version: process.version,
+        arch: process.arch,
+        memory_total_mb: Math.round(process.memoryUsage().heapTotal / 1024 / 1024),
+        cpu_count: require("node:os").cpus().length,
+        is_docker: this.isRunningInDocker(),
+        is_development: process.env.NODE_ENV === "development",
+        // Runtime configuration
+        startup_time_ms: Date.now() - process.uptime() * 1000,
+      });
+    } else {
+      TelemetryConfig.getInstance().disable();
+    }
+  }
+
+  /**
+   * Setup global error handling for telemetry
+   */
+  private setupErrorHandling(): void {
+    // Only add listeners if they haven't been added yet (prevent duplicate listeners in tests)
+    if (!process.listenerCount("unhandledRejection")) {
+      // Catch unhandled promise rejections
+      process.on("unhandledRejection", (reason) => {
+        logger.error(`Unhandled Promise Rejection: ${reason}`);
+        if (analytics.isEnabled()) {
+          analytics.track(TelemetryEvent.ERROR_OCCURRED, {
+            error_type: "UnhandledPromiseRejection",
+            error_category: "system",
+            component: "AppServer",
+            severity: "critical",
+            context: "process_unhandled_rejection",
+          });
+        }
+      });
+    }
+
+    if (!process.listenerCount("uncaughtException")) {
+      // Catch uncaught exceptions
+      process.on("uncaughtException", (error) => {
+        logger.error(`Uncaught Exception: ${error.message}`);
+        if (analytics.isEnabled()) {
+          analytics.track(TelemetryEvent.ERROR_OCCURRED, {
+            error_type: error.constructor.name,
+            error_category: "system",
+            component: "AppServer",
+            severity: "critical",
+            context: "process_uncaught_exception",
+          });
+        }
+        // Don't exit immediately, let the app attempt graceful shutdown
+      });
+    }
+
+    // Setup Fastify error handler (if method exists - for testing compatibility)
+    if (typeof this.server.setErrorHandler === "function") {
+      this.server.setErrorHandler(async (error, request, reply) => {
+        if (analytics.isEnabled()) {
+          analytics.track(TelemetryEvent.ERROR_OCCURRED, {
+            error_type: error.constructor.name,
+            error_category: "http",
+            component: "FastifyServer",
+            severity: "high",
+            status_code: error.statusCode || 500,
+            method: request.method,
+            route: request.routeOptions?.url || request.url,
+            context: "http_request_error",
+          });
+        }
+
+        logger.error(`HTTP Error on ${request.method} ${request.url}: ${error.message}`);
+
+        // Send appropriate error response
+        const statusCode = error.statusCode || 500;
+        reply.status(statusCode).send({
+          error: "Internal Server Error",
+          statusCode,
+          message: statusCode < 500 ? error.message : "An unexpected error occurred",
+        });
+      });
+    }
+  }
+
+  /**
+   * Get list of currently active services for telemetry
+   */
+  private getActiveServicesList(): string[] {
+    const services: string[] = [];
+    if (this.config.enableMcpServer) services.push("mcp");
+    if (this.config.enableWebInterface) services.push("web");
+    if (this.config.enableApiServer) services.push("api");
+    if (this.config.enableWorker) services.push("worker");
+    return services;
+  }
+
+  /**
+   * Detect if running in Docker container for deployment analytics
+   */
+  private isRunningInDocker(): boolean {
+    try {
+      const fs = require("node:fs");
+      return (
+        fs.existsSync("/.dockerenv") ||
+        fs.readFileSync("/proc/self/cgroup", "utf8").includes("docker")
+      );
+    } catch {
+      return false;
     }
   }
 
@@ -119,6 +292,12 @@ export class AppServer {
    * Setup the server with plugins and conditionally enabled services.
    */
   private async setupServer(): Promise<void> {
+    // Initialize telemetry
+    this.initializeTelemetry();
+
+    // Setup global error handling for telemetry
+    this.setupErrorHandling();
+
     // Initialize authentication if enabled
     if (this.config.auth?.enabled) {
       await this.initializeAuth();

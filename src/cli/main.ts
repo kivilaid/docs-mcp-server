@@ -5,6 +5,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { IPipeline } from "../pipeline";
 import type { IDocumentManagement } from "../store/trpc/interfaces";
+import { analytics } from "../utils/analytics";
 import { logger } from "../utils/logger";
 import { createCliProgram } from "./index";
 
@@ -51,6 +52,12 @@ const sigintHandler = async (): Promise<void> => {
       await activeDocService.shutdown();
       activeDocService = null;
       logger.debug("SIGINT: DocumentManagementService shut down.");
+    }
+
+    // Shutdown analytics
+    if (analytics.isEnabled()) {
+      await analytics.shutdown();
+      logger.debug("SIGINT: Analytics shut down.");
     }
 
     logger.info("✅ Graceful shutdown completed");

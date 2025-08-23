@@ -75,6 +75,7 @@
     "mime-types": "^3.0.1",
     "minimatch": "^10.0.1",
     "playwright": "^1.52.0",
+    "posthog-node": "^5.7.0",
     "psl": "^1.15.0",
     "remark": "^15.0.1",
     "remark-gfm": "^4.0.1",

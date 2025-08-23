@@ -6,6 +6,8 @@ import type { Command } from "commander";
 import { FileFetcher, HttpFetcher } from "../../scraper/fetcher";
 import { ScrapeMode } from "../../scraper/types";
 import { FetchUrlTool } from "../../tools";
+import { trackTool } from "../../utils/analytics";
+import { extractCliFlags, extractProtocol } from "../../utils/dataSanitizer";
 import { parseHeaders, setupLogging } from "../utils";
 
 export async function fetchUrlAction(
@@ -18,12 +20,27 @@ export async function fetchUrlAction(
 
   const headers = parseHeaders(options.header);
   const fetchUrlTool = new FetchUrlTool(new HttpFetcher(), new FileFetcher());
-  const content = await fetchUrlTool.execute({
-    url,
-    followRedirects: options.followRedirects,
-    scrapeMode: options.scrapeMode,
-    headers: Object.keys(headers).length > 0 ? headers : undefined,
-  });
+
+  // Track command execution with privacy-safe analytics
+  const content = await trackTool(
+    "fetch_url",
+    () =>
+      fetchUrlTool.execute({
+        url,
+        followRedirects: options.followRedirects,
+        scrapeMode: options.scrapeMode,
+        headers: Object.keys(headers).length > 0 ? headers : undefined,
+      }),
+    (content) => ({
+      url_protocol: extractProtocol(url), // Safe: only protocol, not full URL
+      follow_redirects: options.followRedirects,
+      scrape_mode: options.scrapeMode,
+      has_custom_headers: Object.keys(headers).length > 0,
+      content_length: content.length,
+      cli_flags: extractCliFlags(process.argv),
+    }),
+  );
+
   console.log(content);
 }
 
