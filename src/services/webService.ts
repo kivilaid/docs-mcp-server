@@ -3,17 +3,10 @@
  * Extracted from src/web/web.ts to enable modular server composition.
  */
 
-import type { FastifyInstance, FastifyRequest } from "fastify";
+import type { FastifyInstance } from "fastify";
 import type { IPipeline } from "../pipeline/trpc/interfaces";
 import type { IDocumentManagement } from "../store/trpc/interfaces";
-import { analytics, createWebSession, TelemetryEvent } from "../telemetry";
-import { categorizeUserAgent, extractDomain } from "../telemetry/dataSanitizer";
 import { SearchTool } from "../tools";
-
-// Extend FastifyRequest to include telemetry timing
-interface TelemetryRequest extends FastifyRequest {
-  telemetryStartTime?: number;
-}
 
 import { CancelJobTool } from "../tools/CancelJobTool";
 import { ClearCompletedJobsTool } from "../tools/ClearCompletedJobsTool";
@@ -39,41 +32,10 @@ export async function registerWebService(
   docService: IDocumentManagement,
   pipeline: IPipeline,
 ): Promise<void> {
-  // Add telemetry middleware for web requests
-  if (analytics.isEnabled()) {
-    server.addHook("onRequest", async (request) => {
-      // Create a web session for this request
-      const sessionContext = createWebSession({
-        route: request.url,
-      });
+  // TODO: Implement proper web session tracking
+  // Currently disabled due to excessive session creation per request
+  // Web tracking should use browser-based session management instead of per-request sessions
 
-      // Set session context for this request
-      analytics.startSession(sessionContext);
-
-      // Store request start time for duration tracking
-      (request as TelemetryRequest).telemetryStartTime = performance.now();
-    });
-
-    server.addHook("onResponse", async (request, reply) => {
-      const telemetryRequest = request as TelemetryRequest;
-      if (telemetryRequest.telemetryStartTime) {
-        const duration = performance.now() - telemetryRequest.telemetryStartTime;
-
-        // Track web request completion
-        analytics.track(TelemetryEvent.HTTP_REQUEST_COMPLETED, {
-          method: request.method,
-          route: request.routeOptions?.url || request.url,
-          status_code: reply.statusCode,
-          duration_ms: Math.round(duration),
-          domain: extractDomain(request.hostname || "localhost"),
-          user_agent_category: categorizeUserAgent(request.headers["user-agent"] || ""),
-        });
-
-        // End session
-        analytics.endSession();
-      }
-    });
-  }
   // Instantiate tools for web routes
   const listLibrariesTool = new ListLibrariesTool(docService);
   const listJobsTool = new ListJobsTool(pipeline);

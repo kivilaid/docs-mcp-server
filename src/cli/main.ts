@@ -1,5 +1,6 @@
 /**
  * CLI main entry point with global shutdown and error handling.
+ * Analytics is initialized immediately when imported for proper telemetry across all services.
  */
 
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";

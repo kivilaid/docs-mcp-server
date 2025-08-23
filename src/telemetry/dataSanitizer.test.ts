@@ -1,7 +1,3 @@
-/**
- * Tests for data sanitization utilities
- */
-
 import { describe, expect, it } from "vitest";
 import {
   analyzeSearchQuery,
@@ -9,128 +5,107 @@ import {
   extractDomain,
   extractProtocol,
   sanitizeError,
-  sanitizeJobId,
-  sanitizeUrl,
-} from "../utils/dataSanitizer";
+  sanitizeErrorMessage,
+} from "./dataSanitizer.js";
 
-describe("Data Sanitization", () => {
-  describe("sanitizeUrl", () => {
-    it("should sanitize GitHub URLs", () => {
-      expect(sanitizeUrl("https://github.com/owner/repo")).toBe(
-        "https://github.com/[path]",
-      );
-    });
+describe("extractDomain", () => {
+  it("should extract domain from various URL formats", () => {
+    expect(extractDomain("https://example.com/path")).toBe("example.com");
+    expect(extractDomain("http://subdomain.example.com")).toBe("subdomain.example.com");
+    expect(extractDomain("https://docs.example.com/api/v1")).toBe("docs.example.com");
+    expect(extractDomain("invalid-url")).toBe("invalid-domain");
+    expect(extractDomain("")).toBe("invalid-domain");
+  });
+});
 
-    it("should sanitize documentation URLs", () => {
-      expect(sanitizeUrl("https://docs.python.org/3/library/os.html")).toBe(
-        "https://docs.python.org/[path]",
-      );
-    });
+describe("extractProtocol", () => {
+  it("should extract protocol from URLs", () => {
+    expect(extractProtocol("https://example.com")).toBe("https");
+    expect(extractProtocol("http://example.com")).toBe("http");
+    expect(extractProtocol("file:///path/to/file")).toBe("file");
+    expect(extractProtocol("invalid-url")).toBe("unknown");
+    expect(extractProtocol("")).toBe("unknown");
+  });
+});
 
-    it("should handle localhost URLs", () => {
-      expect(sanitizeUrl("http://localhost:3000/api/search")).toBe(
-        "http://localhost/[path]",
-      );
-    });
+describe("analyzeSearchQuery", () => {
+  it("should analyze search query characteristics", () => {
+    const result1 = analyzeSearchQuery("react hooks");
+    expect(result1.length).toBe(11);
+    expect(result1.wordCount).toBe(2);
+    expect(result1.hasSpecialChars).toBe(false);
+    expect(result1.hasCodeTerms).toBe(false);
 
-    it("should handle URLs without paths", () => {
-      expect(sanitizeUrl("https://example.com")).toBe("https://example.com");
-    });
+    const result2 = analyzeSearchQuery("get-user-info()");
+    expect(result2.hasSpecialChars).toBe(true);
 
-    it("should handle invalid URLs", () => {
-      expect(sanitizeUrl("not-a-url")).toBe("[invalid-url]");
-    });
+    const result3 = analyzeSearchQuery("function test");
+    expect(result3.hasCodeTerms).toBe(true);
+  });
+});
+
+describe("sanitizeErrorMessage", () => {
+  it("should sanitize error messages removing sensitive info", () => {
+    expect(sanitizeErrorMessage("Error in /Users/john/project/file.js")).toBe(
+      "Error in [path]",
+    );
+
+    expect(
+      sanitizeErrorMessage("Failed to read file:///Users/john/documents/secret.txt"),
+    ).toBe("Failed to read [file-url]");
+
+    expect(sanitizeErrorMessage("Cannot access ./local/config.json")).toBe(
+      "Cannot access .[path]",
+    );
+
+    expect(sanitizeErrorMessage("api_key=secret123 invalid")).toBe(
+      "api_key=[redacted] invalid",
+    );
+  });
+});
+
+describe("sanitizeError", () => {
+  it("should sanitize Error objects", () => {
+    const error = new Error("File not found: /Users/john/secret.txt");
+    const result = sanitizeError(error);
+
+    expect(result.type).toBe("Error");
+    expect(result.message).toBe("File not found: [path]");
+    expect(result.hasStack).toBe(true);
   });
 
-  describe("extractDomain", () => {
-    it("should extract domain from valid URLs", () => {
-      expect(extractDomain("https://docs.python.org/3/library/os.html")).toBe(
-        "docs.python.org",
-      );
-      expect(extractDomain("https://github.com/owner/repo")).toBe("github.com");
-      expect(extractDomain("http://localhost:3000/api")).toBe("localhost");
-    });
+  it("should handle TypeError objects", () => {
+    const error = new TypeError("Cannot read property of undefined");
+    const result = sanitizeError(error);
 
-    it("should handle invalid URLs", () => {
-      expect(extractDomain("not-a-url")).toBe("invalid-domain");
-    });
+    expect(result.type).toBe("TypeError");
+    expect(result.message).toBe("Cannot read property of undefined");
+    expect(result.hasStack).toBe(true);
+  });
+});
+
+describe("extractCliFlags", () => {
+  it("should extract CLI flags", () => {
+    const args = ["node", "script.js", "--verbose", "--port=3000", "file.txt"];
+    const result = extractCliFlags(args);
+
+    expect(result).toEqual(["--verbose", "--port=3000"]);
+    expect(result.length).toBe(2);
   });
 
-  describe("extractProtocol", () => {
-    it("should extract protocol from URLs", () => {
-      expect(extractProtocol("https://github.com/owner/repo")).toBe("https");
-      expect(extractProtocol("http://localhost:3000/api")).toBe("http");
-      expect(extractProtocol("file:///local/path")).toBe("file");
-    });
+  it("should handle no flags", () => {
+    const args = ["node", "script.js", "file.txt"];
+    const result = extractCliFlags(args);
 
-    it("should detect local file paths as file protocol", () => {
-      expect(extractProtocol("/Users/john/project/src/main.ts")).toBe("file");
-      expect(extractProtocol("C:\\Users\\john\\project")).toBe("file");
-      expect(extractProtocol("/var/lib/docs/react/hooks.md")).toBe("file");
-    });
+    expect(result).toEqual([]);
+    expect(result.length).toBe(0);
   });
 
-  describe("analyzeSearchQuery", () => {
-    it("should analyze query structure", () => {
-      const result = analyzeSearchQuery("async function fetchData");
-      expect(result.length).toBe(24); // "async function fetchData".length
-      expect(result.wordCount).toBe(3);
-      expect(result.hasCodeTerms).toBe(true);
-      expect(result.hasSpecialChars).toBe(false);
-      expect(result.charset).toBe("ascii");
-    });
+  it("should handle single dash flags", () => {
+    const args = ["node", "script.js", "-v", "--help"];
+    const result = extractCliFlags(args);
 
-    it("should detect special characters", () => {
-      const result = analyzeSearchQuery("react.useState()");
-      expect(result.hasSpecialChars).toBe(true);
-    });
-  });
-
-  describe("sanitizeError", () => {
-    it("should categorize network errors", () => {
-      const error = new Error("Network timeout occurred");
-      const result = sanitizeError(error);
-      expect(result.type).toBe("Error");
-      expect(result.category).toBe("network"); // Updated expectation
-      expect(result.recoverable).toBe(true);
-      expect(result.hasStack).toBe(true);
-    });
-
-    it("should categorize auth errors", () => {
-      const error = new Error("Authentication failed");
-      const result = sanitizeError(error);
-      expect(result.category).toBe("auth");
-      expect(result.recoverable).toBe(false);
-    });
-  });
-
-  describe("sanitizeJobId", () => {
-    it("should hash job IDs consistently", () => {
-      const jobId = "job-12345-sensitive";
-      const result1 = sanitizeJobId(jobId);
-      const result2 = sanitizeJobId(jobId);
-
-      expect(result1).toBe(result2);
-      expect(result1).toHaveLength(8);
-      expect(result1).not.toContain("sensitive");
-    });
-  });
-
-  describe("extractCliFlags", () => {
-    it("should extract CLI flags without values", () => {
-      const args = [
-        "node",
-        "script.js",
-        "--verbose",
-        "--max-depth=3",
-        "--auth-token=secret",
-      ];
-      const result = extractCliFlags(args);
-
-      expect(result).toContain("--verbose");
-      expect(result).toContain("--max-depth");
-      expect(result).not.toContain("--auth-token"); // Filtered out
-      expect(result).not.toContain("secret"); // Values removed
-    });
+    expect(result).toEqual(["-v", "--help"]);
+    expect(result.length).toBe(2);
   });
 });

@@ -3,8 +3,10 @@
  * Handles CLI flags, environment variables, and default settings.
  */
 
-import { createHash } from "node:crypto";
-import { arch, cpus, platform, totalmem } from "node:os";
+import { randomUUID } from "node:crypto";
+import fs from "node:fs";
+import path from "node:path";
+import envPaths from "env-paths";
 
 export class TelemetryConfig {
   private static instance?: TelemetryConfig;
@@ -55,12 +57,43 @@ export class TelemetryConfig {
 }
 
 /**
- * Generate anonymous but persistent installation identifier based on system characteristics.
- * Not personally identifying but consistent across runs.
+ * Generate or retrieve a persistent installation identifier.
+ * Creates a UUID and stores it in a file in the standard user data directory.
+ * This ensures truly unique identification that persists across runs.
  */
 export function generateInstallationId(): string {
-  // Create hash from system info (not personally identifying)
-  const systemInfo = [platform(), arch(), cpus().length, totalmem()].join("|");
+  try {
+    const standardPaths = envPaths("docs-mcp-server", { suffix: "" });
+    const installationIdPath = path.join(standardPaths.data, "installation.id");
 
-  return createHash("sha256").update(systemInfo).digest("hex").substring(0, 16); // First 16 chars for brevity
+    // Try to read existing installation ID
+    if (fs.existsSync(installationIdPath)) {
+      const existingId = fs.readFileSync(installationIdPath, "utf8").trim();
+      if (existingId) {
+        return existingId;
+      }
+    }
+
+    // Generate new UUID and store it
+    const newId = randomUUID();
+
+    // Ensure directory exists
+    fs.mkdirSync(standardPaths.data, { recursive: true });
+
+    // Write the installation ID
+    fs.writeFileSync(installationIdPath, newId, "utf8");
+
+    return newId;
+  } catch {
+    // Fallback to a session-only UUID if file operations fail
+    // This ensures analytics always has a valid distinct ID
+    return randomUUID();
+  }
+}
+
+/**
+ * Check if telemetry should be enabled based on environment and CLI flags.
+ */
+export function shouldEnableTelemetry(): boolean {
+  return TelemetryConfig.getInstance().isEnabled();
 }

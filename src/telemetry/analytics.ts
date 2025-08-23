@@ -105,14 +105,6 @@ export class Analytics {
   }
 
   /**
-   * Set persistent user ID for tracking across sessions
-   */
-  setUserId(userId: string): void {
-    this.distinctId = userId;
-    logger.debug(`Analytics user ID set: ${userId}`);
-  }
-
-  /**
    * Initialize session context - call once per session
    */
   startSession(context: SessionContext): void {

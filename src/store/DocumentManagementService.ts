@@ -413,7 +413,6 @@ export class DocumentManagementService {
         // Content characteristics (privacy-safe)
         mimeType: document.metadata.mimeType,
         contentSizeBytes: document.pageContent.length,
-        contentSizeCategory: this.categorizeContentSize(document.pageContent.length),
 
         // Processing metrics
         processingTimeMs: Math.round(processingTime),
@@ -485,16 +484,5 @@ export class DocumentManagementService {
     );
 
     return versionId;
-  }
-
-  /**
-   * Categorize content size for analytics
-   */
-  private categorizeContentSize(sizeBytes: number): string {
-    if (sizeBytes < 1024) return "tiny"; // < 1KB
-    if (sizeBytes < 10240) return "small"; // < 10KB
-    if (sizeBytes < 102400) return "medium"; // < 100KB
-    if (sizeBytes < 1048576) return "large"; // < 1MB
-    return "xlarge"; // >= 1MB
   }
 }

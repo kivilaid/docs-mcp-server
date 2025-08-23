@@ -4,13 +4,7 @@
  */
 
 import type { IPipeline } from "../pipeline/trpc/interfaces";
-import {
-  analytics,
-  categorizeError,
-  isRecoverableError,
-  sanitizeJobId,
-  TelemetryEvent,
-} from "../telemetry";
+import { analytics, sanitizeError, TelemetryEvent } from "../telemetry";
 import { logger } from "../utils/logger";
 
 /**
@@ -27,7 +21,7 @@ export async function registerWorkerService(pipeline: IPipeline): Promise<void> 
 
       // Track job progress for analytics with enhanced metrics
       analytics.track(TelemetryEvent.PIPELINE_JOB_PROGRESS, {
-        jobId: sanitizeJobId(job.id),
+        jobId: job.id, // Job IDs are already anonymous
         library: job.library,
         pagesScraped: progress.pagesScraped,
         totalPages: progress.totalPages,
@@ -55,7 +49,7 @@ export async function registerWorkerService(pipeline: IPipeline): Promise<void> 
           : null;
 
       analytics.track(TelemetryEvent.PIPELINE_JOB_COMPLETED, {
-        jobId: sanitizeJobId(job.id),
+        jobId: job.id, // Job IDs are already anonymous
         library: job.library,
         status: job.status,
         duration_ms: duration,
@@ -76,14 +70,15 @@ export async function registerWorkerService(pipeline: IPipeline): Promise<void> 
       );
 
       // Enhanced error tracking with more context
+      const errorInfo = sanitizeError(error);
       analytics.track(TelemetryEvent.ERROR_OCCURRED, {
-        jobId: sanitizeJobId(job.id),
+        jobId: job.id, // Job IDs are already anonymous
         library: job.library,
-        errorType: error.constructor.name,
+        errorType: errorInfo.type,
+        errorMessage: errorInfo.message,
         hasDocument: !!document,
         stage: document ? "document_processing" : "job_setup",
-        error_category: categorizeError(error),
-        is_recoverable: isRecoverableError(error),
+        hasStack: errorInfo.hasStack,
         pages_processed_before_error: job.progressPages || 0,
       });
     },
