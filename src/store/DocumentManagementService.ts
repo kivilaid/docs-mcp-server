@@ -426,7 +426,7 @@ export class DocumentManagementService {
 
         // Library context
         library,
-        version: normalizedVersion || "[no-version]",
+        libraryVersion: normalizedVersion || null,
 
         // Processing efficiency
         avgChunkSizeBytes: Math.round(document.pageContent.length / splitDocs.length),
@@ -444,7 +444,7 @@ export class DocumentManagementService {
         errorType: error instanceof Error ? error.constructor.name : "UnknownError",
         errorMessage: error instanceof Error ? error.message : "Unknown error",
         library,
-        version: normalizedVersion || "[no-version]",
+        libraryVersion: normalizedVersion || null,
       });
 
       throw error;
