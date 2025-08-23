@@ -98,6 +98,35 @@ describe("generateInstallationId", () => {
       "utf8",
     );
   });
+
+  it("should use DOCS_MCP_STORE_PATH environment variable when set", () => {
+    const customPath = "/custom/store/path";
+    const originalEnv = process.env.DOCS_MCP_STORE_PATH;
+    process.env.DOCS_MCP_STORE_PATH = customPath;
+
+    vi.mocked(fs.existsSync).mockReturnValue(false);
+    vi.mocked(fs.writeFileSync).mockImplementation(() => {});
+    vi.mocked(fs.mkdirSync).mockImplementation(() => "");
+
+    const id = generateInstallationId();
+
+    expect(id).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+    );
+    expect(fs.mkdirSync).toHaveBeenCalledWith(customPath, { recursive: true });
+    expect(fs.writeFileSync).toHaveBeenCalledWith(
+      path.join(customPath, "installation.id"),
+      id,
+      "utf8",
+    );
+
+    // Cleanup
+    if (originalEnv !== undefined) {
+      process.env.DOCS_MCP_STORE_PATH = originalEnv;
+    } else {
+      delete process.env.DOCS_MCP_STORE_PATH;
+    }
+  });
 });
 
 describe("shouldEnableTelemetry", () => {

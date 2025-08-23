@@ -58,13 +58,16 @@ export class TelemetryConfig {
 
 /**
  * Generate or retrieve a persistent installation identifier.
- * Creates a UUID and stores it in a file in the standard user data directory.
+ * Creates a UUID and stores it in a file in the user data directory.
+ * Supports DOCS_MCP_STORE_PATH environment variable override for Docker deployments.
  * This ensures truly unique identification that persists across runs.
  */
 export function generateInstallationId(): string {
   try {
-    const standardPaths = envPaths("docs-mcp-server", { suffix: "" });
-    const installationIdPath = path.join(standardPaths.data, "installation.id");
+    // Use DOCS_MCP_STORE_PATH if set (for Docker/custom deployments), otherwise use standard paths
+    const envStorePath = process.env.DOCS_MCP_STORE_PATH;
+    const dataDir = envStorePath || envPaths("docs-mcp-server", { suffix: "" }).data;
+    const installationIdPath = path.join(dataDir, "installation.id");
 
     // Try to read existing installation ID
     if (fs.existsSync(installationIdPath)) {
@@ -78,7 +81,7 @@ export function generateInstallationId(): string {
     const newId = randomUUID();
 
     // Ensure directory exists
-    fs.mkdirSync(standardPaths.data, { recursive: true });
+    fs.mkdirSync(dataDir, { recursive: true });
 
     // Write the installation ID
     fs.writeFileSync(installationIdPath, newId, "utf8");

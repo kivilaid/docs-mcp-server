@@ -1,6 +1,6 @@
 # Telemetry Architecture
 
-The MCP Documentation Server implements comprehensive privacy-first telemetry to understand usage patterns, monitor performance, and improve user experience. The system is designed with user privacy as the primary concern while providing valuable insights for product development.
+The MCP Documentation Server implements privacy-first telemetry to understand usage patterns, monitor performance, and improve user experience. The system is designed with user privacy as the primary concern while providing valuable insights for product development.
 
 ## Core Principles
 
@@ -13,229 +13,172 @@ The MCP Documentation Server implements comprehensive privacy-first telemetry to
 
 ### Minimal Performance Impact
 
-- **Asynchronous Tracking**: All telemetry operations are non-blocking
+- **Synchronous Design**: Simple, lightweight telemetry with minimal overhead
 - **Graceful Degradation**: System continues functioning normally when telemetry fails
-- **Efficient Batching**: Events are batched and sent efficiently to minimize network overhead
-- **Memory-Only Persistence**: No local telemetry data storage for privacy
+- **No Dependencies**: Core application never depends on telemetry functionality
+- **Installation ID Only**: Uses persistent UUID for consistent analytics without user tracking
 
-### Modular Architecture
+### Simple Architecture
 
-- **Service-Based Design**: Clean separation between analytics, user tracking, and session management
-- **Interface Abstraction**: Easy to swap analytics backends without code changes
-- **Optional Integration**: Components can easily enable or disable tracking as needed
+- **Direct Analytics**: Direct PostHog integration with installation ID as distinct user
+- **Focused Data Collection**: Essential functions only, no over-engineering
+- **Easy Integration**: Simple service interface for application components
 
 ## System Architecture
 
-### Analytics Foundation
+### Core Components
 
-The telemetry system is built on three core layers:
+The telemetry system consists of four main components:
 
 **Analytics Layer** (`src/telemetry/analytics.ts`)
 
 - PostHog integration with privacy-optimized configuration
 - Event tracking with automatic session context inclusion
-- Batch processing and error resilience
+- Installation ID as the distinct user identifier
 - Session lifecycle management for different interface types
+
+**Configuration Management** (`src/telemetry/config.ts`)
+
+- Installation ID generation and persistence using UUID
+- Telemetry enable/disable controls via environment variables and CLI flags
+- Configuration validation and fallback handling
 
 **Service Layer** (`src/telemetry/service.ts`)
 
-- High-level initialization and coordination
-- Combines analytics, user tracking, and session management
-- Provides unified interface for application components
-- Handles fallback scenarios when components are unavailable
+- Simple service factory providing session management
+- Unified interface for application components
+- Handles configuration and analytics integration
 
 **Data Sanitization** (`src/telemetry/dataSanitizer.ts`)
 
-- URL and domain extraction without exposing paths
-- Error categorization and message sanitization
+- Essential privacy protection functions:
+  - Domain extraction without exposing paths
+  - Protocol detection for file and web URLs
+  - Error message sanitization removing sensitive information
+  - Search query analysis without storing content
+  - CLI flag extraction for usage patterns
 - User agent categorization for browser analytics
 - Content size categorization for processing insights
 
 ### Session Management
 
-The system recognizes four distinct session types, each with specific lifecycle and context requirements:
+The session management system provides context for analytics events across different interfaces:
 
-**CLI Sessions**
+**Session Factory Functions** (`src/telemetry/sessionManager.ts`)
 
-- Lifecycle: Command invocation → execution → completion
-- Context: Command name, execution duration, success/failure
-- Session ID: UUID generated per command execution
+- `createCliSession()`: Creates context for command-line interface usage
+- `createMcpSession()`: Creates context for MCP protocol sessions
+- `createWebSession()`: Creates context for web interface requests
+- `createPipelineSession()`: Creates context for background processing jobs
 
-**MCP Protocol Sessions**
+**Session Context**
 
-- Lifecycle: Service registration → transport connection → disconnection
-- Context: Protocol type (stdio/http), transport mode, read-only state
-- Session ID: Transport session ID or server instance ID
+Each session includes:
 
-**Web Request Sessions**
+- Session ID: UUID generated per session
+- Interface type and configuration
+- Platform information (OS, Node.js version)
+- Session start time and metadata
+- Application version and enabled services
 
-- Lifecycle: HTTP request → response
-- Context: Route accessed, response time, status codes
-- Session ID: Request-scoped UUID
+### Installation ID System
 
-**Pipeline Job Sessions**
+The system uses a persistent installation identifier for consistent analytics:
 
-- Lifecycle: Job creation → processing → completion/failure
-- Context: Library, job type, pages processed, error types
-- Session ID: Pipeline job ID
+**Installation ID Generation** (`src/telemetry/config.ts`)
 
-### Persistent User Tracking
-
-The system implements database-backed user identification for consistent cross-session tracking:
-
-**Database Schema** (Migration 009)
-
-- `user_tracking` table stores anonymous UUIDs and activity counters
-- Indexed by UUID, last seen timestamp, and installation ID
-- Tracks total sessions, commands, and documents processed
-
-**UserTrackingService** (`src/telemetry/userTracking.ts`)
-
-- Generates and maintains persistent anonymous user identifiers
-- Falls back to installation-based identification when needed
-- Tracks user activity patterns without personal information
-- Provides cross-session user journey insights
-
-**Installation ID Generation**
-
-- Creates anonymous identifiers based on system characteristics
-- Uses CPU count, memory, and platform information
-- Provides fallback identification when database is unavailable
+- Creates UUID-based installation identifier stored in `installation.id`
+- Uses `envPaths` standard for cross-platform directory location (`~/.local/share/docs-mcp-server/`)
+- Supports `DOCS_MCP_STORE_PATH` environment variable override for Docker deployments
+- Provides consistent identification across sessions without user tracking
+- Falls back to new UUID generation if file is corrupted or missing
 
 ## Integration Points
 
 ### Application Server Integration
 
-The AppServer uses the enhanced telemetry service for comprehensive application lifecycle tracking:
+The AppServer integrates telemetry for application lifecycle tracking:
 
 **Startup Tracking**
 
 - Application configuration and enabled services
-- Startup duration and success/failure states
-- Environment detection and system characteristics
+- Session initialization based on interface type
+- Installation ID verification and service availability
 
-**Configuration Respect**
+**Configuration Integration**
 
-- Honors `config.telemetry` setting for enable/disable control
-- Integrates with environment variables and CLI flags
+- Respects telemetry configuration settings
+- Integrates with environment variables (`DOCS_MCP_TELEMETRY=false`) and CLI flags (`--no-telemetry`)
 - Provides graceful fallback when telemetry is disabled
 
-**Session Management**
+**Service Integration**
 
-- Initializes session context based on interface type
-- Tracks user activity and session duration
-- Handles proper cleanup and shutdown procedures
+- Simple telemetry service initialization
+- Session context creation for analytics
+- Event tracking with sanitized data
 
 ### Service-Level Integration
 
-Each service integrates telemetry appropriate to its function and user interactions:
+Services integrate telemetry through the simplified service interface:
 
 **Web Service** (`src/services/webService.ts`)
 
-- Request/response middleware tracking
-- Performance metrics for HTTP requests
-- User agent categorization for browser insights
-- Route-level usage analytics
-
-**MCP Service** (`src/services/mcpService.ts`)
-
-- Protocol session lifecycle tracking
-- Transport mode and configuration analytics
-- Connection duration and stability metrics
+- Basic request tracking and performance metrics
+- Error tracking with sanitized error information
+- Session management for web interface users
 
 **Worker Service** (`src/services/workerService.ts`)
 
 - Pipeline job progress and completion tracking
-- Processing performance and error analytics
-- Queue health and throughput metrics
+- Error tracking with sanitized job information
+- Performance metrics for background processing
 
-### Document Processing Analytics
+**MCP Service** (`src/services/mcpService.ts`)
 
-The document management system provides comprehensive insights into content processing:
-
-**Processing Metrics**
-
-- Document size categorization and processing time
-- Chunk creation efficiency and distribution
-- Content type analysis and processing patterns
-- Success/failure rates with error categorization
-
-**Performance Tracking**
-
-- Processing speed in KB/second
-- Average chunk sizes and ratios
-- Memory usage and resource efficiency
-- Bottleneck identification and optimization insights
-
-**Privacy-Safe Content Analysis**
-
-- MIME type and domain extraction without URLs
-- Content size patterns without actual content
-- Processing patterns without sensitive metadata
-
-### Error Tracking and Categorization
-
-The system implements comprehensive error tracking while maintaining privacy:
-
-**Error Categories**
-
-- Network: Connection and fetch-related failures
-- Parsing: Content processing and format errors
-- Authentication: Permission and access issues
-- Timeout: Performance and resource limitations
-- Database: Storage and retrieval failures
-
-**Error Context**
-
-- Component identification and error frequency
-- Recoverable vs non-recoverable error classification
-- Error patterns and correlation analysis
-- Performance impact assessment
+- Protocol session lifecycle tracking
+- Basic usage analytics and error tracking
 
 ## Data Collection Patterns
 
 ### Event Types
 
-The system tracks a focused set of event types to maintain data clarity:
+The system tracks essential event types for usage understanding:
 
 - `session_started` / `session_ended`: Session lifecycle tracking
-- `app_started` / `app_shutdown`: Application lifecycle events
 - `tool_used`: Individual tool execution and outcomes
-- `http_request_completed`: Web request performance and patterns
-- `pipeline_job_progress` / `pipeline_job_completed`: Background processing
-- `document_processed` / `document_processing_failed`: Content processing
-- `error_occurred`: System errors and recovery patterns
+- `job_completed` / `job_failed`: Background processing results
+- `error_occurred`: System errors with sanitized information
 
 ### Session Context
 
-All events automatically include session-specific context:
+All events automatically include basic session context:
 
-- Interface type and configuration
+- Interface type (CLI, MCP, Web, Pipeline)
 - Application version and platform information
-- Enabled services and security settings
-- Session duration and activity patterns
+- Session ID and installation ID
+- Basic timing information
 
 ### Privacy-Safe Data Collection
 
-The system ensures privacy through multiple layers of protection:
+The system ensures privacy through essential data sanitization:
 
-**URL Sanitization**
+**URL and Path Sanitization**
 
-- Domain extraction without paths or parameters
-- Protocol identification without sensitive information
-- Route patterns without actual URLs or user input
+- Domain extraction without paths or parameters (`extractDomain`)
+- Protocol identification for file and web URLs (`extractProtocol`)
+- Error message sanitization removing sensitive paths and tokens (`sanitizeErrorMessage`)
 
-**Content Analysis**
+**Error Information**
 
-- Size and type categorization without content
-- Processing patterns without sensitive metadata
-- Performance metrics without exposing data
+- Error type and sanitized messages (`sanitizeError`)
+- Stack trace presence indication without content
+- Component identification without sensitive context
 
-**User Identification**
+**Usage Patterns**
 
-- Anonymous UUIDs with no personal correlation
-- System-based identification without user data
-- Cross-session tracking without identity exposure
+- CLI flag extraction without values (`extractCliFlags`)
+- Search query analysis without storing content (`analyzeSearchQuery`)
+- Basic performance metrics without sensitive data
 
 ## Configuration and Control
 
@@ -244,90 +187,91 @@ The system ensures privacy through multiple layers of protection:
 **CLI Flags**
 
 - `--no-telemetry`: Disable all telemetry for current session
-- Environment variable `DOCS_MCP_TELEMETRY=false`: Global disable
+
+**Environment Variables**
+
+- `DOCS_MCP_TELEMETRY=false`: Global disable telemetry collection
+- `DOCS_MCP_STORE_PATH=/custom/path`: Override installation ID storage location (useful for Docker volumes)
 
 **Configuration Integration**
 
-- AppServer `telemetry` configuration field
+- Simple enable/disable configuration
 - Graceful fallback when disabled
 - No impact on core functionality when opted out
 
 **Runtime Behavior**
 
 - Telemetry failures never affect application functionality
-- Automatic fallback to no-op implementations when disabled
-- Memory-only operation with no persistent tracking data
+- Simple fallback to no-op behavior when disabled
+- Installation ID persisted locally in standard user data directory
 
 ### Development and Testing
 
 **Development Mode**
 
-- Separate PostHog project for development data
-- Enhanced logging for telemetry debugging
-- Local testing without affecting production analytics
+- Environment-based configuration for development vs production
+- Enhanced logging for telemetry debugging when needed
 
-**Testing Isolation**
+**Testing**
 
-- Memory-only persistence prevents test data pollution
-- Mock implementations for unit testing
-- Privacy validation in sanitization tests
+- Comprehensive test coverage for all telemetry functions
+- Privacy validation in data sanitization tests
+- Behavior-focused testing without timing dependencies
 
 ## Analytics and Insights
 
 ### Usage Analytics
 
-The telemetry system provides insights into:
+The simplified telemetry system provides essential insights:
 
-- Tool popularity across different interfaces
-- User workflow patterns and tool combinations
-- Session duration and engagement metrics
-- Feature adoption and usage trends
+- Tool usage patterns across different interfaces
+- Session frequency and basic engagement metrics
+- Error patterns and system reliability
+- Feature adoption trends
 
 ### Performance Monitoring
 
 Key performance insights include:
 
-- Processing speed trends and bottlenecks
-- Error rates and recovery patterns
-- Resource usage and efficiency metrics
-- Network performance and reliability
+- Error rates and common failure patterns
+- Basic processing performance metrics
+- System stability and reliability trends
 
 ### Product Intelligence
 
 Strategic insights for product development:
 
 - Interface preference trends (CLI vs MCP vs Web)
-- Content type popularity and processing patterns
-- Library and documentation source preferences
-- User journey analysis and workflow optimization
+- Tool popularity and usage patterns
+- Error categorization for improvement priorities
 
 ## Privacy Compliance
 
 ### Data Minimization
 
-The system implements strict data minimization principles:
+The system implements strict data minimization:
 
-- Only collect data necessary for specific insights
-- Aggregate and anonymize data wherever possible
-- Automatically expire sensitive temporary data
-- Minimize data retention periods
+- Only essential data collection for core insights
+- Installation ID as the only persistent identifier
+- No user tracking or cross-session correlation beyond installation
+- Minimal data retention with focus on current patterns
 
 ### Transparency
 
-Users have clear visibility into data collection:
+Users have clear control and visibility:
 
-- Documentation of all collected data types
-- Clear explanation of privacy protections
 - Simple opt-out mechanisms
-- No hidden or undocumented data collection
+- Clear documentation of collected data types
+- No hidden or complex data collection
+- Installation ID stored locally and under user control
 
 ### Security
 
-Telemetry data is protected through:
+Telemetry data protection:
 
 - Encrypted transmission to analytics service
-- No local storage of sensitive information
-- Anonymous identification systems
-- Regular privacy compliance audits
+- No sensitive local storage beyond installation ID
+- Simple UUID-based identification system
+- Essential data sanitization to prevent information leakage
 
-The telemetry architecture provides comprehensive insights while maintaining strict privacy protections, enabling data-driven product development without compromising user trust or application performance.
+The simplified telemetry architecture provides essential insights while maintaining user privacy and system simplicity, enabling focused product development without complex tracking systems.
