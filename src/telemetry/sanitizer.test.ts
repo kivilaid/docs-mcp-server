@@ -6,7 +6,7 @@ import {
   extractProtocol,
   sanitizeError,
   sanitizeErrorMessage,
-} from "./dataSanitizer.js";
+} from "./sanitizer";
 
 describe("extractDomain", () => {
   it("should extract domain from various URL formats", () => {

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { SessionContext } from "./analytics.js";
-import { createTelemetryService, telemetryService } from "./service.js";
+import type { SessionContext } from "./SessionContext";
+import { createTelemetryService, telemetryService } from "./TelemetryService";
 
 // Mock analytics module
 vi.mock("./analytics.js", () => ({
@@ -11,7 +11,7 @@ vi.mock("./analytics.js", () => ({
   },
 }));
 
-import { analytics } from "./analytics.js";
+import { analytics } from "./analytics";
 
 describe("TelemetryService", () => {
   beforeEach(() => {

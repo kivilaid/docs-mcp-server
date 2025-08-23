@@ -5,7 +5,7 @@
 
 import { randomUUID } from "node:crypto";
 import packageJson from "../../package.json";
-import type { SessionContext } from "./analytics";
+import type { SessionContext } from "./SessionContext";
 
 /**
  * Get package version from package.json

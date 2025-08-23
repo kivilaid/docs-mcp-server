@@ -3,8 +3,8 @@
  * No more async initialization or user tracking complexity.
  */
 
-import type { SessionContext } from "./analytics";
 import { analytics } from "./analytics";
+import type { SessionContext } from "./SessionContext";
 
 /**
  * Simple telemetry service interface

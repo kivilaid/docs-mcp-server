@@ -5,7 +5,7 @@ import {
   createPipelineSession,
   createWebSession,
   getEnabledServices,
-} from "./sessionManager.js";
+} from "./sessions";
 
 // Mock package.json
 vi.mock("../../package.json", () => ({

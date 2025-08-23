@@ -1,11 +1,18 @@
 /**
  * Analytics wrapper for privacy-first telemetry using PostHog.
  * Provides session-based context and automatic data sanitization.
+ *
+ * Architecture:
+ * - PostHogClient: Handles PostHog SDK integration and event capture
+ * - SessionTracker: Manages session context and properties enrichment
+ * - Analytics: High-level coordinator providing public API
  */
 
-import { PostHog } from "posthog-node";
 import { logger } from "../utils/logger";
-import { generateInstallationId, TelemetryConfig } from "./config";
+import { PostHogClient } from "./postHogClient";
+import type { SessionContext } from "./SessionContext";
+import { SessionTracker } from "./SessionTracker";
+import { generateInstallationId, TelemetryConfig } from "./TelemetryConfig";
 
 /**
  * Telemetry event types for structured analytics
@@ -26,55 +33,11 @@ export enum TelemetryEvent {
 }
 
 /**
- * Session context interface for different interface types
- */
-export interface SessionContext {
-  sessionId: string;
-  interface: "mcp" | "cli" | "web" | "pipeline";
-  startTime: Date;
-  version: string;
-  platform: string;
-  nodeVersion?: string;
-
-  // Interface-specific context
-  command?: string; // CLI: command name
-  protocol?: "stdio" | "http"; // MCP: protocol type
-  transport?: "sse" | "streamable"; // MCP: transport mode
-  route?: string; // Web: current route
-
-  // Configuration context
-  authEnabled: boolean;
-  readOnly: boolean;
-  servicesEnabled: string[];
-}
-
-/**
- * PostHog configuration for analytics
- */
-const POSTHOG_CONFIG = {
-  apiKey:
-    process.env.POSTHOG_API_KEY || "phc_zDlR5l4GXHohqiJTYpH6Lc8TztgtP0GDmwIlCmyOLOs",
-  host: "https://app.posthog.com",
-
-  // Performance optimizations
-  flushAt: 20, // Batch size - send after 20 events
-  flushInterval: 10000, // 10 seconds - send after time
-
-  // Privacy settings
-  disableGeoip: true, // Don't collect IP geolocation
-  disableSessionRecording: true, // Never record sessions
-  disableSurveys: true, // No user surveys
-
-  // Data handling
-  persistence: "memory" as const, // No disk persistence for privacy
-};
-
-/**
  * Main analytics class providing privacy-first telemetry
  */
 export class Analytics {
-  private client?: PostHog;
-  private sessionContext?: SessionContext;
+  private postHogClient: PostHogClient;
+  private sessionTracker: SessionTracker;
   private enabled: boolean = true;
   private distinctId: string;
 
@@ -82,24 +45,12 @@ export class Analytics {
     this.enabled = enabled ?? TelemetryConfig.getInstance().isEnabled();
     this.distinctId = generateInstallationId();
 
-    if (this.enabled && POSTHOG_CONFIG.apiKey) {
-      try {
-        this.client = new PostHog(POSTHOG_CONFIG.apiKey, {
-          host: POSTHOG_CONFIG.host,
-          flushAt: POSTHOG_CONFIG.flushAt,
-          flushInterval: POSTHOG_CONFIG.flushInterval,
-          disableGeoip: POSTHOG_CONFIG.disableGeoip,
-        });
-        logger.debug("Analytics enabled");
-      } catch (error) {
-        logger.debug(
-          `Analytics initialization failed: ${error instanceof Error ? error.message : "Unknown error"}, continuing without telemetry`,
-        );
-        this.enabled = false;
-      }
+    this.postHogClient = new PostHogClient(this.enabled);
+    this.sessionTracker = new SessionTracker();
+
+    if (this.enabled) {
+      logger.debug("Analytics enabled");
     } else {
-      // Analytics disabled or no API key provided
-      this.enabled = false;
       logger.debug("Analytics disabled");
     }
   }
@@ -110,7 +61,7 @@ export class Analytics {
   startSession(context: SessionContext): void {
     if (!this.enabled) return;
 
-    this.sessionContext = context;
+    this.sessionTracker.startSession(context);
     this.track(TelemetryEvent.SESSION_STARTED, {
       interface: context.interface,
       version: context.version,
@@ -126,71 +77,46 @@ export class Analytics {
    * Track an event with automatic session context inclusion
    */
   track(event: string, properties: Record<string, unknown> = {}): void {
-    if (!this.enabled || !this.client) return;
+    if (!this.enabled) return;
 
-    try {
-      const eventProperties = {
-        ...this.sessionContext, // Automatically include session context
-        ...properties,
-        timestamp: new Date().toISOString(),
-      };
-
-      this.client.capture({
-        distinctId: this.distinctId,
-        event,
-        properties: eventProperties,
-      });
-
-      logger.debug(`Tracked event: ${event}`);
-    } catch (error) {
-      // Fail silently - never break the application
-      logger.debug(
-        `Analytics error: ${error instanceof Error ? error.message : "Unknown error"}`,
-      );
-    }
+    const eventProperties = this.sessionTracker.getEnrichedProperties(properties);
+    this.postHogClient.capture(this.distinctId, event, eventProperties);
   }
 
   /**
    * Track session end with duration
    */
   endSession(): void {
-    if (!this.enabled || !this.sessionContext) return;
+    if (!this.enabled) return;
 
-    const duration = Date.now() - this.sessionContext.startTime.getTime();
-    this.track(TelemetryEvent.SESSION_ENDED, {
-      durationMs: duration,
-      interface: this.sessionContext.interface,
-    });
+    const sessionInfo = this.sessionTracker.endSession();
+    if (sessionInfo) {
+      this.track(TelemetryEvent.SESSION_ENDED, {
+        durationMs: sessionInfo.duration,
+        interface: sessionInfo.interface,
+      });
+    }
   }
 
   /**
    * Graceful shutdown with event flushing
    */
   async shutdown(): Promise<void> {
-    if (this.client) {
-      try {
-        await this.client.shutdown();
-        logger.debug("Analytics shutdown complete");
-      } catch (error) {
-        logger.debug(
-          `Analytics shutdown error: ${error instanceof Error ? error.message : "Unknown error"}`,
-        );
-      }
-    }
+    await this.postHogClient.shutdown();
   }
 
   /**
    * Check if analytics is enabled
    */
   isEnabled(): boolean {
-    return this.enabled;
+    return this.enabled && this.postHogClient.isEnabled();
   }
 
   /**
    * Get current session context
    */
   getSessionContext(): SessionContext | undefined {
-    return this.sessionContext;
+    return this.sessionTracker.getSessionContext();
   }
 }
 

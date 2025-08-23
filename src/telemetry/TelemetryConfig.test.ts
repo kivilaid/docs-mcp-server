@@ -5,7 +5,7 @@ import {
   generateInstallationId,
   shouldEnableTelemetry,
   TelemetryConfig,
-} from "./config.js";
+} from "./TelemetryConfig";
 
 // Mock fs and envPaths
 vi.mock("node:fs");
