@@ -1,5 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
-import { hasSameDomain, hasSameHostname, isSubpath, normalizeUrl } from "./url";
+import {
+  extractPrimaryDomain,
+  hasSameDomain,
+  hasSameHostname,
+  isSubpath,
+  normalizeUrl,
+} from "./url";
 
 vi.mock("./logger");
 
@@ -219,6 +225,86 @@ describe("URL comparison utilities", () => {
       const sibling = new URL("https://example.com/api/v1ref/page");
       expect(isSubpath(baseUrl, nested)).toBe(true);
       expect(isSubpath(baseUrl, sibling)).toBe(false);
+    });
+  });
+});
+
+describe("extractPrimaryDomain", () => {
+  describe("standard domains", () => {
+    it("should extract primary domain from subdomains", () => {
+      expect(extractPrimaryDomain("docs.python.org")).toBe("python.org");
+      expect(extractPrimaryDomain("api.github.com")).toBe("github.com");
+      expect(extractPrimaryDomain("www.example.com")).toBe("example.com");
+      expect(extractPrimaryDomain("subdomain.example.org")).toBe("example.org");
+    });
+
+    it("should return domain as-is when already primary", () => {
+      expect(extractPrimaryDomain("python.org")).toBe("python.org");
+      expect(extractPrimaryDomain("github.com")).toBe("github.com");
+      expect(extractPrimaryDomain("example.net")).toBe("example.net");
+    });
+  });
+
+  describe("complex TLDs", () => {
+    it("should handle multi-part TLDs correctly", () => {
+      expect(extractPrimaryDomain("example.co.uk")).toBe("example.co.uk");
+      expect(extractPrimaryDomain("subdomain.example.co.uk")).toBe("example.co.uk");
+      expect(extractPrimaryDomain("test.com.au")).toBe("test.com.au");
+      expect(extractPrimaryDomain("subdomain.test.com.au")).toBe("test.com.au");
+      // Note: For .gov.uk domains, the registrable domain is at the third level
+      expect(extractPrimaryDomain("api.service.gov.uk")).toBe("api.service.gov.uk");
+      expect(extractPrimaryDomain("subdomain.api.service.gov.uk")).toBe(
+        "api.service.gov.uk",
+      );
+    });
+
+    it("should handle country code domains", () => {
+      expect(extractPrimaryDomain("example.de")).toBe("example.de");
+      expect(extractPrimaryDomain("www.example.fr")).toBe("example.fr");
+      expect(extractPrimaryDomain("subdomain.example.jp")).toBe("example.jp");
+    });
+  });
+
+  describe("special cases", () => {
+    it("should handle GitHub Pages correctly", () => {
+      expect(extractPrimaryDomain("username.github.io")).toBe("username.github.io");
+      expect(extractPrimaryDomain("org.github.io")).toBe("org.github.io");
+    });
+
+    it("should handle localhost and single-part hostnames", () => {
+      expect(extractPrimaryDomain("localhost")).toBe("localhost");
+      expect(extractPrimaryDomain("myserver")).toBe("myserver");
+      expect(extractPrimaryDomain("internal")).toBe("internal");
+    });
+
+    it("should handle IP addresses", () => {
+      expect(extractPrimaryDomain("192.168.1.1")).toBe("192.168.1.1");
+      expect(extractPrimaryDomain("10.0.0.1")).toBe("10.0.0.1");
+      expect(extractPrimaryDomain("127.0.0.1")).toBe("127.0.0.1");
+    });
+
+    it("should handle IPv6 addresses", () => {
+      expect(extractPrimaryDomain("2001:db8::1")).toBe("2001:db8::1");
+      expect(extractPrimaryDomain("::1")).toBe("::1");
+      expect(extractPrimaryDomain("fe80::1")).toBe("fe80::1");
+    });
+  });
+
+  describe("edge cases", () => {
+    it("should handle CDN domains", () => {
+      expect(extractPrimaryDomain("cdn.example.com")).toBe("example.com");
+      expect(extractPrimaryDomain("assets.cloudflare.com")).toBe("cloudflare.com");
+    });
+
+    it("should handle empty and invalid inputs gracefully", () => {
+      expect(extractPrimaryDomain("")).toBe("");
+      expect(extractPrimaryDomain(".")).toBe(".");
+      expect(extractPrimaryDomain("..")).toBe("..");
+    });
+
+    it("should preserve case handling consistently", () => {
+      expect(extractPrimaryDomain("DOCS.PYTHON.ORG")).toBe("python.org");
+      expect(extractPrimaryDomain("API.GitHub.COM")).toBe("github.com");
     });
   });
 });

@@ -147,7 +147,7 @@ export async function createPipelineWithCallbacks(
   pipeline.setCallbacks({
     onJobProgress: async (job, progress) => {
       logger.debug(
-        `📊 Job ${job.id} progress: ${progress.pagesScraped}/${progress.totalPages} pages`,
+        `Job ${job.id} progress: ${progress.pagesScraped}/${progress.totalPages} pages`,
       );
     },
     onJobStatusChange: async (job) => {
@@ -216,6 +216,7 @@ export const CLI_DEFAULTS = {
   HTTP_PORT: DEFAULT_HTTP_PORT,
   WEB_PORT: DEFAULT_WEB_PORT,
   MAX_CONCURRENCY: DEFAULT_MAX_CONCURRENCY,
+  TELEMETRY: true,
 } as const;
 
 /**

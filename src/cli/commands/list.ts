@@ -4,7 +4,9 @@
 
 import type { Command } from "commander";
 import { createDocumentManagement } from "../../store";
+import { extractCliFlags, trackTool } from "../../telemetry";
 import { ListLibrariesTool } from "../../tools";
+import type { ListLibrariesResult } from "../../tools/ListLibrariesTool";
 import { formatOutput, setupLogging } from "../utils";
 
 export async function listAction(options: { serverUrl?: string }, command: Command) {
@@ -14,7 +16,18 @@ export async function listAction(options: { serverUrl?: string }, command: Comma
   const docService = await createDocumentManagement({ serverUrl });
   try {
     const listLibrariesTool = new ListLibrariesTool(docService);
-    const result = await listLibrariesTool.execute();
+
+    // Track command execution with privacy-safe analytics
+    const result = await trackTool(
+      "list_libraries",
+      () => listLibrariesTool.execute(),
+      (result: ListLibrariesResult) => ({
+        library_count: result.libraries.length,
+        using_remote_server: !!serverUrl,
+        cli_flags: extractCliFlags(process.argv),
+      }),
+    );
+
     console.log(formatOutput(result.libraries));
   } finally {
     await docService.shutdown();

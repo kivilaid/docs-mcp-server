@@ -5,6 +5,10 @@ import packageJson from "./package.json";
 export default defineConfig({
   plugins: [
   ],
+  define: {
+    // Inject environment variables at build time - MUST be set during CI/CD
+    '__POSTHOG_API_KEY__': JSON.stringify(process.env.POSTHOG_API_KEY || ''),
+  },
   resolve: {
     // Keep existing resolve extensions
     extensions: [".ts", ".tsx", ".js", ".jsx", ".json"],

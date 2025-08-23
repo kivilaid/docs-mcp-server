@@ -1,6 +1,10 @@
 # Build stage
 FROM node:22-slim AS builder
 
+# Accept build argument for PostHog API key
+ARG POSTHOG_API_KEY
+ENV POSTHOG_API_KEY=$POSTHOG_API_KEY
+
 WORKDIR /app
 
 # Copy package files

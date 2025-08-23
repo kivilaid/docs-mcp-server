@@ -4,6 +4,8 @@
 
 import type { Command } from "commander";
 import { createDocumentManagement } from "../../store";
+import { analyzeSearchQuery, extractCliFlags, trackTool } from "../../telemetry";
+import type { SearchToolResult } from "../../tools";
 import { SearchTool } from "../../tools";
 import { formatOutput, setupLogging } from "../utils";
 
@@ -17,15 +19,33 @@ export async function searchAction(
   setupLogging(globalOptions);
   const serverUrl = options.serverUrl;
   const docService = await createDocumentManagement({ serverUrl });
+
   try {
     const searchTool = new SearchTool(docService);
-    const result = await searchTool.execute({
-      library,
-      version: options.version,
-      query,
-      limit: Number.parseInt(options.limit, 10),
-      exactMatch: options.exactMatch,
-    });
+
+    // Track command execution with privacy-safe analytics
+    const result = await trackTool(
+      "search_docs",
+      () =>
+        searchTool.execute({
+          library,
+          version: options.version,
+          query,
+          limit: Number.parseInt(options.limit, 10),
+          exactMatch: options.exactMatch,
+        }),
+      (result: SearchToolResult) => ({
+        library: library, // Safe: library names are public
+        query_analysis: analyzeSearchQuery(query), // Analyzed, not raw query
+        result_count: result.results.length,
+        limit_used: Number.parseInt(options.limit, 10),
+        has_version_filter: !!options.version,
+        exact_match: options.exactMatch,
+        using_remote_server: !!serverUrl,
+        cli_flags: extractCliFlags(process.argv),
+      }),
+    );
+
     console.log(formatOutput(result.results));
   } finally {
     await docService.shutdown();

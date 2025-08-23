@@ -1,0 +1,159 @@
+/**
+ * Analytics wrapper for privacy-first telemetry using PostHog.
+ * Provides session-based context and automatic data sanitization.
+ *
+ * Architecture:
+ * - PostHogClient: Handles PostHog SDK integration and event capture
+ * - SessionTracker: Manages session context and properties enrichment
+ * - Analytics: High-level coordinator providing public API
+ */
+
+import { logger } from "../utils/logger";
+import { PostHogClient } from "./postHogClient";
+import type { SessionContext } from "./SessionContext";
+import { SessionTracker } from "./SessionTracker";
+import { generateInstallationId, TelemetryConfig } from "./TelemetryConfig";
+
+/**
+ * Telemetry event types for structured analytics
+ */
+export enum TelemetryEvent {
+  SESSION_STARTED = "session_started",
+  SESSION_ENDED = "session_ended",
+  APP_STARTED = "app_started",
+  APP_SHUTDOWN = "app_shutdown",
+  COMMAND_EXECUTED = "command_executed",
+  TOOL_USED = "tool_used",
+  HTTP_REQUEST_COMPLETED = "http_request_completed",
+  PIPELINE_JOB_PROGRESS = "pipeline_job_progress",
+  PIPELINE_JOB_COMPLETED = "pipeline_job_completed",
+  DOCUMENT_PROCESSED = "document_processed",
+  DOCUMENT_PROCESSING_FAILED = "document_processing_failed",
+  ERROR_OCCURRED = "error_occurred",
+}
+
+/**
+ * Main analytics class providing privacy-first telemetry
+ */
+export class Analytics {
+  private postHogClient: PostHogClient;
+  private sessionTracker: SessionTracker;
+  private enabled: boolean = true;
+  private distinctId: string;
+
+  constructor(enabled?: boolean) {
+    this.enabled = enabled ?? TelemetryConfig.getInstance().isEnabled();
+    this.distinctId = generateInstallationId();
+
+    this.postHogClient = new PostHogClient(this.enabled);
+    this.sessionTracker = new SessionTracker();
+
+    if (this.enabled) {
+      logger.debug("Analytics enabled");
+    } else {
+      logger.debug("Analytics disabled");
+    }
+  }
+
+  /**
+   * Initialize session context - call once per session
+   */
+  startSession(context: SessionContext): void {
+    if (!this.enabled) return;
+
+    this.sessionTracker.startSession(context);
+    this.track(TelemetryEvent.SESSION_STARTED, {
+      interface: context.interface,
+      version: context.version,
+      platform: context.platform,
+      sessionDurationTarget: context.interface === "cli" ? "short" : "long",
+      authEnabled: context.authEnabled,
+      readOnly: context.readOnly,
+      servicesCount: context.servicesEnabled.length,
+    });
+  }
+
+  /**
+   * Track an event with automatic session context inclusion
+   */
+  track(event: string, properties: Record<string, unknown> = {}): void {
+    if (!this.enabled) return;
+
+    const eventProperties = this.sessionTracker.getEnrichedProperties(properties);
+    this.postHogClient.capture(this.distinctId, event, eventProperties);
+  }
+
+  /**
+   * Track session end with duration
+   */
+  endSession(): void {
+    if (!this.enabled) return;
+
+    const sessionInfo = this.sessionTracker.endSession();
+    if (sessionInfo) {
+      this.track(TelemetryEvent.SESSION_ENDED, {
+        durationMs: sessionInfo.duration,
+        interface: sessionInfo.interface,
+      });
+    }
+  }
+
+  /**
+   * Graceful shutdown with event flushing
+   */
+  async shutdown(): Promise<void> {
+    await this.postHogClient.shutdown();
+  }
+
+  /**
+   * Check if analytics is enabled
+   */
+  isEnabled(): boolean {
+    return this.enabled && this.postHogClient.isEnabled();
+  }
+
+  /**
+   * Get current session context
+   */
+  getSessionContext(): SessionContext | undefined {
+    return this.sessionTracker.getSessionContext();
+  }
+}
+
+/**
+ * Global analytics instance
+ */
+export const analytics = new Analytics();
+
+/**
+ * Helper function for tracking tool usage with error handling
+ */
+export async function trackTool<T>(
+  toolName: string,
+  operation: () => Promise<T>,
+  getProperties?: (result: T) => Record<string, unknown>,
+): Promise<T> {
+  const startTime = Date.now();
+
+  try {
+    const result = await operation();
+
+    analytics.track(TelemetryEvent.TOOL_USED, {
+      tool: toolName,
+      success: true,
+      durationMs: Date.now() - startTime,
+      ...(getProperties ? getProperties(result) : {}),
+    });
+
+    return result;
+  } catch (error) {
+    analytics.track(TelemetryEvent.TOOL_USED, {
+      tool: toolName,
+      success: false,
+      durationMs: Date.now() - startTime,
+      errorType: error instanceof Error ? error.constructor.name : "UnknownError",
+    });
+
+    throw error;
+  }
+}

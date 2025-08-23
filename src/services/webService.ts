@@ -7,6 +7,7 @@ import type { FastifyInstance } from "fastify";
 import type { IPipeline } from "../pipeline/trpc/interfaces";
 import type { IDocumentManagement } from "../store/trpc/interfaces";
 import { SearchTool } from "../tools";
+
 import { CancelJobTool } from "../tools/CancelJobTool";
 import { ClearCompletedJobsTool } from "../tools/ClearCompletedJobsTool";
 import { ListJobsTool } from "../tools/ListJobsTool";
@@ -31,6 +32,10 @@ export async function registerWebService(
   docService: IDocumentManagement,
   pipeline: IPipeline,
 ): Promise<void> {
+  // TODO: Implement proper web session tracking
+  // Currently disabled due to excessive session creation per request
+  // Web tracking should use browser-based session management instead of per-request sessions
+
   // Instantiate tools for web routes
   const listLibrariesTool = new ListLibrariesTool(docService);
   const listJobsTool = new ListJobsTool(pipeline);

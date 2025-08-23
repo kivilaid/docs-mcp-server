@@ -7,6 +7,7 @@ import semver from "semver";
 import type { ScraperOptions } from "../scraper/types";
 import { GreedySplitter, SemanticMarkdownSplitter } from "../splitter";
 import type { ContentChunk, DocumentSplitter } from "../splitter/types";
+import { analytics, extractHostname, TelemetryEvent } from "../telemetry";
 import { LibraryNotFoundError, VersionNotFoundError } from "../tools";
 import {
   SPLITTER_MAX_CHUNK_SIZE,
@@ -360,7 +361,7 @@ export class DocumentManagementService {
       `🗑️ Removing all documents from ${library}@${normalizedVersion || "[no version]"} store`,
     );
     const count = await this.store.deleteDocuments(library, normalizedVersion);
-    logger.info(`📊 Deleted ${count} documents`);
+    logger.info(`🗑️ Deleted ${count} documents`);
   }
 
   /**
@@ -374,8 +375,10 @@ export class DocumentManagementService {
     version: string | null | undefined,
     document: Document,
   ): Promise<void> {
+    const processingStart = performance.now();
     const normalizedVersion = this.normalizeVersion(version);
     const url = document.metadata.url as string;
+
     if (!url || typeof url !== "string" || !url.trim()) {
       throw new StoreError("Document metadata must include a valid URL");
     }
@@ -386,22 +389,66 @@ export class DocumentManagementService {
       throw new Error("Document content cannot be empty");
     }
 
-    // Split document into semantic chunks
-    const chunks = await this.splitter.splitText(document.pageContent);
+    try {
+      // Split document into semantic chunks
+      const chunks = await this.splitter.splitText(document.pageContent);
 
-    // Convert semantic chunks to documents
-    const splitDocs = chunks.map((chunk: ContentChunk) => ({
-      pageContent: chunk.content,
-      metadata: {
-        ...document.metadata,
-        level: chunk.section.level,
-        path: chunk.section.path,
-      },
-    }));
-    logger.info(`✂️  Split document into ${splitDocs.length} chunks`);
+      // Convert semantic chunks to documents
+      const splitDocs = chunks.map((chunk: ContentChunk) => ({
+        pageContent: chunk.content,
+        metadata: {
+          ...document.metadata,
+          level: chunk.section.level,
+          path: chunk.section.path,
+        },
+      }));
+      logger.info(`✂️  Split document into ${splitDocs.length} chunks`);
 
-    // Add split documents to store
-    await this.store.addDocuments(library, normalizedVersion, splitDocs);
+      // Add split documents to store
+      await this.store.addDocuments(library, normalizedVersion, splitDocs);
+
+      // Track successful document processing
+      const processingTime = performance.now() - processingStart;
+      analytics.track(TelemetryEvent.DOCUMENT_PROCESSED, {
+        // Content characteristics (privacy-safe)
+        mimeType: document.metadata.mimeType,
+        contentSizeBytes: document.pageContent.length,
+
+        // Processing metrics
+        processingTimeMs: Math.round(processingTime),
+        chunksCreated: splitDocs.length,
+
+        // Document characteristics
+        hasTitle: !!document.metadata.title,
+        hasDescription: !!document.metadata.description,
+        urlDomain: extractHostname(url),
+        depth: document.metadata.depth,
+
+        // Library context
+        library,
+        libraryVersion: normalizedVersion || null,
+
+        // Processing efficiency
+        avgChunkSizeBytes: Math.round(document.pageContent.length / splitDocs.length),
+        processingSpeedKbPerSec: Math.round(
+          document.pageContent.length / 1024 / (processingTime / 1000),
+        ),
+      });
+    } catch (error) {
+      // Track processing failures
+      const processingTime = performance.now() - processingStart;
+      analytics.track(TelemetryEvent.DOCUMENT_PROCESSING_FAILED, {
+        mimeType: document.metadata.mimeType,
+        contentSizeBytes: document.pageContent.length,
+        processingTimeMs: Math.round(processingTime),
+        errorType: error instanceof Error ? error.constructor.name : "UnknownError",
+        errorMessage: error instanceof Error ? error.message : "Unknown error",
+        library,
+        libraryVersion: normalizedVersion || null,
+      });
+
+      throw error;
+    }
   }
 
   /**
