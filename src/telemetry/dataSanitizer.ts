@@ -79,25 +79,10 @@ export function sanitizePath(path: string): string {
 }
 
 /**
- * Extracts file extension from URL or path for content type analysis.
- * Examples:
- * - https://docs.python.org/file.html -> "html"
- * - /path/to/script.js -> "js"
- * - no-extension -> "none"
+ * Extract hostname from URL
+ * - https://docs.python.org/3/path -> "docs.python.org"
+ * - file:///local/path -> "local"
  */
-export function extractFileExtension(urlOrPath: string): string {
-  try {
-    // Try URL parsing first
-    const parsed = new URL(urlOrPath);
-    const pathname = parsed.pathname;
-    const match = pathname.match(/\.([^.]+)$/);
-    return match ? match[1].toLowerCase() : "none";
-  } catch {
-    // Fall back to simple path parsing
-    const match = urlOrPath.match(/\.([^.]+)$/);
-    return match ? match[1].toLowerCase() : "none";
-  }
-}
 
 /**
  * Categorizes content size for analytics.
@@ -253,4 +238,29 @@ export function shouldEnableTelemetry(): boolean {
 
   // Default to enabled
   return true;
+}
+
+/**
+ * Categorize user agent for analytics without storing full string
+ */
+export function categorizeUserAgent(userAgent: string): string {
+  const ua = userAgent.toLowerCase();
+
+  if (ua.includes("postman")) return "api_client_postman";
+  if (ua.includes("insomnia")) return "api_client_insomnia";
+  if (ua.includes("curl")) return "api_client_curl";
+  if (ua.includes("wget")) return "api_client_wget";
+  if (ua.includes("python-requests") || ua.includes("python/"))
+    return "api_client_python";
+  if (ua.includes("node-fetch") || ua.includes("node/")) return "api_client_node";
+
+  if (ua.includes("chrome")) return "browser_chrome";
+  if (ua.includes("firefox")) return "browser_firefox";
+  if (ua.includes("safari")) return "browser_safari";
+  if (ua.includes("edge")) return "browser_edge";
+
+  if (ua.includes("mobile")) return "browser_mobile";
+  if (ua.includes("bot") || ua.includes("crawler")) return "bot";
+
+  return "other";
 }
