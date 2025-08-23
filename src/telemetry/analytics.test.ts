@@ -29,7 +29,7 @@ vi.mock("./postHogClient", () => ({
 }));
 
 // Mock SessionTracker
-vi.mock("./sessionTracker", () => ({
+vi.mock("./SessionTracker", () => ({
   SessionTracker: vi.fn().mockImplementation(() => ({
     startSession: vi.fn(),
     endSession: vi.fn(() => ({ duration: 5000, interface: "cli" })),
@@ -63,7 +63,7 @@ describe("Analytics", () => {
     vi.clearAllMocks();
     analytics = new Analytics();
 
-    // Get the mocked instances that were created in the constructor
+    // Get the mocked instances that were created by the constructors
     mockPostHogClient = (analytics as any).postHogClient;
     mockSessionTracker = (analytics as any).sessionTracker;
   });
