@@ -81,6 +81,11 @@ export class DocumentStore {
     updateVersionScraperOptions: Database.Statement<[string, string, number]>;
     getVersionWithOptions: Database.Statement<[number]>;
     getVersionsBySourceUrl: Database.Statement<[string]>;
+    // Version and library deletion statements
+    deleteVersionById: Database.Statement<[number]>;
+    deleteLibraryById: Database.Statement<[number]>;
+    countVersionsByLibraryId: Database.Statement<[number]>;
+    getVersionId: Database.Statement<[string, string]>;
   };
 
   /**
@@ -318,6 +323,17 @@ export class DocumentStore {
       ),
       getVersionsBySourceUrl: this.db.prepare<[string]>(
         "SELECT v.*, l.name as library_name FROM versions v JOIN libraries l ON v.library_id = l.id WHERE v.source_url = ? ORDER BY v.created_at DESC",
+      ),
+      // Version and library deletion statements
+      deleteVersionById: this.db.prepare<[number]>("DELETE FROM versions WHERE id = ?"),
+      deleteLibraryById: this.db.prepare<[number]>("DELETE FROM libraries WHERE id = ?"),
+      countVersionsByLibraryId: this.db.prepare<[number]>(
+        "SELECT COUNT(*) as count FROM versions WHERE library_id = ?",
+      ),
+      getVersionId: this.db.prepare<[string, string]>(
+        `SELECT v.id, v.library_id FROM versions v
+         JOIN libraries l ON v.library_id = l.id
+         WHERE l.name = ? AND COALESCE(v.name, '') = COALESCE(?, '')`,
       ),
     };
     this.statements = statements;
@@ -868,6 +884,70 @@ export class DocumentStore {
       return result.changes;
     } catch (error) {
       throw new ConnectionError("Failed to delete documents by URL", error);
+    }
+  }
+
+  /**
+   * Completely removes a library version and all associated documents.
+   * Optionally removes the library if no other versions remain.
+   * @param library Library name
+   * @param version Version string (empty string for unversioned)
+   * @param removeLibraryIfEmpty Whether to remove the library if no versions remain
+   * @returns Object with counts of deleted documents, version deletion status, and library deletion status
+   */
+  async removeVersion(
+    library: string,
+    version: string,
+    removeLibraryIfEmpty = true,
+  ): Promise<{
+    documentsDeleted: number;
+    versionDeleted: boolean;
+    libraryDeleted: boolean;
+  }> {
+    try {
+      const normalizedLibrary = library.toLowerCase();
+      const normalizedVersion = version.toLowerCase();
+
+      // First, get the version ID and library ID
+      const versionResult = this.statements.getVersionId.get(
+        normalizedLibrary,
+        normalizedVersion,
+      ) as { id: number; library_id: number } | undefined;
+
+      if (!versionResult) {
+        // Version doesn't exist, return zero counts
+        return { documentsDeleted: 0, versionDeleted: false, libraryDeleted: false };
+      }
+
+      const { id: versionId, library_id: libraryId } = versionResult;
+
+      // Delete all documents for this version
+      const documentsDeleted = await this.deleteDocuments(library, version);
+
+      // Delete the version record
+      const versionDeleteResult = this.statements.deleteVersionById.run(versionId);
+      const versionDeleted = versionDeleteResult.changes > 0;
+
+      let libraryDeleted = false;
+
+      // Check if we should remove the library
+      if (removeLibraryIfEmpty && versionDeleted) {
+        // Count remaining versions for this library
+        const countResult = this.statements.countVersionsByLibraryId.get(libraryId) as
+          | { count: number }
+          | undefined;
+        const remainingVersions = countResult?.count ?? 0;
+
+        if (remainingVersions === 0) {
+          // No versions left, delete the library
+          const libraryDeleteResult = this.statements.deleteLibraryById.run(libraryId);
+          libraryDeleted = libraryDeleteResult.changes > 0;
+        }
+      }
+
+      return { documentsDeleted, versionDeleted, libraryDeleted };
+    } catch (error) {
+      throw new ConnectionError("Failed to remove version", error);
     }
   }
 

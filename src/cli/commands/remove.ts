@@ -30,12 +30,10 @@ export async function removeAction(
       }),
     );
 
-    console.log(
-      `✅ Successfully removed documents for ${library}${version ? `@${version}` : " (unversioned)"}.`,
-    );
+    console.log(`✅ Successfully removed ${library}${version ? `@${version}` : ""}.`);
   } catch (error) {
     console.error(
-      `❌ Failed to remove documents for ${library}${version ? `@${version}` : " (unversioned)"}:`,
+      `❌ Failed to remove ${library}${version ? `@${version}` : ""}:`,
       error instanceof Error ? error.message : String(error),
     );
     throw error;
