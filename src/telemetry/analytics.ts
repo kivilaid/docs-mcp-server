@@ -9,6 +9,7 @@
  */
 
 import { logger } from "../utils/logger";
+import type { TelemetryEventPropertiesMap } from "./eventTypes";
 import { PostHogClient } from "./postHogClient";
 import type { SessionContext } from "./SessionContext";
 import { SessionTracker } from "./SessionTracker";
@@ -28,8 +29,6 @@ export enum TelemetryEvent {
   PIPELINE_JOB_PROGRESS = "pipeline_job_progress",
   PIPELINE_JOB_COMPLETED = "pipeline_job_completed",
   DOCUMENT_PROCESSED = "document_processed",
-  DOCUMENT_PROCESSING_FAILED = "document_processing_failed",
-  ERROR_OCCURRED = "error_occurred",
 }
 
 /**
@@ -63,24 +62,49 @@ export class Analytics {
 
     this.sessionTracker.startSession(context);
     this.track(TelemetryEvent.SESSION_STARTED, {
-      interface: context.interface,
-      version: context.version,
-      platform: context.platform,
-      sessionDurationTarget: context.interface === "cli" ? "short" : "long",
-      authEnabled: context.authEnabled,
-      readOnly: context.readOnly,
-      servicesCount: context.servicesEnabled.length,
+      interface: context.appInterface,
+      version: context.appVersion,
+      platform: context.appPlatform,
+      authEnabled: context.appAuthEnabled,
+      readOnly: context.appReadOnly,
+      servicesCount: context.appServicesEnabled.length,
     });
   }
 
   /**
-   * Track an event with automatic session context inclusion
+   * Update session context with additional fields (e.g., embedding model info)
    */
+  updateSessionContext(updates: Partial<SessionContext>): void {
+    if (!this.enabled) return;
+
+    this.sessionTracker.updateSessionContext(updates);
+  }
+
+  /**
+   * Track an event with automatic session context inclusion
+   *
+   * Type-safe overloads for specific events:
+   */
+  track<T extends keyof TelemetryEventPropertiesMap>(
+    event: T,
+    properties: TelemetryEventPropertiesMap[T],
+  ): void;
+  track(event: string, properties?: Record<string, unknown>): void;
   track(event: string, properties: Record<string, unknown> = {}): void {
     if (!this.enabled) return;
 
     const eventProperties = this.sessionTracker.getEnrichedProperties(properties);
     this.postHogClient.capture(this.distinctId, event, eventProperties);
+  }
+
+  /**
+   * Capture exception using PostHog's native error tracking with session context
+   */
+  captureException(error: Error, properties: Record<string, unknown> = {}): void {
+    if (!this.enabled) return;
+
+    const eventProperties = this.sessionTracker.getEnrichedProperties(properties);
+    this.postHogClient.captureException(this.distinctId, error, eventProperties);
   }
 
   /**
@@ -118,42 +142,51 @@ export class Analytics {
   getSessionContext(): SessionContext | undefined {
     return this.sessionTracker.getSessionContext();
   }
+
+  /**
+   * Track tool usage with error handling and automatic timing
+   */
+  async trackTool<T>(
+    toolName: string,
+    operation: () => Promise<T>,
+    getProperties?: (result: T) => Record<string, unknown>,
+  ): Promise<T> {
+    const startTime = Date.now();
+
+    try {
+      const result = await operation();
+
+      this.track(TelemetryEvent.TOOL_USED, {
+        tool: toolName,
+        success: true,
+        durationMs: Date.now() - startTime,
+        ...(getProperties ? getProperties(result) : {}),
+      });
+
+      return result;
+    } catch (error) {
+      // Track the tool usage failure
+      this.track(TelemetryEvent.TOOL_USED, {
+        tool: toolName,
+        success: false,
+        durationMs: Date.now() - startTime,
+      });
+
+      // Capture the exception with full error tracking
+      if (error instanceof Error) {
+        this.captureException(error, {
+          tool: toolName,
+          context: "tool_execution",
+          durationMs: Date.now() - startTime,
+        });
+      }
+
+      throw error;
+    }
+  }
 }
 
 /**
  * Global analytics instance
  */
 export const analytics = new Analytics();
-
-/**
- * Helper function for tracking tool usage with error handling
- */
-export async function trackTool<T>(
-  toolName: string,
-  operation: () => Promise<T>,
-  getProperties?: (result: T) => Record<string, unknown>,
-): Promise<T> {
-  const startTime = Date.now();
-
-  try {
-    const result = await operation();
-
-    analytics.track(TelemetryEvent.TOOL_USED, {
-      tool: toolName,
-      success: true,
-      durationMs: Date.now() - startTime,
-      ...(getProperties ? getProperties(result) : {}),
-    });
-
-    return result;
-  } catch (error) {
-    analytics.track(TelemetryEvent.TOOL_USED, {
-      tool: toolName,
-      success: false,
-      durationMs: Date.now() - startTime,
-      errorType: error instanceof Error ? error.constructor.name : "UnknownError",
-    });
-
-    throw error;
-  }
-}

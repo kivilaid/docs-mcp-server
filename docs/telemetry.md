@@ -37,6 +37,12 @@ The telemetry system consists of four main components:
 - Installation ID as the distinct user identifier
 - Session lifecycle management for different interface types
 
+**PostHog Client** (`src/telemetry/postHogClient.ts`)
+
+- Automatic camelCase to snake_case property conversion for PostHog compatibility
+- Privacy-optimized PostHog configuration
+- Error tracking with native PostHog exception capture
+
 **Configuration Management** (`src/telemetry/config.ts`)
 
 - Installation ID generation and persistence using UUID
@@ -80,6 +86,14 @@ Each session includes:
 - Platform information (OS, Node.js version)
 - Session start time and metadata
 - Application version and enabled services
+
+Properties use consistent naming conventions with domain-specific prefixes:
+
+- `app*` properties: Application-level context (appVersion, appInterface, appPlatform)
+- `mcp*` properties: MCP protocol-specific context (mcpProtocol, mcpTransport)
+- `web*` properties: Web interface context (webRoute)
+- `cli*` properties: Command-line interface context (cliCommand)
+- `ai*` properties: AI/embedding model context (aiEmbeddingProvider, aiEmbeddingModel)
 
 ### Installation ID System
 
@@ -147,7 +161,7 @@ The system tracks essential event types for usage understanding:
 - `session_started` / `session_ended`: Session lifecycle tracking
 - `tool_used`: Individual tool execution and outcomes
 - `job_completed` / `job_failed`: Background processing results
-- `error_occurred`: System errors with sanitized information
+- **Error Tracking**: PostHog's native exception tracking with full stack traces and context
 
 ### Session Context
 
@@ -157,6 +171,8 @@ All events automatically include basic session context:
 - Application version and platform information
 - Session ID and installation ID
 - Basic timing information
+
+Property names follow PostHog's snake_case convention through automatic conversion from internal camelCase names.
 
 ### Privacy-Safe Data Collection
 
@@ -170,9 +186,10 @@ The system ensures privacy through essential data sanitization:
 
 **Error Information**
 
-- Error type and sanitized messages (`sanitizeError`)
-- Stack trace presence indication without content
-- Component identification without sensitive context
+- **Native Error Tracking**: PostHog's exception capture with full stack traces and automatic grouping
+- Error sanitization functions available for sensitive contexts (`sanitizeError`, `sanitizeErrorMessage`)
+- Component identification and contextual information
+- Enhanced debugging capabilities with source code integration
 
 **Usage Patterns**
 

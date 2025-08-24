@@ -1,5 +1,6 @@
 import type { IPipeline } from "../pipeline/trpc/interfaces";
 import type { PipelineJob, PipelineJobStatus } from "../pipeline/types";
+import { analytics } from "../telemetry";
 import type { JobInfo } from "./GetJobInfoTool"; // Import JobInfo
 
 /**
@@ -38,33 +39,51 @@ export class ListJobsTool {
    * @returns A promise that resolves with the list of simplified job objects.
    */
   async execute(input: ListJobsInput): Promise<ListJobsToolResponse> {
-    const jobs = await this.pipeline.getJobs(input.status);
+    return analytics.trackTool(
+      "list_jobs",
+      async () => {
+        const jobs = await this.pipeline.getJobs(input.status);
 
-    // Transform jobs into simplified objects using enhanced PipelineJob interface
-    const simplifiedJobs: JobInfo[] = jobs.map((job: PipelineJob): JobInfo => {
-      return {
-        id: job.id,
-        library: job.library,
-        version: job.version,
-        status: job.status,
-        dbStatus: job.versionStatus,
-        createdAt: job.createdAt.toISOString(),
-        startedAt: job.startedAt?.toISOString() ?? null,
-        finishedAt: job.finishedAt?.toISOString() ?? null,
-        error: job.error?.message ?? null,
-        progress:
-          job.progressMaxPages && job.progressMaxPages > 0
-            ? {
-                pages: job.progressPages || 0,
-                totalPages: job.progressMaxPages,
-                totalDiscovered: job.progress?.totalDiscovered || job.progressMaxPages,
-              }
-            : undefined,
-        updatedAt: job.updatedAt?.toISOString(),
-        errorMessage: job.errorMessage ?? undefined,
-      };
-    });
+        // Transform jobs into simplified objects using enhanced PipelineJob interface
+        const simplifiedJobs: JobInfo[] = jobs.map((job: PipelineJob): JobInfo => {
+          return {
+            id: job.id,
+            library: job.library,
+            version: job.version,
+            status: job.status,
+            dbStatus: job.versionStatus,
+            createdAt: job.createdAt.toISOString(),
+            startedAt: job.startedAt?.toISOString() ?? null,
+            finishedAt: job.finishedAt?.toISOString() ?? null,
+            error: job.error?.message ?? null,
+            progress:
+              job.progressMaxPages && job.progressMaxPages > 0
+                ? {
+                    pages: job.progressPages || 0,
+                    totalPages: job.progressMaxPages,
+                    totalDiscovered:
+                      job.progress?.totalDiscovered || job.progressMaxPages,
+                  }
+                : undefined,
+            updatedAt: job.updatedAt?.toISOString(),
+            errorMessage: job.errorMessage ?? undefined,
+          };
+        });
 
-    return { jobs: simplifiedJobs };
+        return { jobs: simplifiedJobs };
+      },
+      (result) => {
+        return {
+          jobCount: result.jobs.length,
+          statusCounts: result.jobs.reduce(
+            (acc, job) => {
+              acc[job.status] = (acc[job.status] || 0) + 1;
+              return acc;
+            },
+            {} as Record<string, number>,
+          ),
+        };
+      },
+    );
   }
 }

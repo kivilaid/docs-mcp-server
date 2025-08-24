@@ -4,10 +4,8 @@
 
 import type { Command } from "commander";
 import { createDocumentManagement } from "../../store";
-import { analyzeSearchQuery, extractCliFlags, trackTool } from "../../telemetry";
-import type { SearchToolResult } from "../../tools";
 import { SearchTool } from "../../tools";
-import { formatOutput, setupLogging } from "../utils";
+import { formatOutput, resolveEmbeddingContext, setupLogging } from "../utils";
 
 export async function searchAction(
   library: string,
@@ -17,34 +15,34 @@ export async function searchAction(
 ) {
   const globalOptions = command.parent?.opts() || {};
   setupLogging(globalOptions);
+
   const serverUrl = options.serverUrl;
-  const docService = await createDocumentManagement({ serverUrl });
+
+  // Resolve embedding configuration for local execution (search needs embeddings)
+  const embeddingConfig = resolveEmbeddingContext();
+  if (!serverUrl && !embeddingConfig) {
+    throw new Error(
+      "Embedding configuration is required for local search. " +
+        "Please set DOCS_MCP_EMBEDDING_MODEL environment variable or use --server-url for remote execution.",
+    );
+  }
+
+  const docService = await createDocumentManagement({
+    serverUrl,
+    embeddingConfig,
+  });
 
   try {
     const searchTool = new SearchTool(docService);
 
-    // Track command execution with privacy-safe analytics
-    const result = await trackTool(
-      "search_docs",
-      () =>
-        searchTool.execute({
-          library,
-          version: options.version,
-          query,
-          limit: Number.parseInt(options.limit, 10),
-          exactMatch: options.exactMatch,
-        }),
-      (result: SearchToolResult) => ({
-        library: library, // Safe: library names are public
-        query_analysis: analyzeSearchQuery(query), // Analyzed, not raw query
-        result_count: result.results.length,
-        limit_used: Number.parseInt(options.limit, 10),
-        has_version_filter: !!options.version,
-        exact_match: options.exactMatch,
-        using_remote_server: !!serverUrl,
-        cli_flags: extractCliFlags(process.argv),
-      }),
-    );
+    // Call the tool directly - tracking is now handled inside the tool
+    const result = await searchTool.execute({
+      library,
+      version: options.version,
+      query,
+      limit: Number.parseInt(options.limit, 10),
+      exactMatch: options.exactMatch,
+    });
 
     console.log(formatOutput(result.results));
   } finally {

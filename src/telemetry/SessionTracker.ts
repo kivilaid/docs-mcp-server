@@ -25,7 +25,7 @@ export class SessionTracker {
     if (!this.sessionContext) return null;
 
     const duration = Date.now() - this.sessionContext.startTime.getTime();
-    const sessionInterface = this.sessionContext.interface;
+    const sessionInterface = this.sessionContext.appInterface;
 
     // Clear session context
     this.sessionContext = undefined;
@@ -38,6 +38,15 @@ export class SessionTracker {
    */
   getSessionContext(): SessionContext | undefined {
     return this.sessionContext;
+  }
+
+  /**
+   * Update session context with additional fields
+   */
+  updateSessionContext(updates: Partial<SessionContext>): void {
+    if (this.sessionContext) {
+      this.sessionContext = { ...this.sessionContext, ...updates };
+    }
   }
 
   /**

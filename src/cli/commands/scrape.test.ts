@@ -20,6 +20,7 @@ vi.mock("../utils", () => ({
   setupLogging: vi.fn(),
   parseHeaders: () => ({}),
   createPipelineWithCallbacks: vi.fn(async () => pipelineMock),
+  resolveEmbeddingContext: vi.fn(() => ({ type: "mock" })),
 }));
 
 import { scrapeAction } from "./scrape";

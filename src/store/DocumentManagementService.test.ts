@@ -134,7 +134,7 @@ describe("DocumentManagementService", () => {
       expect(localDocService).toBeInstanceOf(DocumentManagementService);
 
       // Verify DocumentStore was called with the old path
-      expect(vi.mocked(DocumentStore)).toHaveBeenCalledWith(expectedOldDbPath);
+      expect(vi.mocked(DocumentStore)).toHaveBeenCalledWith(expectedOldDbPath, undefined);
       // Verify the directory still exists (mkdirSync shouldn't error)
       expect(vol.existsSync(path.dirname(expectedOldDbPath))).toBe(true);
     });
@@ -148,7 +148,10 @@ describe("DocumentManagementService", () => {
       const _localDocService = new DocumentManagementService();
 
       // Verify DocumentStore was called with the standard path
-      expect(vi.mocked(DocumentStore)).toHaveBeenCalledWith(expectedStandardDbPath);
+      expect(vi.mocked(DocumentStore)).toHaveBeenCalledWith(
+        expectedStandardDbPath,
+        undefined,
+      );
       // Verify envPaths was called
       expect(mockEnvPathsFn).toHaveBeenCalledWith("docs-mcp-server", { suffix: "" });
       // Verify the standard directory was created in memfs
@@ -169,7 +172,10 @@ describe("DocumentManagementService", () => {
         const _localDocService = new DocumentManagementService();
 
         // Verify DocumentStore was called with the env var path
-        expect(vi.mocked(DocumentStore)).toHaveBeenCalledWith(expectedEnvDbPath);
+        expect(vi.mocked(DocumentStore)).toHaveBeenCalledWith(
+          expectedEnvDbPath,
+          undefined,
+        );
         // Verify the env var directory was created in memfs
         expect(vol.existsSync(mockEnvStorePath)).toBe(true);
         // Verify other paths were NOT created (optional but good check)

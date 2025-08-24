@@ -309,6 +309,8 @@ This architecture allows independent scaling of processing (workers) and user in
 
 ## Configuration
 
+Commands that perform search or indexing operations require embedding configuration to be explicitly set via environment variables.
+
 The Docs MCP Server is configured via environment variables. Set these in your shell, Docker, or MCP client config.
 
 | Variable                           | Description                                           |

@@ -5,7 +5,10 @@
 
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { IPipeline } from "../pipeline";
-import { ModelConfigurationError } from "../store/embeddings/EmbeddingFactory";
+import {
+  ModelConfigurationError,
+  UnsupportedProviderError,
+} from "../store/embeddings/EmbeddingFactory";
 import type { IDocumentManagement } from "../store/trpc/interfaces";
 import { analytics } from "../telemetry";
 import { logger } from "../utils/logger";
@@ -108,15 +111,13 @@ export async function runCli(): Promise<void> {
 
     await program.parseAsync(process.argv);
   } catch (error) {
-    // Handle embedding configuration errors with helpful messages
-    if (error instanceof ModelConfigurationError) {
-      logger.error("❌ Missing API key for embedding provider");
-      logger.error(
-        "   Please set OPENAI_API_KEY or configure an alternative embedding model.",
-      );
-      logger.error(
-        "   See README.md for configuration options or run with --help for more details.",
-      );
+    // Handle embedding configuration errors with clean, helpful messages
+    if (
+      error instanceof ModelConfigurationError ||
+      error instanceof UnsupportedProviderError
+    ) {
+      // These errors already have properly formatted messages
+      logger.error(error.message);
     } else {
       logger.error(`❌ Error in CLI: ${error}`);
     }

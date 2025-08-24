@@ -8,7 +8,12 @@ import type { DocumentMetadata } from "../types";
 import { EMBEDDING_BATCH_CHARS, EMBEDDING_BATCH_SIZE } from "../utils/config";
 import { logger } from "../utils/logger";
 import { applyMigrations } from "./applyMigrations";
-import { ModelConfigurationError } from "./embeddings/EmbeddingFactory";
+import { EmbeddingConfig, type EmbeddingModelConfig } from "./embeddings/EmbeddingConfig";
+import {
+  createEmbeddingModel,
+  ModelConfigurationError,
+  UnsupportedProviderError,
+} from "./embeddings/EmbeddingFactory";
 import { ConnectionError, DimensionError, StoreError } from "./errors";
 import type { StoredScraperOptions } from "./types";
 import {
@@ -46,6 +51,7 @@ export class DocumentStore {
   private embeddings!: Embeddings;
   private readonly dbDimension: number = VECTOR_DIMENSION;
   private modelDimension!: number;
+  private readonly embeddingConfig?: EmbeddingModelConfig | null;
   private statements!: {
     getById: Database.Statement<[bigint]>;
     insertDocument: Database.Statement<
@@ -139,13 +145,16 @@ export class DocumentStore {
     }));
   }
 
-  constructor(dbPath: string) {
+  constructor(dbPath: string, embeddingConfig?: EmbeddingModelConfig | null) {
     if (!dbPath) {
       throw new StoreError("Missing required database path");
     }
 
     // Only establish database connection in constructor
     this.db = new Database(dbPath);
+
+    // Store embedding config for later initialization
+    this.embeddingConfig = embeddingConfig;
   }
 
   /**
@@ -357,31 +366,77 @@ export class DocumentStore {
   }
 
   /**
-   * Initializes embeddings client using environment variables for configuration.
+   * Initialize the embeddings client using either provided config or environment variables.
+   * If no embedding config is provided (null), embeddings will not be initialized.
+   * This allows DocumentStore to be used without embeddings for operations that don't need them.
    *
-   * The embedding model is configured using DOCS_MCP_EMBEDDING_MODEL environment variable.
-   * Format: "provider:model_name" (e.g., "google:text-embedding-004") or just "model_name"
-   * for OpenAI (default).
-   *
-   * Supported providers and their required environment variables:
+   * Environment variables per provider:
    * - openai: OPENAI_API_KEY (and optionally OPENAI_API_BASE, OPENAI_ORG_ID)
-   * - google: GOOGLE_APPLICATION_CREDENTIALS (path to service account JSON)
-   * - aws: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION (or BEDROCK_AWS_REGION)
+   * - vertex: GOOGLE_APPLICATION_CREDENTIALS (path to service account JSON)
+   * - gemini: GOOGLE_API_KEY
+   * - aws: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION
    * - microsoft: Azure OpenAI credentials (AZURE_OPENAI_API_*)
    */
   private async initializeEmbeddings(): Promise<void> {
-    const modelSpec = process.env.DOCS_MCP_EMBEDDING_MODEL || "text-embedding-3-small";
+    // If embedding config is explicitly null, skip embedding initialization
+    if (this.embeddingConfig === null) {
+      logger.debug("Embedding initialization skipped (explicitly disabled)");
+      return;
+    }
 
-    // Import dynamically to avoid circular dependencies
-    const { createEmbeddingModel } = await import("./embeddings/EmbeddingFactory");
-    this.embeddings = createEmbeddingModel(modelSpec);
+    // Use provided config or fall back to parsing environment
+    const config = this.embeddingConfig || EmbeddingConfig.parseEmbeddingConfig();
 
-    // Determine the model's actual dimension by embedding a test string
-    const testVector = await this.embeddings.embedQuery("test");
-    this.modelDimension = testVector.length;
+    // Create embedding model
+    try {
+      this.embeddings = createEmbeddingModel(config.modelSpec);
 
-    if (this.modelDimension > this.dbDimension) {
-      throw new DimensionError(modelSpec, this.modelDimension, this.dbDimension);
+      // Use known dimensions if available, otherwise detect via test query
+      if (config.dimensions !== null) {
+        this.modelDimension = config.dimensions;
+      } else {
+        // Fallback: determine the model's actual dimension by embedding a test string
+        const testVector = await this.embeddings.embedQuery("test");
+        this.modelDimension = testVector.length;
+
+        // Cache the discovered dimensions for future use
+        EmbeddingConfig.setKnownModelDimensions(config.model, this.modelDimension);
+      }
+
+      if (this.modelDimension > this.dbDimension) {
+        throw new DimensionError(config.modelSpec, this.modelDimension, this.dbDimension);
+      }
+
+      logger.debug(
+        `Embeddings initialized: ${config.provider}:${config.model} (${this.modelDimension}d)`,
+      );
+    } catch (error) {
+      // Handle model-related errors with helpful messages
+      if (error instanceof Error) {
+        if (
+          error.message.includes("does not exist") ||
+          error.message.includes("MODEL_NOT_FOUND")
+        ) {
+          throw new ModelConfigurationError(
+            `❌ Invalid embedding model: ${config.model}\n` +
+              `   The model "${config.model}" is not available or you don't have access to it.\n` +
+              "   See README.md for supported models or run with --help for more details.",
+          );
+        }
+        if (
+          error.message.includes("API key") ||
+          error.message.includes("401") ||
+          error.message.includes("authentication")
+        ) {
+          throw new ModelConfigurationError(
+            `❌ Authentication failed for ${config.provider} embedding provider\n` +
+              "   Please check your API key configuration.\n" +
+              "   See README.md for configuration options or run with --help for more details.",
+          );
+        }
+      }
+      // Re-throw other embedding errors (like DimensionError) as-is
+      throw error;
     }
   }
 
@@ -413,8 +468,12 @@ export class DocumentStore {
       // 4. Initialize embeddings client (await to catch errors)
       await this.initializeEmbeddings();
     } catch (error) {
-      // Re-throw StoreError and ModelConfigurationError directly, wrap others in ConnectionError
-      if (error instanceof StoreError || error instanceof ModelConfigurationError) {
+      // Re-throw StoreError, ModelConfigurationError, and UnsupportedProviderError directly
+      if (
+        error instanceof StoreError ||
+        error instanceof ModelConfigurationError ||
+        error instanceof UnsupportedProviderError
+      ) {
         throw error;
       }
       throw new ConnectionError("Failed to initialize database connection", error);

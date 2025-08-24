@@ -18,6 +18,7 @@ import { logger } from "../utils/logger";
 import { getProjectRoot } from "../utils/paths";
 import { DocumentRetrieverService } from "./DocumentRetrieverService";
 import { DocumentStore } from "./DocumentStore";
+import type { EmbeddingModelConfig } from "./embeddings/EmbeddingConfig";
 import { StoreError } from "./errors";
 import type {
   DbVersionWithLibrary,
@@ -46,7 +47,7 @@ export class DocumentManagementService {
     return (version ?? "").toLowerCase();
   }
 
-  constructor() {
+  constructor(embeddingConfig?: EmbeddingModelConfig | null) {
     let dbPath: string;
     let dbDir: string;
 
@@ -85,7 +86,7 @@ export class DocumentManagementService {
       logger.error(`⚠️  Failed to create database directory ${dbDir}: ${error}`);
     }
 
-    this.store = new DocumentStore(dbPath);
+    this.store = new DocumentStore(dbPath, embeddingConfig);
     this.documentRetriever = new DocumentRetrieverService(this.store);
 
     const semanticSplitter = new SemanticMarkdownSplitter(
@@ -462,17 +463,20 @@ export class DocumentManagementService {
         ),
       });
     } catch (error) {
-      // Track processing failures
+      // Track processing failures with native error tracking
       const processingTime = performance.now() - processingStart;
-      analytics.track(TelemetryEvent.DOCUMENT_PROCESSING_FAILED, {
-        mimeType: document.metadata.mimeType,
-        contentSizeBytes: document.pageContent.length,
-        processingTimeMs: Math.round(processingTime),
-        errorType: error instanceof Error ? error.constructor.name : "UnknownError",
-        errorMessage: error instanceof Error ? error.message : "Unknown error",
-        library,
-        libraryVersion: normalizedVersion || null,
-      });
+
+      if (error instanceof Error) {
+        analytics.captureException(error, {
+          mimeType: document.metadata.mimeType,
+          contentSizeBytes: document.pageContent.length,
+          processingTimeMs: Math.round(processingTime),
+          library,
+          libraryVersion: normalizedVersion || null,
+          context: "document_processing",
+          component: DocumentManagementService.constructor.name,
+        });
+      }
 
       throw error;
     }

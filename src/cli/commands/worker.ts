@@ -13,6 +13,7 @@ import {
   createAppServerConfig,
   createPipelineWithCallbacks,
   ensurePlaywrightBrowsersInstalled,
+  resolveEmbeddingContext,
   setupLogging,
   validatePort,
 } from "../utils";
@@ -46,8 +47,11 @@ export function createWorkerCommand(program: Command): Command {
         // Ensure browsers are installed for scraping
         ensurePlaywrightBrowsersInstalled();
 
+        // Resolve embedding configuration for worker (worker needs embeddings for indexing)
+        const embeddingConfig = resolveEmbeddingContext();
+
         // Initialize services
-        const docService = await createLocalDocumentManagement();
+        const docService = await createLocalDocumentManagement(embeddingConfig);
         const pipelineOptions: PipelineOptions = {
           recoverJobs: cmdOptions.resume, // Use the resume option
           concurrency: CLI_DEFAULTS.MAX_CONCURRENCY,

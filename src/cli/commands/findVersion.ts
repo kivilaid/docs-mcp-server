@@ -4,7 +4,6 @@
 
 import type { Command } from "commander";
 import { createDocumentManagement } from "../../store";
-import { extractCliFlags, trackTool } from "../../telemetry";
 import { FindVersionTool } from "../../tools";
 import { setupLogging } from "../utils";
 
@@ -16,26 +15,20 @@ export async function findVersionAction(
   const globalOptions = command.parent?.opts() || {};
   setupLogging(globalOptions);
   const serverUrl = options.serverUrl;
-  const docService = await createDocumentManagement({ serverUrl });
+
+  // Find version command doesn't need embeddings - explicitly disable for local execution
+  const docService = await createDocumentManagement({
+    serverUrl,
+    embeddingConfig: serverUrl ? undefined : null,
+  });
   try {
     const findVersionTool = new FindVersionTool(docService);
 
-    // Track command execution with privacy-safe analytics
-    const versionInfo = await trackTool(
-      "find_version",
-      () =>
-        findVersionTool.execute({
-          library,
-          targetVersion: options.version,
-        }),
-      (versionInfo: string) => ({
-        library: library, // Safe: library names are public
-        has_target_version: !!options.version,
-        result_type: typeof versionInfo, // 'string'
-        using_remote_server: !!serverUrl,
-        cli_flags: extractCliFlags(process.argv),
-      }),
-    );
+    // Call the tool directly - tracking is now handled inside the tool
+    const versionInfo = await findVersionTool.execute({
+      library,
+      targetVersion: options.version,
+    });
 
     if (!versionInfo) throw new Error("Failed to get version information");
     console.log(versionInfo);

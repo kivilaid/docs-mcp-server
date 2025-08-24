@@ -4,7 +4,7 @@
  */
 
 import type { IPipeline } from "../pipeline/trpc/interfaces";
-import { analytics, sanitizeError, TelemetryEvent } from "../telemetry";
+import { analytics, TelemetryEvent } from "../telemetry";
 import { logger } from "../utils/logger";
 
 /**
@@ -69,16 +69,12 @@ export async function registerWorkerService(pipeline: IPipeline): Promise<void> 
         `⚠️ Job ${job.id} error ${document ? `on document ${document.metadata.url}` : ""}: ${error.message}`,
       );
 
-      // Enhanced error tracking with more context
-      const errorInfo = sanitizeError(error);
-      analytics.track(TelemetryEvent.ERROR_OCCURRED, {
+      // Use PostHog's native error tracking instead of custom events
+      analytics.captureException(error, {
         jobId: job.id, // Job IDs are already anonymous
         library: job.library,
-        errorType: errorInfo.type,
-        errorMessage: errorInfo.message,
         hasDocument: !!document,
         stage: document ? "document_processing" : "job_setup",
-        hasStack: errorInfo.hasStack,
         pages_processed_before_error: job.progressPages || 0,
       });
     },

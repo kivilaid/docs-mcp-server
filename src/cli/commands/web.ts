@@ -13,6 +13,7 @@ import {
   CLI_DEFAULTS,
   createAppServerConfig,
   createPipelineWithCallbacks,
+  resolveEmbeddingContext,
   setupLogging,
   validatePort,
 } from "../utils";
@@ -51,8 +52,18 @@ export function createWebCommand(program: Command): Command {
         setupLogging(globalOptions);
 
         try {
+          // Resolve embedding configuration for local execution
+          const embeddingConfig = resolveEmbeddingContext();
+          if (!serverUrl && !embeddingConfig) {
+            logger.error(
+              "❌ Embedding configuration is required for local mode. Configure an embedding provider with CLI options or environment variables.",
+            );
+            process.exit(1);
+          }
+
           const docService: IDocumentManagement = await createDocumentManagement({
             serverUrl,
+            embeddingConfig,
           });
           const pipelineOptions: PipelineOptions = {
             recoverJobs: false, // Web command doesn't support job recovery

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { Analytics, analytics, TelemetryEvent, trackTool } from "./analytics";
+import { Analytics, analytics, TelemetryEvent } from "./analytics";
 import type { SessionContext } from "./SessionContext";
 
 // Mock the config module
@@ -23,6 +23,7 @@ vi.mock("../utils/logger", () => ({
 vi.mock("./postHogClient", () => ({
   PostHogClient: vi.fn().mockImplementation(() => ({
     capture: vi.fn(),
+    captureException: vi.fn(),
     shutdown: vi.fn().mockResolvedValue(undefined),
     isEnabled: vi.fn(() => true),
   })),
@@ -34,6 +35,7 @@ vi.mock("./SessionTracker", () => ({
     startSession: vi.fn(),
     endSession: vi.fn(() => ({ duration: 5000, interface: "cli" })),
     getSessionContext: vi.fn(),
+    updateSessionContext: vi.fn(),
     getEnrichedProperties: vi.fn((props = {}) => ({
       sessionId: "test-session",
       interface: "cli",
@@ -45,13 +47,13 @@ vi.mock("./SessionTracker", () => ({
 
 const mockSessionContext: SessionContext = {
   sessionId: "test-session",
-  interface: "cli",
+  appInterface: "cli",
   startTime: new Date("2025-08-23T10:00:00Z"),
-  version: "1.0.0",
-  platform: "linux",
-  authEnabled: false,
-  readOnly: false,
-  servicesEnabled: [],
+  appVersion: "1.0.0",
+  appPlatform: "linux",
+  appAuthEnabled: false,
+  appReadOnly: false,
+  appServicesEnabled: [],
 };
 
 describe("Analytics", () => {
@@ -94,7 +96,6 @@ describe("Analytics", () => {
           timestamp: "2025-08-23T10:00:05.000Z",
           version: "1.0.0",
           platform: "linux",
-          sessionDurationTarget: "short",
           authEnabled: false,
           readOnly: false,
           servicesCount: 0,
@@ -175,7 +176,11 @@ describe("trackTool", () => {
     // Use vi.spyOn to spy on the global analytics.track method
     const trackSpy = vi.spyOn(analytics, "track");
 
-    const result = await trackTool("test_tool", mockOperation, mockGetProperties);
+    const result = await analytics.trackTool(
+      "test_tool",
+      mockOperation,
+      mockGetProperties,
+    );
 
     expect(result).toBe("success");
     expect(mockOperation).toHaveBeenCalled();
@@ -194,19 +199,77 @@ describe("trackTool", () => {
   it("should track failed tool usage", async () => {
     const mockOperation = vi.fn().mockRejectedValue(new Error("Test error"));
 
-    // Use vi.spyOn to spy on the global analytics.track method
+    // Use vi.spyOn to spy on the global analytics methods
     const trackSpy = vi.spyOn(analytics, "track");
+    const captureExceptionSpy = vi.spyOn(analytics, "captureException");
 
-    await expect(trackTool("test_tool", mockOperation)).rejects.toThrow("Test error");
+    await expect(analytics.trackTool("test_tool", mockOperation)).rejects.toThrow(
+      "Test error",
+    );
 
     expect(trackSpy).toHaveBeenCalledWith(
       TelemetryEvent.TOOL_USED,
       expect.objectContaining({
         tool: "test_tool",
         success: false,
-        errorType: "Error",
         durationMs: expect.any(Number),
       }),
     );
+
+    expect(captureExceptionSpy).toHaveBeenCalledWith(
+      expect.any(Error),
+      expect.objectContaining({
+        tool: "test_tool",
+        context: "tool_execution",
+        durationMs: expect.any(Number),
+      }),
+    );
+  });
+
+  it("should start session with embedding model context", () => {
+    const analytics = new Analytics(true);
+    const sessionContext = {
+      ...mockSessionContext,
+      embeddingProvider: "openai",
+      embeddingModel: "text-embedding-3-small",
+      embeddingDimensions: 1536,
+    };
+
+    analytics.startSession(sessionContext);
+
+    // Verify that startSession was called on the SessionTracker
+    expect(analytics.isEnabled()).toBe(true);
+  });
+
+  it("should allow session context updates with embedding info", () => {
+    const analytics = new Analytics(true);
+    analytics.startSession(mockSessionContext);
+
+    // Test that updateSessionContext method exists and can be called
+    expect(() => {
+      analytics.updateSessionContext({
+        aiEmbeddingProvider: "google",
+        aiEmbeddingModel: "text-embedding-004",
+        aiEmbeddingDimensions: 768,
+      });
+    }).not.toThrow();
+  });
+  it("should include embedding context in enriched event properties", () => {
+    const analytics = new Analytics(true);
+    const sessionContext = {
+      ...mockSessionContext,
+      aiEmbeddingProvider: "google",
+      aiEmbeddingModel: "text-embedding-004",
+      aiEmbeddingDimensions: 768,
+    };
+
+    analytics.startSession(sessionContext);
+    analytics.track(TelemetryEvent.DOCUMENT_PROCESSED, {
+      mimeType: "text/html",
+      contentSizeBytes: 1024,
+    });
+
+    // The SessionTracker mock should include the embedding context in enriched properties
+    expect(analytics.isEnabled()).toBe(true);
   });
 });

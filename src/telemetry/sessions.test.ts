@@ -12,6 +12,18 @@ vi.mock("../../package.json", () => ({
   default: { version: "1.2.3" },
 }));
 
+// Mock the embedding factory
+vi.mock("../store/embeddings/EmbeddingFactory", () => ({
+  createEmbeddingModel: vi.fn((_modelSpec: string) => {
+    if (_modelSpec === "invalid:model") {
+      throw new Error("Invalid model spec");
+    }
+    return {
+      embedQuery: vi.fn().mockResolvedValue(new Array(1536).fill(0.1)), // Mock 1536-dim vector
+    };
+  }),
+}));
+
 describe("sessionManager", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -21,16 +33,16 @@ describe("sessionManager", () => {
     it("should create CLI session with defaults", () => {
       const session = createCliSession();
 
-      expect(session.interface).toBe("cli");
+      expect(session.appInterface).toBe("cli");
       expect(session.sessionId).toMatch(/^[0-9a-f-]{36}$/);
       expect(session.startTime).toBeInstanceOf(Date);
-      expect(session.version).toBe("1.2.3");
-      expect(session.platform).toBe(process.platform);
-      expect(session.nodeVersion).toBe(process.version);
-      expect(session.command).toBe("unknown");
-      expect(session.authEnabled).toBe(false);
-      expect(session.readOnly).toBe(false);
-      expect(session.servicesEnabled).toEqual(["worker"]);
+      expect(session.appVersion).toBe("1.2.3");
+      expect(session.appPlatform).toBe(process.platform);
+      expect(session.appNodeVersion).toBe(process.version);
+      expect(session.cliCommand).toBe("unknown");
+      expect(session.appAuthEnabled).toBe(false);
+      expect(session.appReadOnly).toBe(false);
+      expect(session.appServicesEnabled).toEqual(["worker"]);
     });
 
     it("should create CLI session with custom options", () => {
@@ -39,9 +51,41 @@ describe("sessionManager", () => {
         readOnly: true,
       });
 
-      expect(session.command).toBe("scrape");
-      expect(session.authEnabled).toBe(true);
-      expect(session.readOnly).toBe(true);
+      expect(session.cliCommand).toBe("scrape");
+      expect(session.appAuthEnabled).toBe(true);
+      expect(session.appReadOnly).toBe(true);
+    });
+
+    it("should create CLI session with embedding context", () => {
+      const embeddingContext = {
+        aiEmbeddingProvider: "openai",
+        aiEmbeddingModel: "text-embedding-3-small",
+        aiEmbeddingDimensions: 1536,
+      };
+
+      const session = createCliSession("search", {
+        authEnabled: false,
+        readOnly: false,
+        embeddingContext,
+      });
+
+      expect(session.cliCommand).toBe("search");
+      expect(session.aiEmbeddingProvider).toBe("openai");
+      expect(session.aiEmbeddingModel).toBe("text-embedding-3-small");
+      expect(session.aiEmbeddingDimensions).toBe(1536);
+    });
+
+    it("should create CLI session without embedding context when null", () => {
+      const session = createCliSession("fetch-url", {
+        authEnabled: false,
+        readOnly: false,
+        embeddingContext: null,
+      });
+
+      expect(session.cliCommand).toBe("fetch-url");
+      expect(session.aiEmbeddingProvider).toBeUndefined();
+      expect(session.aiEmbeddingModel).toBeUndefined();
+      expect(session.aiEmbeddingDimensions).toBeUndefined();
     });
   });
 
@@ -49,13 +93,13 @@ describe("sessionManager", () => {
     it("should create MCP session with defaults", () => {
       const session = createMcpSession({});
 
-      expect(session.interface).toBe("mcp");
+      expect(session.appInterface).toBe("mcp");
       expect(session.sessionId).toMatch(/^[0-9a-f-]{36}$/);
-      expect(session.protocol).toBe("stdio");
-      expect(session.transport).toBeUndefined();
-      expect(session.authEnabled).toBe(false);
-      expect(session.readOnly).toBe(false);
-      expect(session.servicesEnabled).toEqual(["mcp"]);
+      expect(session.mcpProtocol).toBe("stdio");
+      expect(session.mcpTransport).toBeUndefined();
+      expect(session.appAuthEnabled).toBe(false);
+      expect(session.appReadOnly).toBe(false);
+      expect(session.appServicesEnabled).toEqual(["mcp"]);
     });
 
     it("should create MCP session with custom options", () => {
@@ -67,11 +111,33 @@ describe("sessionManager", () => {
         servicesEnabled: ["mcp", "api"],
       });
 
-      expect(session.protocol).toBe("http");
-      expect(session.transport).toBe("sse");
-      expect(session.authEnabled).toBe(true);
-      expect(session.readOnly).toBe(true);
-      expect(session.servicesEnabled).toEqual(["mcp", "api"]);
+      expect(session.mcpProtocol).toBe("http");
+      expect(session.mcpTransport).toBe("sse");
+      expect(session.appAuthEnabled).toBe(true);
+      expect(session.appReadOnly).toBe(true);
+      expect(session.appServicesEnabled).toEqual(["mcp", "api"]);
+    });
+
+    it("should create MCP session with embedding context", () => {
+      const embeddingContext = {
+        aiEmbeddingProvider: "vertex",
+        aiEmbeddingModel: "text-embedding-004",
+        aiEmbeddingDimensions: 768,
+      };
+
+      const session = createMcpSession({
+        protocol: "http",
+        transport: "sse",
+        authEnabled: false,
+        readOnly: false,
+        servicesEnabled: ["mcp"],
+        embeddingContext,
+      });
+
+      expect(session.mcpProtocol).toBe("http");
+      expect(session.aiEmbeddingProvider).toBe("vertex");
+      expect(session.aiEmbeddingModel).toBe("text-embedding-004");
+      expect(session.aiEmbeddingDimensions).toBe(768);
     });
   });
 
@@ -79,13 +145,13 @@ describe("sessionManager", () => {
     it("should create web session with defaults", () => {
       const session = createWebSession({});
 
-      expect(session.interface).toBe("web");
+      expect(session.appInterface).toBe("web");
       expect(session.sessionId).toMatch(/^[0-9a-f-]{36}$/);
-      expect(session.protocol).toBe("http");
-      expect(session.route).toBeUndefined();
-      expect(session.authEnabled).toBe(false);
-      expect(session.readOnly).toBe(false);
-      expect(session.servicesEnabled).toEqual(["web"]);
+      expect(session.mcpProtocol).toBe("http");
+      expect(session.webRoute).toBeUndefined();
+      expect(session.appAuthEnabled).toBe(false);
+      expect(session.appReadOnly).toBe(false);
+      expect(session.appServicesEnabled).toEqual(["web"]);
     });
 
     it("should create web session with custom options", () => {
@@ -95,9 +161,9 @@ describe("sessionManager", () => {
         servicesEnabled: ["web", "worker"],
       });
 
-      expect(session.route).toBe("/docs/search");
-      expect(session.authEnabled).toBe(true);
-      expect(session.servicesEnabled).toEqual(["web", "worker"]);
+      expect(session.webRoute).toBe("/docs/search");
+      expect(session.appAuthEnabled).toBe(true);
+      expect(session.appServicesEnabled).toEqual(["web", "worker"]);
     });
   });
 
@@ -105,11 +171,11 @@ describe("sessionManager", () => {
     it("should create pipeline session with defaults", () => {
       const session = createPipelineSession({});
 
-      expect(session.interface).toBe("pipeline");
+      expect(session.appInterface).toBe("pipeline");
       expect(session.sessionId).toMatch(/^[0-9a-f-]{36}$/);
-      expect(session.authEnabled).toBe(false);
-      expect(session.readOnly).toBe(false);
-      expect(session.servicesEnabled).toEqual(["worker"]);
+      expect(session.appAuthEnabled).toBe(false);
+      expect(session.appReadOnly).toBe(false);
+      expect(session.appServicesEnabled).toEqual(["worker"]);
     });
 
     it("should create pipeline session with custom options", () => {
@@ -119,9 +185,9 @@ describe("sessionManager", () => {
         servicesEnabled: ["worker", "api"],
       });
 
-      expect(session.authEnabled).toBe(true);
-      expect(session.readOnly).toBe(false);
-      expect(session.servicesEnabled).toEqual(["worker", "api"]);
+      expect(session.appAuthEnabled).toBe(true);
+      expect(session.appReadOnly).toBe(false);
+      expect(session.appServicesEnabled).toEqual(["worker", "api"]);
     });
   });
 

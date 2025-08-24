@@ -45,7 +45,7 @@ export function createCliProgram(): Command {
     .showHelpAfterError(true);
 
   // Set up global options handling
-  program.hook("preAction", (thisCommand, actionCommand) => {
+  program.hook("preAction", async (thisCommand, actionCommand) => {
     const globalOptions: GlobalOptions = thisCommand.opts();
 
     // Setup logging
@@ -55,6 +55,8 @@ export function createCliProgram(): Command {
     // Initialize telemetry if enabled
     if (shouldEnableTelemetry()) {
       const commandName = actionCommand.name();
+
+      // Create session without embedding context - commands will provide this themselves
       const session = createCliSession(commandName, {
         authEnabled: false, // CLI doesn't use auth
         readOnly: false,
