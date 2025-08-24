@@ -11,8 +11,8 @@ import type { IPipeline, PipelineOptions } from "../pipeline";
 import { PipelineFactory } from "../pipeline";
 import type { DocumentManagementService } from "../store";
 import {
+  EmbeddingConfig,
   type EmbeddingModelConfig,
-  parseEmbeddingConfig,
 } from "../store/embeddings/EmbeddingConfig";
 import {
   DEFAULT_HTTP_PORT,
@@ -352,10 +352,6 @@ export function warnHttpUsage(authConfig: AuthConfig | undefined, port: number):
 }
 
 /**
- * Resolves embedding context when running locally (no server URL provided).
- * This should be called by commands that need embeddings and are running locally.
- *
-/**
  * Resolves embedding configuration from environment variables and CLI args.
  * This function always attempts to resolve embedding configuration regardless of deployment mode.
  * @param cliArgs Future: CLI arguments that might override environment
@@ -369,7 +365,7 @@ export function resolveEmbeddingContext(cliArgs?: {
     const modelSpec = cliArgs?.embeddingModel || process.env.DOCS_MCP_EMBEDDING_MODEL;
 
     logger.debug("Resolving embedding configuration");
-    const config = parseEmbeddingConfig(modelSpec);
+    const config = EmbeddingConfig.parseEmbeddingConfig(modelSpec);
 
     return config;
   } catch (error) {

@@ -1,9 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import {
-  getKnownModelDimensions,
-  parseEmbeddingConfig,
-  setKnownModelDimensions,
-} from "./EmbeddingConfig";
+import { EmbeddingConfig } from "./EmbeddingConfig";
 
 // Mock process.env for each test
 const originalEnv = process.env;
@@ -15,15 +11,19 @@ beforeEach(() => {
       DOCS_MCP_EMBEDDING_MODEL: undefined,
     },
   });
+  // Reset the singleton for each test to ensure isolation
+  EmbeddingConfig.resetInstance();
 });
 
 afterEach(() => {
   vi.stubGlobal("process", { env: originalEnv });
+  // Reset the singleton after each test
+  EmbeddingConfig.resetInstance();
 });
 
 describe("parseEmbeddingConfig", () => {
   test("should parse OpenAI model without provider prefix", () => {
-    const config = parseEmbeddingConfig("text-embedding-3-small");
+    const config = EmbeddingConfig.parseEmbeddingConfig("text-embedding-3-small");
 
     expect(config).toEqual({
       provider: "openai",
@@ -34,7 +34,7 @@ describe("parseEmbeddingConfig", () => {
   });
 
   test("should parse OpenAI model with explicit provider", () => {
-    const config = parseEmbeddingConfig("openai:text-embedding-3-large");
+    const config = EmbeddingConfig.parseEmbeddingConfig("openai:text-embedding-3-large");
 
     expect(config).toEqual({
       provider: "openai",
@@ -45,7 +45,7 @@ describe("parseEmbeddingConfig", () => {
   });
 
   test("should parse Google Vertex AI model", () => {
-    const config = parseEmbeddingConfig("vertex:text-embedding-004");
+    const config = EmbeddingConfig.parseEmbeddingConfig("vertex:text-embedding-004");
 
     expect(config).toEqual({
       provider: "vertex",
@@ -56,7 +56,7 @@ describe("parseEmbeddingConfig", () => {
   });
 
   test("should parse Google Gemini model", () => {
-    const config = parseEmbeddingConfig("gemini:embedding-001");
+    const config = EmbeddingConfig.parseEmbeddingConfig("gemini:embedding-001");
 
     expect(config).toEqual({
       provider: "gemini",
@@ -67,7 +67,9 @@ describe("parseEmbeddingConfig", () => {
   });
 
   test("should parse AWS Bedrock model with colon in name", () => {
-    const config = parseEmbeddingConfig("aws:amazon.titan-embed-text-v2:0");
+    const config = EmbeddingConfig.parseEmbeddingConfig(
+      "aws:amazon.titan-embed-text-v2:0",
+    );
 
     expect(config).toEqual({
       provider: "aws",
@@ -78,7 +80,9 @@ describe("parseEmbeddingConfig", () => {
   });
 
   test("should parse SageMaker model", () => {
-    const config = parseEmbeddingConfig("sagemaker:intfloat/multilingual-e5-large");
+    const config = EmbeddingConfig.parseEmbeddingConfig(
+      "sagemaker:intfloat/multilingual-e5-large",
+    );
 
     expect(config).toEqual({
       provider: "sagemaker",
@@ -88,7 +92,9 @@ describe("parseEmbeddingConfig", () => {
     });
   });
   test("should parse Microsoft Azure model", () => {
-    const config = parseEmbeddingConfig("microsoft:text-embedding-ada-002");
+    const config = EmbeddingConfig.parseEmbeddingConfig(
+      "microsoft:text-embedding-ada-002",
+    );
 
     expect(config).toEqual({
       provider: "microsoft",
@@ -99,7 +105,7 @@ describe("parseEmbeddingConfig", () => {
   });
 
   test("should return null dimensions for unknown model", () => {
-    const config = parseEmbeddingConfig("openai:unknown-model");
+    const config = EmbeddingConfig.parseEmbeddingConfig("openai:unknown-model");
 
     expect(config).toEqual({
       provider: "openai",
@@ -117,7 +123,7 @@ describe("parseEmbeddingConfig", () => {
       },
     });
 
-    const config = parseEmbeddingConfig();
+    const config = EmbeddingConfig.parseEmbeddingConfig();
 
     expect(config).toEqual({
       provider: "vertex",
@@ -128,7 +134,7 @@ describe("parseEmbeddingConfig", () => {
   });
 
   test("should default to text-embedding-3-small when no env var set", () => {
-    const config = parseEmbeddingConfig();
+    const config = EmbeddingConfig.parseEmbeddingConfig();
 
     expect(config).toEqual({
       provider: "openai",
@@ -142,25 +148,33 @@ describe("parseEmbeddingConfig", () => {
 describe("getKnownModelDimensions", () => {
   test("should return known dimensions for various model types", () => {
     // OpenAI models
-    expect(getKnownModelDimensions("text-embedding-3-small")).toBe(1536);
-    expect(getKnownModelDimensions("text-embedding-3-large")).toBe(3072);
+    expect(EmbeddingConfig.getKnownModelDimensions("text-embedding-3-small")).toBe(1536);
+    expect(EmbeddingConfig.getKnownModelDimensions("text-embedding-3-large")).toBe(3072);
 
     // Google models
-    expect(getKnownModelDimensions("text-embedding-004")).toBe(768);
-    expect(getKnownModelDimensions("embedding-001")).toBe(768);
+    expect(EmbeddingConfig.getKnownModelDimensions("text-embedding-004")).toBe(768);
+    expect(EmbeddingConfig.getKnownModelDimensions("embedding-001")).toBe(768);
 
     // AWS models
-    expect(getKnownModelDimensions("amazon.titan-embed-text-v1")).toBe(1536);
-    expect(getKnownModelDimensions("amazon.titan-embed-text-v2:0")).toBe(1024);
-    expect(getKnownModelDimensions("cohere.embed-english-v3")).toBe(1024);
+    expect(EmbeddingConfig.getKnownModelDimensions("amazon.titan-embed-text-v1")).toBe(
+      1536,
+    );
+    expect(EmbeddingConfig.getKnownModelDimensions("amazon.titan-embed-text-v2:0")).toBe(
+      1024,
+    );
+    expect(EmbeddingConfig.getKnownModelDimensions("cohere.embed-english-v3")).toBe(1024);
 
     // SageMaker models
-    expect(getKnownModelDimensions("intfloat/multilingual-e5-large")).toBe(1024);
-    expect(getKnownModelDimensions("sentence-transformers/all-MiniLM-L6-v2")).toBe(384);
+    expect(
+      EmbeddingConfig.getKnownModelDimensions("intfloat/multilingual-e5-large"),
+    ).toBe(1024);
+    expect(
+      EmbeddingConfig.getKnownModelDimensions("sentence-transformers/all-MiniLM-L6-v2"),
+    ).toBe(384);
   });
 
   test("should return null for unknown model", () => {
-    expect(getKnownModelDimensions("unknown-model")).toBeNull();
+    expect(EmbeddingConfig.getKnownModelDimensions("unknown-model")).toBeNull();
   });
 });
 
@@ -170,16 +184,16 @@ describe("setKnownModelDimensions", () => {
     const dimensions = 2048;
 
     // Initially unknown
-    expect(getKnownModelDimensions(modelName)).toBeNull();
+    expect(EmbeddingConfig.getKnownModelDimensions(modelName)).toBeNull();
 
     // Cache the dimensions
-    setKnownModelDimensions(modelName, dimensions);
+    EmbeddingConfig.setKnownModelDimensions(modelName, dimensions);
 
     // Now should return cached value
-    expect(getKnownModelDimensions(modelName)).toBe(dimensions);
+    expect(EmbeddingConfig.getKnownModelDimensions(modelName)).toBe(dimensions);
 
     // Should also work in parseEmbeddingConfig
-    const config = parseEmbeddingConfig(`openai:${modelName}`);
+    const config = EmbeddingConfig.parseEmbeddingConfig(`openai:${modelName}`);
     expect(config.dimensions).toBe(dimensions);
   });
 
@@ -188,35 +202,35 @@ describe("setKnownModelDimensions", () => {
     const newDimensions = 999;
 
     // Initial known value
-    expect(getKnownModelDimensions(modelName)).toBe(1536);
+    expect(EmbeddingConfig.getKnownModelDimensions(modelName)).toBe(1536);
 
     // Update the dimensions
-    setKnownModelDimensions(modelName, newDimensions);
+    EmbeddingConfig.setKnownModelDimensions(modelName, newDimensions);
 
     // Should return updated value
-    expect(getKnownModelDimensions(modelName)).toBe(newDimensions);
+    expect(EmbeddingConfig.getKnownModelDimensions(modelName)).toBe(newDimensions);
   });
 });
 
 describe("case-insensitive model lookups", () => {
   test("should find models with different capitalization", () => {
     // Use a model that wasn't modified by previous tests
-    expect(getKnownModelDimensions("text-embedding-3-large")).toBe(3072);
-    expect(getKnownModelDimensions("TEXT-EMBEDDING-3-LARGE")).toBe(3072);
-    expect(getKnownModelDimensions("Text-Embedding-3-Large")).toBe(3072);
-    expect(getKnownModelDimensions("TEXT-embedding-3-LARGE")).toBe(3072);
+    expect(EmbeddingConfig.getKnownModelDimensions("text-embedding-3-large")).toBe(3072);
+    expect(EmbeddingConfig.getKnownModelDimensions("TEXT-EMBEDDING-3-LARGE")).toBe(3072);
+    expect(EmbeddingConfig.getKnownModelDimensions("Text-Embedding-3-Large")).toBe(3072);
+    expect(EmbeddingConfig.getKnownModelDimensions("TEXT-embedding-3-LARGE")).toBe(3072);
   });
 
   test("should find Hugging Face models with different capitalization", () => {
     // Test some MTEB models with different cases
-    expect(getKnownModelDimensions("BAAI/bge-large-en-v1.5")).toBe(1024);
-    expect(getKnownModelDimensions("baai/bge-large-en-v1.5")).toBe(1024);
-    expect(getKnownModelDimensions("Baai/Bge-Large-En-V1.5")).toBe(1024);
+    expect(EmbeddingConfig.getKnownModelDimensions("BAAI/bge-large-en-v1.5")).toBe(1024);
+    expect(EmbeddingConfig.getKnownModelDimensions("baai/bge-large-en-v1.5")).toBe(1024);
+    expect(EmbeddingConfig.getKnownModelDimensions("Baai/Bge-Large-En-V1.5")).toBe(1024);
   });
 
   test("should work in parseEmbeddingConfig with different capitalization", () => {
-    const config1 = parseEmbeddingConfig("openai:TEXT-EMBEDDING-3-LARGE");
-    const config2 = parseEmbeddingConfig("openai:text-embedding-3-large");
+    const config1 = EmbeddingConfig.parseEmbeddingConfig("openai:TEXT-EMBEDDING-3-LARGE");
+    const config2 = EmbeddingConfig.parseEmbeddingConfig("openai:text-embedding-3-large");
 
     expect(config1.dimensions).toBe(3072);
     expect(config2.dimensions).toBe(3072);
@@ -229,11 +243,51 @@ describe("case-insensitive model lookups", () => {
     const dimensions = 512;
 
     // Set dimensions for one case
-    setKnownModelDimensions(modelName, dimensions);
+    EmbeddingConfig.setKnownModelDimensions(modelName, dimensions);
 
     // Should find it with different capitalization
-    expect(getKnownModelDimensions("new-test-model")).toBe(dimensions);
-    expect(getKnownModelDimensions("NEW-TEST-MODEL")).toBe(dimensions);
-    expect(getKnownModelDimensions("New-Test-Model")).toBe(dimensions);
+    expect(EmbeddingConfig.getKnownModelDimensions("new-test-model")).toBe(dimensions);
+    expect(EmbeddingConfig.getKnownModelDimensions("NEW-TEST-MODEL")).toBe(dimensions);
+    expect(EmbeddingConfig.getKnownModelDimensions("New-Test-Model")).toBe(dimensions);
+  });
+});
+
+describe("EmbeddingConfig class", () => {
+  test("should allow creating isolated instances for testing", () => {
+    const config1 = new EmbeddingConfig();
+    const config2 = new EmbeddingConfig();
+
+    // Add a model to one instance
+    config1.setKnownDimensions("test-model-1", 1000);
+
+    // Should be available in that instance
+    expect(config1.getKnownDimensions("test-model-1")).toBe(1000);
+
+    // Should not affect the other instance
+    expect(config2.getKnownDimensions("test-model-1")).toBeNull();
+
+    // Add a different model to the second instance
+    config2.setKnownDimensions("test-model-2", 2000);
+
+    // Verify isolation
+    expect(config1.getKnownDimensions("test-model-2")).toBeNull();
+    expect(config2.getKnownDimensions("test-model-2")).toBe(2000);
+  });
+
+  test("should support parsing with isolated instances", () => {
+    const config = new EmbeddingConfig();
+
+    // Add a custom model
+    config.setKnownDimensions("custom-model", 512);
+
+    // Parse using the instance
+    const result = config.parse("openai:custom-model");
+
+    expect(result).toEqual({
+      provider: "openai",
+      model: "custom-model",
+      dimensions: 512,
+      modelSpec: "openai:custom-model",
+    });
   });
 });

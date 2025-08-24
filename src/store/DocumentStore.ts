@@ -8,11 +8,7 @@ import type { DocumentMetadata } from "../types";
 import { EMBEDDING_BATCH_CHARS, EMBEDDING_BATCH_SIZE } from "../utils/config";
 import { logger } from "../utils/logger";
 import { applyMigrations } from "./applyMigrations";
-import {
-  type EmbeddingModelConfig,
-  parseEmbeddingConfig,
-  setKnownModelDimensions,
-} from "./embeddings/EmbeddingConfig";
+import { EmbeddingConfig, type EmbeddingModelConfig } from "./embeddings/EmbeddingConfig";
 import {
   createEmbeddingModel,
   ModelConfigurationError,
@@ -389,7 +385,7 @@ export class DocumentStore {
     }
 
     // Use provided config or fall back to parsing environment
-    const config = this.embeddingConfig || parseEmbeddingConfig();
+    const config = this.embeddingConfig || EmbeddingConfig.parseEmbeddingConfig();
 
     // Create embedding model
     try {
@@ -404,7 +400,7 @@ export class DocumentStore {
         this.modelDimension = testVector.length;
 
         // Cache the discovered dimensions for future use
-        setKnownModelDimensions(config.model, this.modelDimension);
+        EmbeddingConfig.setKnownModelDimensions(config.model, this.modelDimension);
       }
 
       if (this.modelDimension > this.dbDimension) {
