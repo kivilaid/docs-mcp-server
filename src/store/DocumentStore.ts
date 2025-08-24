@@ -8,6 +8,7 @@ import type { DocumentMetadata } from "../types";
 import { EMBEDDING_BATCH_CHARS, EMBEDDING_BATCH_SIZE } from "../utils/config";
 import { logger } from "../utils/logger";
 import { applyMigrations } from "./applyMigrations";
+import { ModelConfigurationError } from "./embeddings/EmbeddingFactory";
 import { ConnectionError, DimensionError, StoreError } from "./errors";
 import type { StoredScraperOptions } from "./types";
 import {
@@ -412,8 +413,8 @@ export class DocumentStore {
       // 4. Initialize embeddings client (await to catch errors)
       await this.initializeEmbeddings();
     } catch (error) {
-      // Re-throw StoreError directly, wrap others in ConnectionError
-      if (error instanceof StoreError) {
+      // Re-throw StoreError and ModelConfigurationError directly, wrap others in ConnectionError
+      if (error instanceof StoreError || error instanceof ModelConfigurationError) {
         throw error;
       }
       throw new ConnectionError("Failed to initialize database connection", error);
