@@ -41,6 +41,15 @@ export class SessionTracker {
   }
 
   /**
+   * Update session context with additional fields
+   */
+  updateSessionContext(updates: Partial<SessionContext>): void {
+    if (this.sessionContext) {
+      this.sessionContext = { ...this.sessionContext, ...updates };
+    }
+  }
+
+  /**
    * Get enriched properties with session context
    */
   getEnrichedProperties(

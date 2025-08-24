@@ -71,6 +71,15 @@ export class Analytics {
   }
 
   /**
+   * Update session context with additional fields (e.g., embedding model info)
+   */
+  updateSessionContext(updates: Partial<SessionContext>): void {
+    if (!this.enabled) return;
+
+    this.sessionTracker.updateSessionContext(updates);
+  }
+
+  /**
    * Track an event with automatic session context inclusion
    */
   track(event: string, properties: Record<string, unknown> = {}): void {

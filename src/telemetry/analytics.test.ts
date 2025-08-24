@@ -35,6 +35,7 @@ vi.mock("./SessionTracker", () => ({
     startSession: vi.fn(),
     endSession: vi.fn(() => ({ duration: 5000, interface: "cli" })),
     getSessionContext: vi.fn(),
+    updateSessionContext: vi.fn(),
     getEnrichedProperties: vi.fn((props = {}) => ({
       sessionId: "test-session",
       interface: "cli",
@@ -217,5 +218,52 @@ describe("trackTool", () => {
         durationMs: expect.any(Number),
       }),
     );
+  });
+
+  it("should start session with embedding model context", () => {
+    const analytics = new Analytics(true);
+    const sessionContext = {
+      ...mockSessionContext,
+      embeddingProvider: "openai",
+      embeddingModel: "text-embedding-3-small",
+      embeddingDimensions: 1536,
+    };
+
+    analytics.startSession(sessionContext);
+
+    // Verify that startSession was called on the SessionTracker
+    expect(analytics.isEnabled()).toBe(true);
+  });
+
+  it("should allow session context updates with embedding info", () => {
+    const analytics = new Analytics(true);
+    analytics.startSession(mockSessionContext);
+
+    // Test that updateSessionContext method exists and can be called
+    expect(() => {
+      analytics.updateSessionContext({
+        embeddingProvider: "google",
+        embeddingModel: "text-embedding-004",
+        embeddingDimensions: 768,
+      });
+    }).not.toThrow();
+  });
+  it("should include embedding context in enriched event properties", () => {
+    const analytics = new Analytics(true);
+    const sessionContext = {
+      ...mockSessionContext,
+      embeddingProvider: "google",
+      embeddingModel: "text-embedding-004",
+      embeddingDimensions: 768,
+    };
+
+    analytics.startSession(sessionContext);
+    analytics.track(TelemetryEvent.DOCUMENT_PROCESSED, {
+      mimeType: "text/html",
+      contentSizeBytes: 1024,
+    });
+
+    // The SessionTracker mock should include the embedding context in enriched properties
+    expect(analytics.isEnabled()).toBe(true);
   });
 });

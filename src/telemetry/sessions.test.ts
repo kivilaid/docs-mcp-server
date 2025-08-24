@@ -4,12 +4,25 @@ import {
   createMcpSession,
   createPipelineSession,
   createWebSession,
+  getEmbeddingModelContext,
   getEnabledServices,
 } from "./sessions";
 
 // Mock package.json
 vi.mock("../../package.json", () => ({
   default: { version: "1.2.3" },
+}));
+
+// Mock the embedding factory
+vi.mock("../store/embeddings/EmbeddingFactory", () => ({
+  createEmbeddingModel: vi.fn((_modelSpec: string) => {
+    if (_modelSpec === "invalid:model") {
+      throw new Error("Invalid model spec");
+    }
+    return {
+      embedQuery: vi.fn().mockResolvedValue(new Array(1536).fill(0.1)), // Mock 1536-dim vector
+    };
+  }),
 }));
 
 describe("sessionManager", () => {
@@ -177,6 +190,65 @@ describe("sessionManager", () => {
       // Times should be very close but potentially different
       expect(session1.startTime).toBeInstanceOf(Date);
       expect(session2.startTime).toBeInstanceOf(Date);
+    });
+  });
+
+  describe("getEmbeddingModelContext", () => {
+    it("should extract provider and model from environment variable", async () => {
+      // Mock environment variable
+      const originalEnv = process.env.DOCS_MCP_EMBEDDING_MODEL;
+      process.env.DOCS_MCP_EMBEDDING_MODEL = "google:text-embedding-004";
+
+      const context = await getEmbeddingModelContext();
+
+      expect(context.embeddingProvider).toBe("google");
+      expect(context.embeddingModel).toBe("text-embedding-004");
+      expect(context.embeddingDimensions).toBeGreaterThan(0);
+
+      // Restore environment
+      if (originalEnv !== undefined) {
+        process.env.DOCS_MCP_EMBEDDING_MODEL = originalEnv;
+      } else {
+        delete process.env.DOCS_MCP_EMBEDDING_MODEL;
+      }
+    });
+
+    it("should default to openai when no provider specified", async () => {
+      // Mock environment variable
+      const originalEnv = process.env.DOCS_MCP_EMBEDDING_MODEL;
+      process.env.DOCS_MCP_EMBEDDING_MODEL = "text-embedding-3-small";
+
+      const context = await getEmbeddingModelContext();
+
+      expect(context.embeddingProvider).toBe("openai");
+      expect(context.embeddingModel).toBe("text-embedding-3-small");
+      expect(context.embeddingDimensions).toBeGreaterThan(0);
+
+      // Restore environment
+      if (originalEnv !== undefined) {
+        process.env.DOCS_MCP_EMBEDDING_MODEL = originalEnv;
+      } else {
+        delete process.env.DOCS_MCP_EMBEDDING_MODEL;
+      }
+    });
+
+    it("should handle errors gracefully", async () => {
+      // Mock environment variable with invalid model
+      const originalEnv = process.env.DOCS_MCP_EMBEDDING_MODEL;
+      process.env.DOCS_MCP_EMBEDDING_MODEL = "invalid:model";
+
+      const context = await getEmbeddingModelContext();
+
+      expect(context.embeddingProvider).toBe("unknown");
+      expect(context.embeddingModel).toBe("unknown");
+      expect(context.embeddingDimensions).toBe(0);
+
+      // Restore environment
+      if (originalEnv !== undefined) {
+        process.env.DOCS_MCP_EMBEDDING_MODEL = originalEnv;
+      } else {
+        delete process.env.DOCS_MCP_EMBEDDING_MODEL;
+      }
     });
   });
 });

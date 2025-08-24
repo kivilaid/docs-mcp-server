@@ -19,4 +19,9 @@ export interface SessionContext {
   authEnabled: boolean;
   readOnly: boolean;
   servicesEnabled: string[];
+
+  // Embedding model context
+  embeddingProvider?: string; // "openai", "google", "aws", "microsoft"
+  embeddingModel?: string; // "text-embedding-3-small", "text-embedding-004", etc.
+  embeddingDimensions?: number; // Actual embedding dimensions used
 }

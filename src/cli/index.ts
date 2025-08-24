@@ -7,6 +7,7 @@ import packageJson from "../../package.json";
 import {
   analytics,
   createCliSession,
+  initializeEmbeddingContext,
   shouldEnableTelemetry,
   TelemetryConfig,
 } from "../telemetry";
@@ -45,7 +46,7 @@ export function createCliProgram(): Command {
     .showHelpAfterError(true);
 
   // Set up global options handling
-  program.hook("preAction", (thisCommand, actionCommand) => {
+  program.hook("preAction", async (thisCommand, actionCommand) => {
     const globalOptions: GlobalOptions = thisCommand.opts();
 
     // Setup logging
@@ -60,6 +61,11 @@ export function createCliProgram(): Command {
         readOnly: false,
       });
       analytics.startSession(session);
+
+      // Initialize embedding model context asynchronously (don't block command execution)
+      initializeEmbeddingContext().catch(() => {
+        // Silently ignore embedding context initialization failures
+      });
     } else {
       TelemetryConfig.getInstance().disable();
     }

@@ -5,6 +5,7 @@
 
 import { randomUUID } from "node:crypto";
 import packageJson from "../../package.json";
+import { analytics } from "./analytics";
 import type { SessionContext } from "./SessionContext";
 
 /**
@@ -12,6 +13,46 @@ import type { SessionContext } from "./SessionContext";
  */
 function getPackageVersion(): string {
   return packageJson.version || "unknown";
+}
+
+/**
+ * Extract embedding model information from environment configuration.
+ * Returns provider, model name, and dimensions for telemetry tracking.
+ */
+export async function getEmbeddingModelContext(): Promise<{
+  embeddingProvider: string;
+  embeddingModel: string;
+  embeddingDimensions: number;
+}> {
+  try {
+    // Import dynamically to avoid circular dependencies
+    const { createEmbeddingModel } = await import("../store/embeddings/EmbeddingFactory");
+
+    const modelSpec = process.env.DOCS_MCP_EMBEDDING_MODEL || "text-embedding-3-small";
+
+    // Parse provider and model from string (e.g., "gemini:embedding-001" or just "text-embedding-3-small")
+    const [providerOrModel, modelName] = modelSpec.split(":");
+    const provider = modelName ? providerOrModel : "openai"; // Default to openai if no provider specified
+    const model = modelName || providerOrModel;
+
+    // Create embedding model to get dimensions
+    const embeddings = createEmbeddingModel(modelSpec);
+    const testVector = await embeddings.embedQuery("test");
+    const dimensions = testVector.length;
+
+    return {
+      embeddingProvider: provider,
+      embeddingModel: model,
+      embeddingDimensions: dimensions,
+    };
+  } catch (_error) {
+    // Fallback if embedding model initialization fails
+    return {
+      embeddingProvider: "unknown",
+      embeddingModel: "unknown",
+      embeddingDimensions: 0,
+    };
+  }
 }
 
 /**
@@ -125,4 +166,15 @@ export function getEnabledServices(config?: {
   if (config?.worker) services.push("worker");
 
   return services.length > 0 ? services : ["worker"]; // Default to worker
+}
+
+/**
+ * Initialize embedding model context for an active session.
+ * This should be called after session creation to populate embedding model info asynchronously.
+ */
+export async function initializeEmbeddingContext(): Promise<void> {
+  const embeddingContext = await getEmbeddingModelContext();
+  if (embeddingContext.embeddingProvider || embeddingContext.embeddingModel) {
+    analytics.updateSessionContext(embeddingContext);
+  }
 }
