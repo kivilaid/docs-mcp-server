@@ -16,6 +16,7 @@ import {
 import {
   createEmbeddingModel,
   ModelConfigurationError,
+  UnsupportedProviderError,
 } from "./embeddings/EmbeddingFactory";
 import { ConnectionError, DimensionError, StoreError } from "./errors";
 import type { StoredScraperOptions } from "./types";
@@ -391,27 +392,56 @@ export class DocumentStore {
     const config = this.embeddingConfig || parseEmbeddingConfig();
 
     // Create embedding model
-    this.embeddings = createEmbeddingModel(config.modelSpec);
+    try {
+      this.embeddings = createEmbeddingModel(config.modelSpec);
 
-    // Use known dimensions if available, otherwise detect via test query
-    if (config.dimensions !== null) {
-      this.modelDimension = config.dimensions;
-    } else {
-      // Fallback: determine the model's actual dimension by embedding a test string
-      const testVector = await this.embeddings.embedQuery("test");
-      this.modelDimension = testVector.length;
+      // Use known dimensions if available, otherwise detect via test query
+      if (config.dimensions !== null) {
+        this.modelDimension = config.dimensions;
+      } else {
+        // Fallback: determine the model's actual dimension by embedding a test string
+        const testVector = await this.embeddings.embedQuery("test");
+        this.modelDimension = testVector.length;
 
-      // Cache the discovered dimensions for future use
-      setKnownModelDimensions(config.model, this.modelDimension);
+        // Cache the discovered dimensions for future use
+        setKnownModelDimensions(config.model, this.modelDimension);
+      }
+
+      if (this.modelDimension > this.dbDimension) {
+        throw new DimensionError(config.modelSpec, this.modelDimension, this.dbDimension);
+      }
+
+      logger.debug(
+        `Embeddings initialized: ${config.provider}:${config.model} (${this.modelDimension}d)`,
+      );
+    } catch (error) {
+      // Handle model-related errors with helpful messages
+      if (error instanceof Error) {
+        if (
+          error.message.includes("does not exist") ||
+          error.message.includes("MODEL_NOT_FOUND")
+        ) {
+          throw new ModelConfigurationError(
+            `❌ Invalid embedding model: ${config.model}\n` +
+              `   The model "${config.model}" is not available or you don't have access to it.\n` +
+              "   See README.md for supported models or run with --help for more details.",
+          );
+        }
+        if (
+          error.message.includes("API key") ||
+          error.message.includes("401") ||
+          error.message.includes("authentication")
+        ) {
+          throw new ModelConfigurationError(
+            `❌ Authentication failed for ${config.provider} embedding provider\n` +
+              "   Please check your API key configuration.\n" +
+              "   See README.md for configuration options or run with --help for more details.",
+          );
+        }
+      }
+      // Re-throw other embedding errors (like DimensionError) as-is
+      throw error;
     }
-
-    if (this.modelDimension > this.dbDimension) {
-      throw new DimensionError(config.modelSpec, this.modelDimension, this.dbDimension);
-    }
-
-    logger.debug(
-      `Embeddings initialized: ${config.provider}:${config.model} (${this.modelDimension}d)`,
-    );
   }
 
   /**
@@ -442,8 +472,12 @@ export class DocumentStore {
       // 4. Initialize embeddings client (await to catch errors)
       await this.initializeEmbeddings();
     } catch (error) {
-      // Re-throw StoreError and ModelConfigurationError directly, wrap others in ConnectionError
-      if (error instanceof StoreError || error instanceof ModelConfigurationError) {
+      // Re-throw StoreError, ModelConfigurationError, and UnsupportedProviderError directly
+      if (
+        error instanceof StoreError ||
+        error instanceof ModelConfigurationError ||
+        error instanceof UnsupportedProviderError
+      ) {
         throw error;
       }
       throw new ConnectionError("Failed to initialize database connection", error);
