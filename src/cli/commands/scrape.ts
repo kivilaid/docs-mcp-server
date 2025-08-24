@@ -8,8 +8,6 @@ import type { IPipeline } from "../../pipeline/trpc/interfaces";
 import { ScrapeMode } from "../../scraper/types";
 import { createDocumentManagement } from "../../store";
 import type { IDocumentManagement } from "../../store/trpc/interfaces";
-import { extractCliFlags, extractProtocol, trackTool } from "../../telemetry";
-import type { ScrapeExecuteResult } from "../../tools";
 import { ScrapeTool } from "../../tools";
 import {
   DEFAULT_MAX_CONCURRENCY,
@@ -60,55 +58,30 @@ export async function scrapeAction(
 
     const headers = parseHeaders(options.header);
 
-    // Track command execution with privacy-safe analytics
-    const result = await trackTool(
-      "scrape_docs",
-      () =>
-        scrapeTool.execute({
-          url,
-          library,
-          version: options.version,
-          options: {
-            maxPages: Number.parseInt(options.maxPages, 10),
-            maxDepth: Number.parseInt(options.maxDepth, 10),
-            maxConcurrency: Number.parseInt(options.maxConcurrency, 10),
-            ignoreErrors: options.ignoreErrors,
-            scope: options.scope as "subpages" | "hostname" | "domain",
-            followRedirects: options.followRedirects,
-            scrapeMode: options.scrapeMode,
-            includePatterns:
-              Array.isArray(options.includePattern) && options.includePattern.length > 0
-                ? options.includePattern
-                : undefined,
-            excludePatterns:
-              Array.isArray(options.excludePattern) && options.excludePattern.length > 0
-                ? options.excludePattern
-                : undefined,
-            headers: Object.keys(headers).length > 0 ? headers : undefined,
-          },
-        }),
-      (result: ScrapeExecuteResult) => ({
-        library: library, // Safe: library names are public
-        url_protocol: extractProtocol(url), // Safe: only protocol, not full URL
-        max_pages: Number.parseInt(options.maxPages, 10),
-        max_depth: Number.parseInt(options.maxDepth, 10),
-        max_concurrency: Number.parseInt(options.maxConcurrency, 10),
-        has_version: !!options.version,
-        scope: options.scope,
-        scrape_mode: options.scrapeMode,
-        ignore_errors: options.ignoreErrors,
-        follow_redirects: options.followRedirects,
-        has_include_patterns:
-          Array.isArray(options.includePattern) && options.includePattern.length > 0,
-        has_exclude_patterns:
-          Array.isArray(options.excludePattern) && options.excludePattern.length > 0,
-        has_custom_headers: Object.keys(headers).length > 0,
-        using_remote_server: !!serverUrl,
-        cli_flags: extractCliFlags(process.argv),
-        is_async_job: !("pagesScraped" in result), // Pipeline mode vs direct mode
-        pages_scraped: "pagesScraped" in result ? result.pagesScraped : undefined,
-      }),
-    );
+    // Call the tool directly - tracking is now handled inside the tool
+    const result = await scrapeTool.execute({
+      url,
+      library,
+      version: options.version,
+      options: {
+        maxPages: Number.parseInt(options.maxPages, 10),
+        maxDepth: Number.parseInt(options.maxDepth, 10),
+        maxConcurrency: Number.parseInt(options.maxConcurrency, 10),
+        ignoreErrors: options.ignoreErrors,
+        scope: options.scope as "subpages" | "hostname" | "domain",
+        followRedirects: options.followRedirects,
+        scrapeMode: options.scrapeMode,
+        includePatterns:
+          Array.isArray(options.includePattern) && options.includePattern.length > 0
+            ? options.includePattern
+            : undefined,
+        excludePatterns:
+          Array.isArray(options.excludePattern) && options.excludePattern.length > 0
+            ? options.excludePattern
+            : undefined,
+        headers: Object.keys(headers).length > 0 ? headers : undefined,
+      },
+    });
 
     if ("pagesScraped" in result) {
       console.log(`✅ Successfully scraped ${result.pagesScraped} pages`);

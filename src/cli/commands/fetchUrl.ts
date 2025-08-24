@@ -5,7 +5,6 @@
 import type { Command } from "commander";
 import { FileFetcher, HttpFetcher } from "../../scraper/fetcher";
 import { ScrapeMode } from "../../scraper/types";
-import { extractCliFlags, extractProtocol, trackTool } from "../../telemetry";
 import { FetchUrlTool } from "../../tools";
 import { parseHeaders, setupLogging } from "../utils";
 
@@ -20,25 +19,13 @@ export async function fetchUrlAction(
   const headers = parseHeaders(options.header);
   const fetchUrlTool = new FetchUrlTool(new HttpFetcher(), new FileFetcher());
 
-  // Track command execution with privacy-safe analytics
-  const content = await trackTool(
-    "fetch_url",
-    () =>
-      fetchUrlTool.execute({
-        url,
-        followRedirects: options.followRedirects,
-        scrapeMode: options.scrapeMode,
-        headers: Object.keys(headers).length > 0 ? headers : undefined,
-      }),
-    (content: string) => ({
-      url_protocol: extractProtocol(url), // Safe: only protocol, not full URL
-      follow_redirects: options.followRedirects,
-      scrape_mode: options.scrapeMode,
-      has_custom_headers: Object.keys(headers).length > 0,
-      content_length: content.length,
-      cli_flags: extractCliFlags(process.argv),
-    }),
-  );
+  // Call the tool directly - tracking is now handled inside the tool
+  const content = await fetchUrlTool.execute({
+    url,
+    followRedirects: options.followRedirects,
+    scrapeMode: options.scrapeMode,
+    headers: Object.keys(headers).length > 0 ? headers : undefined,
+  });
 
   console.log(content);
 }

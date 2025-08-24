@@ -190,15 +190,3 @@ export class Analytics {
  * Global analytics instance
  */
 export const analytics = new Analytics();
-
-/**
- * Helper function for tracking tool usage with error handling
- * @deprecated Use analytics.trackTool() instance method instead
- */
-export async function trackTool<T>(
-  toolName: string,
-  operation: () => Promise<T>,
-  getProperties?: (result: T) => Record<string, unknown>,
-): Promise<T> {
-  return analytics.trackTool(toolName, operation, getProperties);
-}

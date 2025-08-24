@@ -9,6 +9,7 @@ import { MarkdownPipeline } from "../scraper/pipelines/MarkdownPipeline";
 import { ScrapeMode } from "../scraper/types";
 import { convertToString } from "../scraper/utils/buffer";
 import { resolveCharset } from "../scraper/utils/charset";
+import { analytics } from "../telemetry";
 import { ScraperError } from "../utils/errors";
 import { logger } from "../utils/logger";
 import { ToolError } from "./errors";
@@ -66,98 +67,118 @@ export class FetchUrlTool {
    * @throws {ToolError} If fetching or processing fails
    */
   async execute(options: FetchUrlToolOptions): Promise<string> {
-    const { url, scrapeMode = ScrapeMode.Auto, headers } = options;
+    return analytics.trackTool(
+      "fetch_url",
+      async () => {
+        const { url, scrapeMode = ScrapeMode.Auto, headers } = options;
 
-    const canFetchResults = this.fetchers.map((f) => f.canFetch(url));
-    const fetcherIndex = canFetchResults.indexOf(true);
-    if (fetcherIndex === -1) {
-      throw new ToolError(
-        `Invalid URL: ${url}. Must be an HTTP/HTTPS URL or a file:// URL.`,
-        this.constructor.name,
-      );
-    }
-
-    const fetcher = this.fetchers[fetcherIndex];
-    const htmlPipeline = new HtmlPipeline();
-    const markdownPipeline = new MarkdownPipeline();
-    const pipelines = [htmlPipeline, markdownPipeline];
-
-    try {
-      logger.info(`📡 Fetching ${url}...`);
-      const rawContent: RawContent = await fetcher.fetch(url, {
-        followRedirects: options.followRedirects ?? true,
-        maxRetries: 3,
-        headers, // propagate custom headers
-      });
-
-      logger.info("🔄 Processing content...");
-
-      let processed: Awaited<ReturnType<(typeof htmlPipeline)["process"]>> | undefined;
-      for (const pipeline of pipelines) {
-        if (pipeline.canProcess(rawContent)) {
-          processed = await pipeline.process(
-            rawContent,
-            {
-              url,
-              library: "",
-              version: "",
-              maxDepth: 0,
-              maxPages: 1,
-              maxConcurrency: 1,
-              scope: "subpages",
-              followRedirects: options.followRedirects ?? true,
-              excludeSelectors: undefined,
-              ignoreErrors: false,
-              scrapeMode,
-              headers, // propagate custom headers
-            },
-            fetcher,
+        const canFetchResults = this.fetchers.map((f) => f.canFetch(url));
+        const fetcherIndex = canFetchResults.indexOf(true);
+        if (fetcherIndex === -1) {
+          throw new ToolError(
+            `Invalid URL: ${url}. Must be an HTTP/HTTPS URL or a file:// URL.`,
+            this.constructor.name,
           );
-          break;
         }
-      }
 
-      if (!processed) {
-        logger.warn(
-          `⚠️  Unsupported content type "${rawContent.mimeType}" for ${url}. Returning raw content.`,
-        );
-        // Use proper charset detection for unsupported content types
-        const resolvedCharset = resolveCharset(
-          rawContent.charset,
-          rawContent.content,
-          rawContent.mimeType,
-        );
-        const contentString = convertToString(rawContent.content, resolvedCharset);
-        return contentString;
-      }
+        const fetcher = this.fetchers[fetcherIndex];
+        const htmlPipeline = new HtmlPipeline();
+        const markdownPipeline = new MarkdownPipeline();
+        const pipelines = [htmlPipeline, markdownPipeline];
 
-      for (const err of processed.errors) {
-        logger.warn(`⚠️  Processing error for ${url}: ${err.message}`);
-      }
+        try {
+          logger.info(`📡 Fetching ${url}...`);
+          const rawContent: RawContent = await fetcher.fetch(url, {
+            followRedirects: options.followRedirects ?? true,
+            maxRetries: 3,
+            headers, // propagate custom headers
+          });
 
-      if (typeof processed.textContent !== "string" || !processed.textContent.trim()) {
-        throw new ToolError(
-          `Processing resulted in empty content for ${url}`,
-          this.constructor.name,
-        );
-      }
+          logger.info("🔄 Processing content...");
 
-      logger.info(`✅ Successfully processed ${url}`);
-      return processed.textContent;
-    } catch (error) {
-      if (error instanceof ScraperError || error instanceof ToolError) {
-        throw new ToolError(
-          `Failed to fetch or process URL: ${error.message}`,
-          this.constructor.name,
-        );
-      }
-      throw new ToolError(
-        `Failed to fetch or process URL: ${error instanceof Error ? error.message : String(error)}`,
-        this.constructor.name,
-      );
-    } finally {
-      await htmlPipeline.close();
-      await markdownPipeline.close();
-    }
+          let processed:
+            | Awaited<ReturnType<(typeof htmlPipeline)["process"]>>
+            | undefined;
+          for (const pipeline of pipelines) {
+            if (pipeline.canProcess(rawContent)) {
+              processed = await pipeline.process(
+                rawContent,
+                {
+                  url,
+                  library: "",
+                  version: "",
+                  maxDepth: 0,
+                  maxPages: 1,
+                  maxConcurrency: 1,
+                  scope: "subpages",
+                  followRedirects: options.followRedirects ?? true,
+                  excludeSelectors: undefined,
+                  ignoreErrors: false,
+                  scrapeMode,
+                  headers, // propagate custom headers
+                },
+                fetcher,
+              );
+              break;
+            }
+          }
+
+          if (!processed) {
+            logger.warn(
+              `⚠️  Unsupported content type "${rawContent.mimeType}" for ${url}. Returning raw content.`,
+            );
+            // Use proper charset detection for unsupported content types
+            const resolvedCharset = resolveCharset(
+              rawContent.charset,
+              rawContent.content,
+              rawContent.mimeType,
+            );
+            const contentString = convertToString(rawContent.content, resolvedCharset);
+            return contentString;
+          }
+
+          for (const err of processed.errors) {
+            logger.warn(`⚠️  Processing error for ${url}: ${err.message}`);
+          }
+
+          if (
+            typeof processed.textContent !== "string" ||
+            !processed.textContent.trim()
+          ) {
+            throw new ToolError(
+              `Processing resulted in empty content for ${url}`,
+              this.constructor.name,
+            );
+          }
+
+          logger.info(`✅ Successfully processed ${url}`);
+          return processed.textContent;
+        } catch (error) {
+          if (error instanceof ScraperError || error instanceof ToolError) {
+            throw new ToolError(
+              `Failed to fetch or process URL: ${error.message}`,
+              this.constructor.name,
+            );
+          }
+          throw new ToolError(
+            `Failed to fetch or process URL: ${error instanceof Error ? error.message : String(error)}`,
+            this.constructor.name,
+          );
+        } finally {
+          await htmlPipeline.close();
+          await markdownPipeline.close();
+        }
+      },
+      (result) => {
+        const { url, scrapeMode, followRedirects, headers } = options;
+        return {
+          url,
+          scrapeMode,
+          followRedirects,
+          contentLength: result.length,
+          hasHeaders: !!headers,
+        };
+      },
+    );
   }
 }

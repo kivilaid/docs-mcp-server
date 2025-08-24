@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { Analytics, analytics, TelemetryEvent, trackTool } from "./analytics";
+import { Analytics, analytics, TelemetryEvent } from "./analytics";
 import type { SessionContext } from "./SessionContext";
 
 // Mock the config module
@@ -176,7 +176,11 @@ describe("trackTool", () => {
     // Use vi.spyOn to spy on the global analytics.track method
     const trackSpy = vi.spyOn(analytics, "track");
 
-    const result = await trackTool("test_tool", mockOperation, mockGetProperties);
+    const result = await analytics.trackTool(
+      "test_tool",
+      mockOperation,
+      mockGetProperties,
+    );
 
     expect(result).toBe("success");
     expect(mockOperation).toHaveBeenCalled();
@@ -199,7 +203,9 @@ describe("trackTool", () => {
     const trackSpy = vi.spyOn(analytics, "track");
     const captureExceptionSpy = vi.spyOn(analytics, "captureException");
 
-    await expect(trackTool("test_tool", mockOperation)).rejects.toThrow("Test error");
+    await expect(analytics.trackTool("test_tool", mockOperation)).rejects.toThrow(
+      "Test error",
+    );
 
     expect(trackSpy).toHaveBeenCalledWith(
       TelemetryEvent.TOOL_USED,

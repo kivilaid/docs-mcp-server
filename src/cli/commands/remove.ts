@@ -4,7 +4,6 @@
 
 import type { Command } from "commander";
 import { createDocumentManagement } from "../../store";
-import { extractCliFlags, trackTool } from "../../telemetry";
 import { setupLogging } from "../utils";
 
 export async function removeAction(
@@ -18,17 +17,8 @@ export async function removeAction(
   const docService = await createDocumentManagement({ serverUrl });
   const { version } = options;
   try {
-    // Track command execution with privacy-safe analytics
-    await trackTool(
-      "remove_documents",
-      () => docService.removeAllDocuments(library, version),
-      () => ({
-        library: library, // Safe: library names are public
-        has_version: !!version,
-        using_remote_server: !!serverUrl,
-        cli_flags: extractCliFlags(process.argv),
-      }),
-    );
+    // Call the document service directly - we could convert this to use RemoveTool if needed
+    await docService.removeAllDocuments(library, version);
 
     console.log(`✅ Successfully removed ${library}${version ? `@${version}` : ""}.`);
   } catch (error) {
