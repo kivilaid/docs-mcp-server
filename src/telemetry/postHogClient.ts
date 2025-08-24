@@ -1,10 +1,84 @@
 /**
  * PostHog client wrapper for telemetry events.
  * Handles PostHog SDK integration and event capture with privacy-first configuration.
+ * Automatically converts camelCase property names to snake_case for PostHog compatibility.
  */
 
 import { PostHog } from "posthog-node";
 import { logger } from "../utils/logger";
+
+/**
+ * Convert camelCase string to snake_case
+ * Specifically designed for PostHog property name conversion
+ */
+function camelToSnakeCase(str: string): string {
+  return str.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`);
+}
+
+/**
+ * Recursively convert object keys from camelCase to snake_case
+ * Handles nested objects and arrays while preserving values
+ */
+function convertPropertiesToSnakeCase(
+  obj: Record<string, unknown>,
+): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+
+  for (const [key, value] of Object.entries(obj)) {
+    const snakeKey = camelToSnakeCase(key);
+
+    if (
+      value &&
+      typeof value === "object" &&
+      !Array.isArray(value) &&
+      !(value instanceof Date)
+    ) {
+      // Recursively convert nested objects
+      result[snakeKey] = convertPropertiesToSnakeCase(value as Record<string, unknown>);
+    } else if (Array.isArray(value)) {
+      // Handle arrays - convert elements if they are objects
+      result[snakeKey] = value.map((item) =>
+        item && typeof item === "object" && !(item instanceof Date)
+          ? convertPropertiesToSnakeCase(item as Record<string, unknown>)
+          : item,
+      );
+    } else {
+      // Primitive values, dates, and null/undefined - keep as-is
+      result[snakeKey] = value;
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Add PostHog standard properties and remove duplicates
+ * Maps our properties to PostHog's expected property names
+ */
+function addPostHogStandardProperties(
+  properties: Record<string, unknown>,
+): Record<string, unknown> {
+  const result = { ...properties };
+
+  // Add PostHog standard session properties
+  if (properties.sessionId) {
+    result.$session_id = properties.sessionId;
+    delete result.sessionId; // Remove duplicate
+  }
+
+  if (properties.startTime) {
+    result.$start_timestamp = (properties.startTime as Date).toISOString();
+    delete result.startTime; // Remove duplicate
+  }
+
+  // Add PostHog standard app properties
+  if (properties.appVersion) {
+    result.$app_version = properties.appVersion;
+    delete result.appVersion; // Remove duplicate
+  }
+
+  return result;
+}
 
 /**
  * PostHog client wrapper for telemetry events
@@ -68,10 +142,16 @@ export class PostHogClient {
     if (!this.enabled || !this.client) return;
 
     try {
+      // Add PostHog standard properties and remove duplicates
+      const enhancedProperties = addPostHogStandardProperties(properties);
+
+      // Convert camelCase properties to snake_case for PostHog
+      const snakeCaseProperties = convertPropertiesToSnakeCase(enhancedProperties);
+
       this.client.capture({
         distinctId,
         event,
-        properties,
+        properties: snakeCaseProperties,
       });
       logger.debug(`PostHog event captured: ${event}`);
     } catch (error) {
@@ -92,12 +172,16 @@ export class PostHogClient {
     if (!this.enabled || !this.client) return;
 
     try {
+      // Add PostHog standard properties and remove duplicates
+      const enhancedProperties = addPostHogStandardProperties(properties || {});
+
+      // Convert camelCase properties to snake_case for PostHog
+      const snakeCaseProperties = convertPropertiesToSnakeCase(enhancedProperties);
+
       this.client.captureException({
         error,
         distinctId,
-        properties: {
-          ...(properties || {}),
-        },
+        properties: snakeCaseProperties,
       });
       logger.debug(`PostHog exception captured: ${error.constructor.name}`);
     } catch (captureError) {
