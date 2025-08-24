@@ -127,18 +127,8 @@ export async function registerMcpService(
           sessionIdGenerator: undefined,
         });
 
-        // Track MCP session for analytics (per-request session)
+        // Initialize embedding model context asynchronously
         if (analytics.isEnabled()) {
-          const session = createMcpSession({
-            protocol: "http",
-            transport: "streamable",
-            authEnabled: !!authManager,
-            readOnly,
-            servicesEnabled: ["mcp"],
-          });
-          analytics.startSession(session);
-
-          // Initialize embedding model context asynchronously
           initializeEmbeddingContext().catch(() => {
             // Silently ignore embedding context initialization failures
           });
@@ -148,10 +138,6 @@ export async function registerMcpService(
           logger.debug("Streamable HTTP request closed");
           requestTransport.close();
           requestServer.close(); // Close the per-request server instance
-          // End telemetry session when request completes
-          if (analytics.isEnabled()) {
-            analytics.endSession();
-          }
         });
 
         await requestServer.connect(requestTransport);
