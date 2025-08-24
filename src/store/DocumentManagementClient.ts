@@ -63,6 +63,10 @@ export class DocumentManagementClient implements IDocumentManagement {
     return this.client.search.query({ library, version: version ?? null, query, limit });
   }
 
+  async removeVersion(library: string, version?: string | null): Promise<void> {
+    await this.client.removeVersion.mutate({ library, version });
+  }
+
   async removeAllDocuments(library: string, version?: string | null): Promise<void> {
     await this.client.removeAllDocuments.mutate({ library, version: version ?? null });
   }
