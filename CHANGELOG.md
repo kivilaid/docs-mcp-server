@@ -1,3 +1,10 @@
+## [1.21.1](https://github.com/arabold/docs-mcp-server/compare/v1.21.0...v1.21.1) (2025-08-24)
+
+
+### Bug Fixes
+
+* **ci:** add vite plugin to include shebang and make index.js executable ([b5087a8](https://github.com/arabold/docs-mcp-server/commit/b5087a82fab3cf790c72911b695041c9ea8d0eaa))
+
 # [1.21.0](https://github.com/arabold/docs-mcp-server/compare/v1.20.0...v1.21.0) (2025-08-23)
 
 
