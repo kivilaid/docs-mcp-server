@@ -68,6 +68,11 @@ export function createEmbeddingModel(providerAndModel: string): Embeddings {
 
   switch (provider) {
     case "openai": {
+      if (!process.env.OPENAI_API_KEY) {
+        throw new ModelConfigurationError(
+          "OPENAI_API_KEY environment variable is required for OpenAI embeddings",
+        );
+      }
       const config: Partial<OpenAIEmbeddingsParams> & { configuration?: ClientOptions } =
         {
           ...baseConfig,
