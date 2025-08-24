@@ -8,7 +8,14 @@ import type { DocumentMetadata } from "../types";
 import { EMBEDDING_BATCH_CHARS, EMBEDDING_BATCH_SIZE } from "../utils/config";
 import { logger } from "../utils/logger";
 import { applyMigrations } from "./applyMigrations";
-import { ModelConfigurationError } from "./embeddings/EmbeddingFactory";
+import {
+  parseEmbeddingConfig,
+  setKnownModelDimensions,
+} from "./embeddings/EmbeddingConfig";
+import {
+  createEmbeddingModel,
+  ModelConfigurationError,
+} from "./embeddings/EmbeddingFactory";
 import { ConnectionError, DimensionError, StoreError } from "./errors";
 import type { StoredScraperOptions } from "./types";
 import {
@@ -357,31 +364,38 @@ export class DocumentStore {
   }
 
   /**
-   * Initializes embeddings client using environment variables for configuration.
+   * Initialize the embedding model for the document store.
+   * Uses shared EmbeddingConfig to avoid code duplication with telemetry.
+   * Only performs expensive dimension detection when dimensions are unknown.
    *
-   * The embedding model is configured using DOCS_MCP_EMBEDDING_MODEL environment variable.
-   * Format: "provider:model_name" (e.g., "google:text-embedding-004") or just "model_name"
-   * for OpenAI (default).
-   *
-   * Supported providers and their required environment variables:
+   * Environment variables per provider:
    * - openai: OPENAI_API_KEY (and optionally OPENAI_API_BASE, OPENAI_ORG_ID)
-   * - google: GOOGLE_APPLICATION_CREDENTIALS (path to service account JSON)
-   * - aws: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION (or BEDROCK_AWS_REGION)
+   * - vertex: GOOGLE_APPLICATION_CREDENTIALS (path to service account JSON)
+   * - gemini: GOOGLE_API_KEY
+   * - aws: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION
    * - microsoft: Azure OpenAI credentials (AZURE_OPENAI_API_*)
    */
   private async initializeEmbeddings(): Promise<void> {
-    const modelSpec = process.env.DOCS_MCP_EMBEDDING_MODEL || "text-embedding-3-small";
+    // Use shared config parsing
+    const config = parseEmbeddingConfig();
 
-    // Import dynamically to avoid circular dependencies
-    const { createEmbeddingModel } = await import("./embeddings/EmbeddingFactory");
-    this.embeddings = createEmbeddingModel(modelSpec);
+    // Create embedding model
+    this.embeddings = createEmbeddingModel(config.modelSpec);
 
-    // Determine the model's actual dimension by embedding a test string
-    const testVector = await this.embeddings.embedQuery("test");
-    this.modelDimension = testVector.length;
+    // Use known dimensions if available, otherwise detect via test query
+    if (config.dimensions !== null) {
+      this.modelDimension = config.dimensions;
+    } else {
+      // Fallback: determine the model's actual dimension by embedding a test string
+      const testVector = await this.embeddings.embedQuery("test");
+      this.modelDimension = testVector.length;
+
+      // Cache the discovered dimensions for future use
+      setKnownModelDimensions(config.model, this.modelDimension);
+    }
 
     if (this.modelDimension > this.dbDimension) {
-      throw new DimensionError(modelSpec, this.modelDimension, this.dbDimension);
+      throw new DimensionError(config.modelSpec, this.modelDimension, this.dbDimension);
     }
   }
 

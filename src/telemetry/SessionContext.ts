@@ -24,5 +24,5 @@ export interface SessionContext {
   // Embedding model context
   aiEmbeddingProvider?: string; // "openai", "google", "aws", "microsoft"
   aiEmbeddingModel?: string; // "text-embedding-3-small", "text-embedding-004", etc.
-  aiEmbeddingDimensions?: number; // Actual embedding dimensions used
+  aiEmbeddingDimensions?: number | null; // Actual embedding dimensions used (null if unknown)
 }

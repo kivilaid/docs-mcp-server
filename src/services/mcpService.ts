@@ -13,7 +13,7 @@ import { createMcpServerInstance } from "../mcp/mcpServer";
 import { initializeTools } from "../mcp/tools";
 import type { IPipeline } from "../pipeline/trpc/interfaces";
 import type { IDocumentManagement } from "../store/trpc/interfaces";
-import { analytics, createMcpSession, initializeEmbeddingContext } from "../telemetry";
+import { analytics, createMcpSession } from "../telemetry";
 import { logger } from "../utils/logger";
 
 /**
@@ -64,11 +64,6 @@ export async function registerMcpService(
             servicesEnabled: ["mcp"],
           });
           analytics.startSession(session);
-
-          // Initialize embedding model context asynchronously
-          initializeEmbeddingContext().catch(() => {
-            // Silently ignore embedding context initialization failures
-          });
         }
 
         reply.raw.on("close", () => {
@@ -126,13 +121,6 @@ export async function registerMcpService(
         const requestTransport = new StreamableHTTPServerTransport({
           sessionIdGenerator: undefined,
         });
-
-        // Initialize embedding model context asynchronously
-        if (analytics.isEnabled()) {
-          initializeEmbeddingContext().catch(() => {
-            // Silently ignore embedding context initialization failures
-          });
-        }
 
         reply.raw.on("close", () => {
           logger.debug("Streamable HTTP request closed");

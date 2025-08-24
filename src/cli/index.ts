@@ -7,7 +7,6 @@ import packageJson from "../../package.json";
 import {
   analytics,
   createCliSession,
-  initializeEmbeddingContext,
   shouldEnableTelemetry,
   TelemetryConfig,
 } from "../telemetry";
@@ -61,11 +60,6 @@ export function createCliProgram(): Command {
         readOnly: false,
       });
       analytics.startSession(session);
-
-      // Initialize embedding model context asynchronously (don't block command execution)
-      initializeEmbeddingContext().catch(() => {
-        // Silently ignore embedding context initialization failures
-      });
     } else {
       TelemetryConfig.getInstance().disable();
     }

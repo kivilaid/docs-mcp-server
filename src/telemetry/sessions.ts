@@ -5,6 +5,7 @@
 
 import { randomUUID } from "node:crypto";
 import packageJson from "../../package.json";
+import { parseEmbeddingConfig } from "../store/embeddings/EmbeddingConfig";
 import { analytics } from "./analytics";
 import type { SessionContext } from "./SessionContext";
 
@@ -18,39 +19,28 @@ function getPackageVersion(): string {
 /**
  * Extract embedding model information from environment configuration.
  * Returns provider, model name, and dimensions for telemetry tracking.
+ * This is now a synchronous operation that uses known dimensions lookup.
  */
-export async function getEmbeddingModelContext(): Promise<{
-  embeddingProvider: string;
-  embeddingModel: string;
-  embeddingDimensions: number;
-}> {
+export function getEmbeddingModelContext(): {
+  aiEmbeddingProvider: string;
+  aiEmbeddingModel: string;
+  aiEmbeddingDimensions: number | null;
+} {
   try {
-    // Import dynamically to avoid circular dependencies
-    const { createEmbeddingModel } = await import("../store/embeddings/EmbeddingFactory");
-
-    const modelSpec = process.env.DOCS_MCP_EMBEDDING_MODEL || "text-embedding-3-small";
-
-    // Parse provider and model from string (e.g., "gemini:embedding-001" or just "text-embedding-3-small")
-    const [providerOrModel, modelName] = modelSpec.split(":");
-    const provider = modelName ? providerOrModel : "openai"; // Default to openai if no provider specified
-    const model = modelName || providerOrModel;
-
-    // Create embedding model to get dimensions
-    const embeddings = createEmbeddingModel(modelSpec);
-    const testVector = await embeddings.embedQuery("test");
-    const dimensions = testVector.length;
+    const config = parseEmbeddingConfig();
 
     return {
-      embeddingProvider: provider,
-      embeddingModel: model,
-      embeddingDimensions: dimensions,
+      aiEmbeddingProvider: config.provider,
+      aiEmbeddingModel: config.model,
+      aiEmbeddingDimensions: config.dimensions,
     };
-  } catch (_error) {
-    // Fallback if embedding model initialization fails
+  } catch (error) {
+    // Fallback if config parsing fails
+    console.warn("Failed to parse embedding config:", error);
     return {
-      embeddingProvider: "unknown",
-      embeddingModel: "unknown",
-      embeddingDimensions: 0,
+      aiEmbeddingProvider: "unknown",
+      aiEmbeddingModel: "unknown",
+      aiEmbeddingDimensions: null,
     };
   }
 }
@@ -65,6 +55,9 @@ export function createCliSession(
     readOnly?: boolean;
   },
 ): SessionContext {
+  // Get embedding context synchronously
+  const embeddingContext = getEmbeddingModelContext();
+
   return {
     sessionId: randomUUID(),
     appInterface: "cli",
@@ -76,6 +69,7 @@ export function createCliSession(
     appAuthEnabled: options?.authEnabled ?? false,
     appReadOnly: options?.readOnly ?? false,
     appServicesEnabled: ["worker"], // CLI typically runs embedded worker
+    ...embeddingContext,
   };
 }
 
@@ -89,6 +83,9 @@ export function createMcpSession(options: {
   readOnly?: boolean;
   servicesEnabled?: string[];
 }): SessionContext {
+  // Get embedding context synchronously
+  const embeddingContext = getEmbeddingModelContext();
+
   return {
     sessionId: randomUUID(),
     appInterface: "mcp",
@@ -101,6 +98,7 @@ export function createMcpSession(options: {
     appAuthEnabled: options.authEnabled ?? false,
     appReadOnly: options.readOnly ?? false,
     appServicesEnabled: options.servicesEnabled ?? ["mcp"],
+    ...embeddingContext,
   };
 }
 
@@ -113,6 +111,9 @@ export function createWebSession(options: {
   readOnly?: boolean;
   servicesEnabled?: string[];
 }): SessionContext {
+  // Get embedding context synchronously
+  const embeddingContext = getEmbeddingModelContext();
+
   return {
     sessionId: randomUUID(),
     appInterface: "web",
@@ -125,6 +126,7 @@ export function createWebSession(options: {
     appAuthEnabled: options.authEnabled ?? false,
     appReadOnly: options.readOnly ?? false,
     appServicesEnabled: options.servicesEnabled ?? ["web"],
+    ...embeddingContext,
   };
 }
 
@@ -136,6 +138,9 @@ export function createPipelineSession(options: {
   readOnly?: boolean;
   servicesEnabled?: string[];
 }): SessionContext {
+  // Get embedding context synchronously
+  const embeddingContext = getEmbeddingModelContext();
+
   return {
     sessionId: randomUUID(),
     appInterface: "pipeline",
@@ -146,6 +151,7 @@ export function createPipelineSession(options: {
     appAuthEnabled: options.authEnabled ?? false,
     appReadOnly: options.readOnly ?? false,
     appServicesEnabled: options.servicesEnabled ?? ["worker"],
+    ...embeddingContext,
   };
 }
 
@@ -170,15 +176,12 @@ export function getEnabledServices(config?: {
 
 /**
  * Initialize embedding model context for an active session.
- * This should be called after session creation to populate embedding model info asynchronously.
+ * This should be called after session creation to populate embedding model info.
+ * Now synchronous since we don't make expensive API calls.
  */
-export async function initializeEmbeddingContext(): Promise<void> {
-  const embeddingContext = await getEmbeddingModelContext();
-  if (embeddingContext.embeddingProvider || embeddingContext.embeddingModel) {
-    analytics.updateSessionContext({
-      aiEmbeddingProvider: embeddingContext.embeddingProvider,
-      aiEmbeddingModel: embeddingContext.embeddingModel,
-      aiEmbeddingDimensions: embeddingContext.embeddingDimensions,
-    });
+export function initializeEmbeddingContext(): void {
+  const embeddingContext = getEmbeddingModelContext();
+  if (embeddingContext.aiEmbeddingProvider || embeddingContext.aiEmbeddingModel) {
+    analytics.updateSessionContext(embeddingContext);
   }
 }

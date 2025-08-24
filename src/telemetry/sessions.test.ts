@@ -194,16 +194,16 @@ describe("sessionManager", () => {
   });
 
   describe("getEmbeddingModelContext", () => {
-    it("should extract provider and model from environment variable", async () => {
+    it("should extract provider and model from environment variable", () => {
       // Mock environment variable
       const originalEnv = process.env.DOCS_MCP_EMBEDDING_MODEL;
-      process.env.DOCS_MCP_EMBEDDING_MODEL = "google:text-embedding-004";
+      process.env.DOCS_MCP_EMBEDDING_MODEL = "vertex:text-embedding-004";
 
-      const context = await getEmbeddingModelContext();
+      const context = getEmbeddingModelContext();
 
-      expect(context.embeddingProvider).toBe("google");
-      expect(context.embeddingModel).toBe("text-embedding-004");
-      expect(context.embeddingDimensions).toBeGreaterThan(0);
+      expect(context.aiEmbeddingProvider).toBe("vertex");
+      expect(context.aiEmbeddingModel).toBe("text-embedding-004");
+      expect(context.aiEmbeddingDimensions).toBe(768); // Known dimension
 
       // Restore environment
       if (originalEnv !== undefined) {
@@ -213,16 +213,16 @@ describe("sessionManager", () => {
       }
     });
 
-    it("should default to openai when no provider specified", async () => {
+    it("should default to openai when no provider specified", () => {
       // Mock environment variable
       const originalEnv = process.env.DOCS_MCP_EMBEDDING_MODEL;
       process.env.DOCS_MCP_EMBEDDING_MODEL = "text-embedding-3-small";
 
-      const context = await getEmbeddingModelContext();
+      const context = getEmbeddingModelContext();
 
-      expect(context.embeddingProvider).toBe("openai");
-      expect(context.embeddingModel).toBe("text-embedding-3-small");
-      expect(context.embeddingDimensions).toBeGreaterThan(0);
+      expect(context.aiEmbeddingProvider).toBe("openai");
+      expect(context.aiEmbeddingModel).toBe("text-embedding-3-small");
+      expect(context.aiEmbeddingDimensions).toBe(1536); // Known dimension
 
       // Restore environment
       if (originalEnv !== undefined) {
@@ -232,16 +232,16 @@ describe("sessionManager", () => {
       }
     });
 
-    it("should handle errors gracefully", async () => {
-      // Mock environment variable with invalid model
+    it("should handle unknown models gracefully", () => {
+      // Mock environment variable with unknown model
       const originalEnv = process.env.DOCS_MCP_EMBEDDING_MODEL;
-      process.env.DOCS_MCP_EMBEDDING_MODEL = "invalid:model";
+      process.env.DOCS_MCP_EMBEDDING_MODEL = "openai:unknown-model";
 
-      const context = await getEmbeddingModelContext();
+      const context = getEmbeddingModelContext();
 
-      expect(context.embeddingProvider).toBe("unknown");
-      expect(context.embeddingModel).toBe("unknown");
-      expect(context.embeddingDimensions).toBe(0);
+      expect(context.aiEmbeddingProvider).toBe("openai");
+      expect(context.aiEmbeddingModel).toBe("unknown-model");
+      expect(context.aiEmbeddingDimensions).toBeNull(); // Unknown dimension
 
       // Restore environment
       if (originalEnv !== undefined) {
