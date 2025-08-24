@@ -1,3 +1,20 @@
+# [1.22.0](https://github.com/arabold/docs-mcp-server/compare/v1.21.1...v1.22.0) (2025-08-24)
+
+
+### Bug Fixes
+
+* **api:** add removeVersion mutation to document management API ([0eb6ae8](https://github.com/arabold/docs-mcp-server/commit/0eb6ae85af1fd0d6cdb73f825b4a6f7c365bea56))
+* **embeddings:** add ModelConfigurationError handling for missing OPENAI_API_KEY ([4460700](https://github.com/arabold/docs-mcp-server/commit/4460700d12916023c9c79cc409b315602de3ccbf)), closes [#188](https://github.com/arabold/docs-mcp-server/issues/188)
+* **mcpService:** fix excessive session creation in MCP HTTP transport ([39e05bd](https://github.com/arabold/docs-mcp-server/commit/39e05bd08aff47fd1f6c157554a68ee18fd0e53a)), closes [#190](https://github.com/arabold/docs-mcp-server/issues/190)
+
+
+### Features
+
+* **telemetry:** add type-safe telemetry event tracking and enhance analytics methods ([75b4004](https://github.com/arabold/docs-mcp-server/commit/75b4004d32711aadbaf3a8b98f10fe74cbe3dfcf))
+* **telemetry:** enhance error tracking with PostHog's native exception capture ([d938134](https://github.com/arabold/docs-mcp-server/commit/d9381345f88cd42741d5dbabd2abc19709890070)), closes [#192](https://github.com/arabold/docs-mcp-server/issues/192)
+* **telemetry:** enhance PostHog client with automatic property conversion and standardization ([cdb191c](https://github.com/arabold/docs-mcp-server/commit/cdb191cf5f60a379d9d9e428022832fbd7dd986c))
+* **telemetry:** enhance session context with embedding model information and initialization ([337bc39](https://github.com/arabold/docs-mcp-server/commit/337bc3972b084aa358e7d20d3a8f3d09626615d8)), closes [#191](https://github.com/arabold/docs-mcp-server/issues/191)
+
 ## [1.21.1](https://github.com/arabold/docs-mcp-server/compare/v1.21.0...v1.21.1) (2025-08-24)
 
 
