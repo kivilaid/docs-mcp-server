@@ -462,17 +462,20 @@ export class DocumentManagementService {
         ),
       });
     } catch (error) {
-      // Track processing failures
+      // Track processing failures with native error tracking
       const processingTime = performance.now() - processingStart;
-      analytics.track(TelemetryEvent.DOCUMENT_PROCESSING_FAILED, {
-        mimeType: document.metadata.mimeType,
-        contentSizeBytes: document.pageContent.length,
-        processingTimeMs: Math.round(processingTime),
-        errorType: error instanceof Error ? error.constructor.name : "UnknownError",
-        errorMessage: error instanceof Error ? error.message : "Unknown error",
-        library,
-        libraryVersion: normalizedVersion || null,
-      });
+
+      if (error instanceof Error) {
+        analytics.captureException(error, {
+          mimeType: document.metadata.mimeType,
+          contentSizeBytes: document.pageContent.length,
+          processingTimeMs: Math.round(processingTime),
+          library,
+          libraryVersion: normalizedVersion || null,
+          context: "document_processing",
+          component: DocumentManagementService.constructor.name,
+        });
+      }
 
       throw error;
     }

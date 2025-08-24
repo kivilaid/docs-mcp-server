@@ -147,7 +147,7 @@ The system tracks essential event types for usage understanding:
 - `session_started` / `session_ended`: Session lifecycle tracking
 - `tool_used`: Individual tool execution and outcomes
 - `job_completed` / `job_failed`: Background processing results
-- `error_occurred`: System errors with sanitized information
+- **Error Tracking**: PostHog's native exception tracking with full stack traces and context
 
 ### Session Context
 
@@ -170,9 +170,10 @@ The system ensures privacy through essential data sanitization:
 
 **Error Information**
 
-- Error type and sanitized messages (`sanitizeError`)
-- Stack trace presence indication without content
-- Component identification without sensitive context
+- **Native Error Tracking**: PostHog's exception capture with full stack traces and automatic grouping
+- Error sanitization functions available for sensitive contexts (`sanitizeError`, `sanitizeErrorMessage`)
+- Component identification and contextual information
+- Enhanced debugging capabilities with source code integration
 
 **Usage Patterns**
 

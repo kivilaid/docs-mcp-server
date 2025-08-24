@@ -28,8 +28,6 @@ export enum TelemetryEvent {
   PIPELINE_JOB_PROGRESS = "pipeline_job_progress",
   PIPELINE_JOB_COMPLETED = "pipeline_job_completed",
   DOCUMENT_PROCESSED = "document_processed",
-  DOCUMENT_PROCESSING_FAILED = "document_processing_failed",
-  ERROR_OCCURRED = "error_occurred",
 }
 
 /**
@@ -66,7 +64,6 @@ export class Analytics {
       interface: context.interface,
       version: context.version,
       platform: context.platform,
-      sessionDurationTarget: context.interface === "cli" ? "short" : "long",
       authEnabled: context.authEnabled,
       readOnly: context.readOnly,
       servicesCount: context.servicesEnabled.length,
@@ -81,6 +78,16 @@ export class Analytics {
 
     const eventProperties = this.sessionTracker.getEnrichedProperties(properties);
     this.postHogClient.capture(this.distinctId, event, eventProperties);
+  }
+
+  /**
+   * Capture exception using PostHog's native error tracking with session context
+   */
+  captureException(error: Error, properties: Record<string, unknown> = {}): void {
+    if (!this.enabled) return;
+
+    const eventProperties = this.sessionTracker.getEnrichedProperties(properties);
+    this.postHogClient.captureException(this.distinctId, error, eventProperties);
   }
 
   /**
@@ -147,12 +154,21 @@ export async function trackTool<T>(
 
     return result;
   } catch (error) {
+    // Track the tool usage failure
     analytics.track(TelemetryEvent.TOOL_USED, {
       tool: toolName,
       success: false,
       durationMs: Date.now() - startTime,
-      errorType: error instanceof Error ? error.constructor.name : "UnknownError",
     });
+
+    // Capture the exception with full error tracking
+    if (error instanceof Error) {
+      analytics.captureException(error, {
+        tool: toolName,
+        context: "tool_execution",
+        durationMs: Date.now() - startTime,
+      });
+    }
 
     throw error;
   }

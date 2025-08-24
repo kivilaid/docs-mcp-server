@@ -82,6 +82,32 @@ export class PostHogClient {
   }
 
   /**
+   * Capture exception using PostHog's native error tracking
+   */
+  captureException(
+    distinctId: string,
+    error: Error,
+    properties?: Record<string, unknown>,
+  ): void {
+    if (!this.enabled || !this.client) return;
+
+    try {
+      this.client.captureException({
+        error,
+        distinctId,
+        properties: {
+          ...(properties || {}),
+        },
+      });
+      logger.debug(`PostHog exception captured: ${error.constructor.name}`);
+    } catch (captureError) {
+      logger.debug(
+        `PostHog captureException error: ${captureError instanceof Error ? captureError.message : "Unknown error"}`,
+      );
+    }
+  }
+
+  /**
    * Graceful shutdown with event flushing
    */
   async shutdown(): Promise<void> {

@@ -193,11 +193,11 @@ export class AppServer {
       process.on("unhandledRejection", (reason) => {
         logger.error(`Unhandled Promise Rejection: ${reason}`);
         if (analytics.isEnabled()) {
-          analytics.track(TelemetryEvent.ERROR_OCCURRED, {
-            error_type: "UnhandledPromiseRejection",
+          // Create an Error object from the rejection reason for better tracking
+          const error = reason instanceof Error ? reason : new Error(String(reason));
+          analytics.captureException(error, {
             error_category: "system",
-            component: "AppServer",
-            severity: "critical",
+            component: AppServer.constructor.name,
             context: "process_unhandled_rejection",
           });
         }
@@ -209,11 +209,9 @@ export class AppServer {
       process.on("uncaughtException", (error) => {
         logger.error(`Uncaught Exception: ${error.message}`);
         if (analytics.isEnabled()) {
-          analytics.track(TelemetryEvent.ERROR_OCCURRED, {
-            error_type: error.constructor.name,
+          analytics.captureException(error, {
             error_category: "system",
-            component: "AppServer",
-            severity: "critical",
+            component: AppServer.constructor.name,
             context: "process_uncaught_exception",
           });
         }
@@ -225,11 +223,9 @@ export class AppServer {
     if (typeof this.server.setErrorHandler === "function") {
       this.server.setErrorHandler(async (error, request, reply) => {
         if (analytics.isEnabled()) {
-          analytics.track(TelemetryEvent.ERROR_OCCURRED, {
-            error_type: error.constructor.name,
+          analytics.captureException(error, {
             error_category: "http",
             component: "FastifyServer",
-            severity: "high",
             status_code: error.statusCode || 500,
             method: request.method,
             route: request.routeOptions?.url || request.url,

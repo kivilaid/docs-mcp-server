@@ -23,6 +23,7 @@ vi.mock("../utils/logger", () => ({
 vi.mock("./postHogClient", () => ({
   PostHogClient: vi.fn().mockImplementation(() => ({
     capture: vi.fn(),
+    captureException: vi.fn(),
     shutdown: vi.fn().mockResolvedValue(undefined),
     isEnabled: vi.fn(() => true),
   })),
@@ -94,7 +95,6 @@ describe("Analytics", () => {
           timestamp: "2025-08-23T10:00:05.000Z",
           version: "1.0.0",
           platform: "linux",
-          sessionDurationTarget: "short",
           authEnabled: false,
           readOnly: false,
           servicesCount: 0,
@@ -194,8 +194,9 @@ describe("trackTool", () => {
   it("should track failed tool usage", async () => {
     const mockOperation = vi.fn().mockRejectedValue(new Error("Test error"));
 
-    // Use vi.spyOn to spy on the global analytics.track method
+    // Use vi.spyOn to spy on the global analytics methods
     const trackSpy = vi.spyOn(analytics, "track");
+    const captureExceptionSpy = vi.spyOn(analytics, "captureException");
 
     await expect(trackTool("test_tool", mockOperation)).rejects.toThrow("Test error");
 
@@ -204,7 +205,15 @@ describe("trackTool", () => {
       expect.objectContaining({
         tool: "test_tool",
         success: false,
-        errorType: "Error",
+        durationMs: expect.any(Number),
+      }),
+    );
+
+    expect(captureExceptionSpy).toHaveBeenCalledWith(
+      expect.any(Error),
+      expect.objectContaining({
+        tool: "test_tool",
+        context: "tool_execution",
         durationMs: expect.any(Number),
       }),
     );
