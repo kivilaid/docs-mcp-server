@@ -62,12 +62,12 @@ export class Analytics {
 
     this.sessionTracker.startSession(context);
     this.track(TelemetryEvent.SESSION_STARTED, {
-      interface: context.interface,
-      version: context.version,
-      platform: context.platform,
-      authEnabled: context.authEnabled,
-      readOnly: context.readOnly,
-      servicesCount: context.servicesEnabled.length,
+      interface: context.appInterface,
+      version: context.appVersion,
+      platform: context.appPlatform,
+      authEnabled: context.appAuthEnabled,
+      readOnly: context.appReadOnly,
+      servicesCount: context.appServicesEnabled.length,
     });
   }
 

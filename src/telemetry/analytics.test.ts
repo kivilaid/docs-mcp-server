@@ -47,13 +47,13 @@ vi.mock("./SessionTracker", () => ({
 
 const mockSessionContext: SessionContext = {
   sessionId: "test-session",
-  interface: "cli",
+  appInterface: "cli",
   startTime: new Date("2025-08-23T10:00:00Z"),
-  version: "1.0.0",
-  platform: "linux",
-  authEnabled: false,
-  readOnly: false,
-  servicesEnabled: [],
+  appVersion: "1.0.0",
+  appPlatform: "linux",
+  appAuthEnabled: false,
+  appReadOnly: false,
+  appServicesEnabled: [],
 };
 
 describe("Analytics", () => {
@@ -248,9 +248,9 @@ describe("trackTool", () => {
     // Test that updateSessionContext method exists and can be called
     expect(() => {
       analytics.updateSessionContext({
-        embeddingProvider: "google",
-        embeddingModel: "text-embedding-004",
-        embeddingDimensions: 768,
+        aiEmbeddingProvider: "google",
+        aiEmbeddingModel: "text-embedding-004",
+        aiEmbeddingDimensions: 768,
       });
     }).not.toThrow();
   });
@@ -258,9 +258,9 @@ describe("trackTool", () => {
     const analytics = new Analytics(true);
     const sessionContext = {
       ...mockSessionContext,
-      embeddingProvider: "google",
-      embeddingModel: "text-embedding-004",
-      embeddingDimensions: 768,
+      aiEmbeddingProvider: "google",
+      aiEmbeddingModel: "text-embedding-004",
+      aiEmbeddingDimensions: 768,
     };
 
     analytics.startSession(sessionContext);

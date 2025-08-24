@@ -67,15 +67,15 @@ export function createCliSession(
 ): SessionContext {
   return {
     sessionId: randomUUID(),
-    interface: "cli",
+    appInterface: "cli",
     startTime: new Date(),
-    version: getPackageVersion(),
-    platform: process.platform,
-    nodeVersion: process.version,
-    command: command || "unknown",
-    authEnabled: options?.authEnabled ?? false,
-    readOnly: options?.readOnly ?? false,
-    servicesEnabled: ["worker"], // CLI typically runs embedded worker
+    appVersion: getPackageVersion(),
+    appPlatform: process.platform,
+    appNodeVersion: process.version,
+    cliCommand: command || "unknown",
+    appAuthEnabled: options?.authEnabled ?? false,
+    appReadOnly: options?.readOnly ?? false,
+    appServicesEnabled: ["worker"], // CLI typically runs embedded worker
   };
 }
 
@@ -91,16 +91,16 @@ export function createMcpSession(options: {
 }): SessionContext {
   return {
     sessionId: randomUUID(),
-    interface: "mcp",
+    appInterface: "mcp",
     startTime: new Date(),
-    version: getPackageVersion(),
-    platform: process.platform,
-    nodeVersion: process.version,
-    protocol: options.protocol || "stdio",
-    transport: options.transport,
-    authEnabled: options.authEnabled ?? false,
-    readOnly: options.readOnly ?? false,
-    servicesEnabled: options.servicesEnabled ?? ["mcp"],
+    appVersion: getPackageVersion(),
+    appPlatform: process.platform,
+    appNodeVersion: process.version,
+    mcpProtocol: options.protocol || "stdio",
+    mcpTransport: options.transport,
+    appAuthEnabled: options.authEnabled ?? false,
+    appReadOnly: options.readOnly ?? false,
+    appServicesEnabled: options.servicesEnabled ?? ["mcp"],
   };
 }
 
@@ -115,16 +115,16 @@ export function createWebSession(options: {
 }): SessionContext {
   return {
     sessionId: randomUUID(),
-    interface: "web",
+    appInterface: "web",
     startTime: new Date(),
-    version: getPackageVersion(),
-    platform: process.platform,
-    nodeVersion: process.version,
-    protocol: "http",
-    route: options.route,
-    authEnabled: options.authEnabled ?? false,
-    readOnly: options.readOnly ?? false,
-    servicesEnabled: options.servicesEnabled ?? ["web"],
+    appVersion: getPackageVersion(),
+    appPlatform: process.platform,
+    appNodeVersion: process.version,
+    mcpProtocol: "http",
+    webRoute: options.route,
+    appAuthEnabled: options.authEnabled ?? false,
+    appReadOnly: options.readOnly ?? false,
+    appServicesEnabled: options.servicesEnabled ?? ["web"],
   };
 }
 
@@ -138,14 +138,14 @@ export function createPipelineSession(options: {
 }): SessionContext {
   return {
     sessionId: randomUUID(),
-    interface: "pipeline",
+    appInterface: "pipeline",
     startTime: new Date(),
-    version: getPackageVersion(),
-    platform: process.platform,
-    nodeVersion: process.version,
-    authEnabled: options.authEnabled ?? false,
-    readOnly: options.readOnly ?? false,
-    servicesEnabled: options.servicesEnabled ?? ["worker"],
+    appVersion: getPackageVersion(),
+    appPlatform: process.platform,
+    appNodeVersion: process.version,
+    appAuthEnabled: options.authEnabled ?? false,
+    appReadOnly: options.readOnly ?? false,
+    appServicesEnabled: options.servicesEnabled ?? ["worker"],
   };
 }
 
@@ -175,6 +175,10 @@ export function getEnabledServices(config?: {
 export async function initializeEmbeddingContext(): Promise<void> {
   const embeddingContext = await getEmbeddingModelContext();
   if (embeddingContext.embeddingProvider || embeddingContext.embeddingModel) {
-    analytics.updateSessionContext(embeddingContext);
+    analytics.updateSessionContext({
+      aiEmbeddingProvider: embeddingContext.embeddingProvider,
+      aiEmbeddingModel: embeddingContext.embeddingModel,
+      aiEmbeddingDimensions: embeddingContext.embeddingDimensions,
+    });
   }
 }

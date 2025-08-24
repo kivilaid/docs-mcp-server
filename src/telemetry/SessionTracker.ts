@@ -25,7 +25,7 @@ export class SessionTracker {
     if (!this.sessionContext) return null;
 
     const duration = Date.now() - this.sessionContext.startTime.getTime();
-    const sessionInterface = this.sessionContext.interface;
+    const sessionInterface = this.sessionContext.appInterface;
 
     // Clear session context
     this.sessionContext = undefined;

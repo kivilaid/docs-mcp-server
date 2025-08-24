@@ -87,13 +87,13 @@ export class AppServer {
       try {
         telemetryService.startSession({
           sessionId: crypto.randomUUID(),
-          interface: "web",
+          appInterface: "web",
           startTime: new Date(),
-          version: process.env.npm_package_version || "unknown",
-          platform: process.platform,
-          servicesEnabled: this.getActiveServicesList(),
-          authEnabled: Boolean(this.config.auth),
-          readOnly: Boolean(this.config.readOnly),
+          appVersion: process.env.npm_package_version || "unknown",
+          appPlatform: process.platform,
+          appServicesEnabled: this.getActiveServicesList(),
+          appAuthEnabled: Boolean(this.config.auth),
+          appReadOnly: Boolean(this.config.readOnly),
         });
       } catch (error) {
         logger.debug(`Failed to initialize telemetry: ${error}`);

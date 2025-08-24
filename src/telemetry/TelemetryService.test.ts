@@ -34,13 +34,13 @@ describe("TelemetryService", () => {
       const service = createTelemetryService();
       const mockContext: SessionContext = {
         sessionId: "test-session",
-        interface: "cli",
+        appInterface: "cli",
         startTime: new Date(),
-        version: "1.0.0",
-        platform: "linux",
-        authEnabled: false,
-        readOnly: false,
-        servicesEnabled: ["worker"],
+        appVersion: "1.0.0",
+        appPlatform: "linux",
+        appAuthEnabled: false,
+        appReadOnly: false,
+        appServicesEnabled: ["worker"],
       };
 
       service.startSession(mockContext);
@@ -81,13 +81,13 @@ describe("TelemetryService", () => {
     it("should work with the global instance", () => {
       const mockContext: SessionContext = {
         sessionId: "global-test",
-        interface: "mcp",
+        appInterface: "mcp",
         startTime: new Date(),
-        version: "1.0.0",
-        platform: "darwin",
-        authEnabled: true,
-        readOnly: true,
-        servicesEnabled: ["mcp", "web"],
+        appVersion: "1.0.0",
+        appPlatform: "darwin",
+        appAuthEnabled: true,
+        appReadOnly: true,
+        appServicesEnabled: ["mcp", "web"],
       };
 
       telemetryService.startSession(mockContext);
