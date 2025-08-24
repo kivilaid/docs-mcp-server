@@ -9,6 +9,7 @@
  */
 
 import { logger } from "../utils/logger";
+import type { TelemetryEventPropertiesMap } from "./eventTypes";
 import { PostHogClient } from "./postHogClient";
 import type { SessionContext } from "./SessionContext";
 import { SessionTracker } from "./SessionTracker";
@@ -81,7 +82,14 @@ export class Analytics {
 
   /**
    * Track an event with automatic session context inclusion
+   *
+   * Type-safe overloads for specific events:
    */
+  track<T extends keyof TelemetryEventPropertiesMap>(
+    event: T,
+    properties: TelemetryEventPropertiesMap[T],
+  ): void;
+  track(event: string, properties?: Record<string, unknown>): void;
   track(event: string, properties: Record<string, unknown> = {}): void {
     if (!this.enabled) return;
 
@@ -134,6 +142,48 @@ export class Analytics {
   getSessionContext(): SessionContext | undefined {
     return this.sessionTracker.getSessionContext();
   }
+
+  /**
+   * Track tool usage with error handling and automatic timing
+   */
+  async trackTool<T>(
+    toolName: string,
+    operation: () => Promise<T>,
+    getProperties?: (result: T) => Record<string, unknown>,
+  ): Promise<T> {
+    const startTime = Date.now();
+
+    try {
+      const result = await operation();
+
+      this.track(TelemetryEvent.TOOL_USED, {
+        tool: toolName,
+        success: true,
+        durationMs: Date.now() - startTime,
+        ...(getProperties ? getProperties(result) : {}),
+      });
+
+      return result;
+    } catch (error) {
+      // Track the tool usage failure
+      this.track(TelemetryEvent.TOOL_USED, {
+        tool: toolName,
+        success: false,
+        durationMs: Date.now() - startTime,
+      });
+
+      // Capture the exception with full error tracking
+      if (error instanceof Error) {
+        this.captureException(error, {
+          tool: toolName,
+          context: "tool_execution",
+          durationMs: Date.now() - startTime,
+        });
+      }
+
+      throw error;
+    }
+  }
 }
 
 /**
@@ -143,42 +193,12 @@ export const analytics = new Analytics();
 
 /**
  * Helper function for tracking tool usage with error handling
+ * @deprecated Use analytics.trackTool() instance method instead
  */
 export async function trackTool<T>(
   toolName: string,
   operation: () => Promise<T>,
   getProperties?: (result: T) => Record<string, unknown>,
 ): Promise<T> {
-  const startTime = Date.now();
-
-  try {
-    const result = await operation();
-
-    analytics.track(TelemetryEvent.TOOL_USED, {
-      tool: toolName,
-      success: true,
-      durationMs: Date.now() - startTime,
-      ...(getProperties ? getProperties(result) : {}),
-    });
-
-    return result;
-  } catch (error) {
-    // Track the tool usage failure
-    analytics.track(TelemetryEvent.TOOL_USED, {
-      tool: toolName,
-      success: false,
-      durationMs: Date.now() - startTime,
-    });
-
-    // Capture the exception with full error tracking
-    if (error instanceof Error) {
-      analytics.captureException(error, {
-        tool: toolName,
-        context: "tool_execution",
-        durationMs: Date.now() - startTime,
-      });
-    }
-
-    throw error;
-  }
+  return analytics.trackTool(toolName, operation, getProperties);
 }

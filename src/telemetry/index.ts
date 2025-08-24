@@ -10,6 +10,7 @@
 
 // Core analytics and tracking
 export { analytics, TelemetryEvent, trackTool } from "./analytics";
+export type * from "./eventTypes";
 export type { SessionContext } from "./SessionContext";
 export * from "./sanitizer";
 // Session management
