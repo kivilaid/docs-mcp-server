@@ -5,7 +5,7 @@
 import type { Command } from "commander";
 import { createDocumentManagement } from "../../store";
 import { SearchTool } from "../../tools";
-import { formatOutput, setupLogging } from "../utils";
+import { formatOutput, resolveEmbeddingContext, setupLogging } from "../utils";
 
 export async function searchAction(
   library: string,
@@ -15,8 +15,22 @@ export async function searchAction(
 ) {
   const globalOptions = command.parent?.opts() || {};
   setupLogging(globalOptions);
+
   const serverUrl = options.serverUrl;
-  const docService = await createDocumentManagement({ serverUrl });
+
+  // Resolve embedding configuration for local execution (search needs embeddings)
+  const embeddingConfig = resolveEmbeddingContext();
+  if (!serverUrl && !embeddingConfig) {
+    throw new Error(
+      "Embedding configuration is required for local search. " +
+        "Please set DOCS_MCP_EMBEDDING_MODEL environment variable or use --server-url for remote execution.",
+    );
+  }
+
+  const docService = await createDocumentManagement({
+    serverUrl,
+    embeddingConfig,
+  });
 
   try {
     const searchTool = new SearchTool(docService);

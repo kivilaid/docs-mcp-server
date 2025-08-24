@@ -14,7 +14,12 @@ import {
   DEFAULT_MAX_DEPTH,
   DEFAULT_MAX_PAGES,
 } from "../../utils/config";
-import { createPipelineWithCallbacks, parseHeaders, setupLogging } from "../utils";
+import {
+  createPipelineWithCallbacks,
+  parseHeaders,
+  resolveEmbeddingContext,
+  setupLogging,
+} from "../utils";
 
 export async function scrapeAction(
   library: string,
@@ -39,7 +44,20 @@ export async function scrapeAction(
   setupLogging(globalOptions);
 
   const serverUrl = options.serverUrl;
-  const docService: IDocumentManagement = await createDocumentManagement({ serverUrl });
+
+  // Resolve embedding configuration for local execution (scrape needs embeddings)
+  const embeddingConfig = resolveEmbeddingContext();
+  if (!serverUrl && !embeddingConfig) {
+    throw new Error(
+      "Embedding configuration is required for local scraping. " +
+        "Please set DOCS_MCP_EMBEDDING_MODEL environment variable or use --server-url for remote execution.",
+    );
+  }
+
+  const docService: IDocumentManagement = await createDocumentManagement({
+    serverUrl,
+    embeddingConfig,
+  });
   let pipeline: IPipeline | null = null;
 
   try {

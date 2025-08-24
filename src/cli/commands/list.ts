@@ -11,7 +11,12 @@ export async function listAction(options: { serverUrl?: string }, command: Comma
   const globalOptions = command.parent?.opts() || {};
   setupLogging(globalOptions);
   const { serverUrl } = options;
-  const docService = await createDocumentManagement({ serverUrl });
+
+  // List command doesn't need embeddings - explicitly disable for local execution
+  const docService = await createDocumentManagement({
+    serverUrl,
+    embeddingConfig: serverUrl ? undefined : null,
+  });
   try {
     const listLibrariesTool = new ListLibrariesTool(docService);
 

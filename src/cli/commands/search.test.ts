@@ -11,7 +11,11 @@ vi.mock("../../tools", () => ({
     .fn()
     .mockImplementation(() => ({ execute: vi.fn(async () => ({ results: [] })) })),
 }));
-vi.mock("../utils", () => ({ setupLogging: vi.fn(), formatOutput: (v: unknown) => v }));
+vi.mock("../utils", () => ({
+  setupLogging: vi.fn(),
+  formatOutput: (v: unknown) => v,
+  resolveEmbeddingContext: vi.fn(() => ({ type: "mock" })),
+}));
 
 import { searchAction } from "./search";
 

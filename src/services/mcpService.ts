@@ -62,6 +62,7 @@ export async function registerMcpService(
             authEnabled: !!authManager,
             readOnly,
             servicesEnabled: ["mcp"],
+            // Embedding context will be resolved by the service that starts MCP
           });
           analytics.startSession(session);
         }

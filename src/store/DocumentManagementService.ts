@@ -18,6 +18,7 @@ import { logger } from "../utils/logger";
 import { getProjectRoot } from "../utils/paths";
 import { DocumentRetrieverService } from "./DocumentRetrieverService";
 import { DocumentStore } from "./DocumentStore";
+import type { EmbeddingModelConfig } from "./embeddings/EmbeddingConfig";
 import { StoreError } from "./errors";
 import type {
   DbVersionWithLibrary,
@@ -46,7 +47,7 @@ export class DocumentManagementService {
     return (version ?? "").toLowerCase();
   }
 
-  constructor() {
+  constructor(embeddingConfig?: EmbeddingModelConfig | null) {
     let dbPath: string;
     let dbDir: string;
 
@@ -85,7 +86,7 @@ export class DocumentManagementService {
       logger.error(`⚠️  Failed to create database directory ${dbDir}: ${error}`);
     }
 
-    this.store = new DocumentStore(dbPath);
+    this.store = new DocumentStore(dbPath, embeddingConfig);
     this.documentRetriever = new DocumentRetrieverService(this.store);
 
     const semanticSplitter = new SemanticMarkdownSplitter(

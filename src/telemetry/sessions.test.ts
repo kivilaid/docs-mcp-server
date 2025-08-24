@@ -4,7 +4,6 @@ import {
   createMcpSession,
   createPipelineSession,
   createWebSession,
-  getEmbeddingModelContext,
   getEnabledServices,
 } from "./sessions";
 
@@ -56,6 +55,38 @@ describe("sessionManager", () => {
       expect(session.appAuthEnabled).toBe(true);
       expect(session.appReadOnly).toBe(true);
     });
+
+    it("should create CLI session with embedding context", () => {
+      const embeddingContext = {
+        aiEmbeddingProvider: "openai",
+        aiEmbeddingModel: "text-embedding-3-small",
+        aiEmbeddingDimensions: 1536,
+      };
+
+      const session = createCliSession("search", {
+        authEnabled: false,
+        readOnly: false,
+        embeddingContext,
+      });
+
+      expect(session.cliCommand).toBe("search");
+      expect(session.aiEmbeddingProvider).toBe("openai");
+      expect(session.aiEmbeddingModel).toBe("text-embedding-3-small");
+      expect(session.aiEmbeddingDimensions).toBe(1536);
+    });
+
+    it("should create CLI session without embedding context when null", () => {
+      const session = createCliSession("fetch-url", {
+        authEnabled: false,
+        readOnly: false,
+        embeddingContext: null,
+      });
+
+      expect(session.cliCommand).toBe("fetch-url");
+      expect(session.aiEmbeddingProvider).toBeUndefined();
+      expect(session.aiEmbeddingModel).toBeUndefined();
+      expect(session.aiEmbeddingDimensions).toBeUndefined();
+    });
   });
 
   describe("createMcpSession", () => {
@@ -85,6 +116,28 @@ describe("sessionManager", () => {
       expect(session.appAuthEnabled).toBe(true);
       expect(session.appReadOnly).toBe(true);
       expect(session.appServicesEnabled).toEqual(["mcp", "api"]);
+    });
+
+    it("should create MCP session with embedding context", () => {
+      const embeddingContext = {
+        aiEmbeddingProvider: "vertex",
+        aiEmbeddingModel: "text-embedding-004",
+        aiEmbeddingDimensions: 768,
+      };
+
+      const session = createMcpSession({
+        protocol: "http",
+        transport: "sse",
+        authEnabled: false,
+        readOnly: false,
+        servicesEnabled: ["mcp"],
+        embeddingContext,
+      });
+
+      expect(session.mcpProtocol).toBe("http");
+      expect(session.aiEmbeddingProvider).toBe("vertex");
+      expect(session.aiEmbeddingModel).toBe("text-embedding-004");
+      expect(session.aiEmbeddingDimensions).toBe(768);
     });
   });
 
@@ -190,65 +243,6 @@ describe("sessionManager", () => {
       // Times should be very close but potentially different
       expect(session1.startTime).toBeInstanceOf(Date);
       expect(session2.startTime).toBeInstanceOf(Date);
-    });
-  });
-
-  describe("getEmbeddingModelContext", () => {
-    it("should extract provider and model from environment variable", () => {
-      // Mock environment variable
-      const originalEnv = process.env.DOCS_MCP_EMBEDDING_MODEL;
-      process.env.DOCS_MCP_EMBEDDING_MODEL = "vertex:text-embedding-004";
-
-      const context = getEmbeddingModelContext();
-
-      expect(context.aiEmbeddingProvider).toBe("vertex");
-      expect(context.aiEmbeddingModel).toBe("text-embedding-004");
-      expect(context.aiEmbeddingDimensions).toBe(768); // Known dimension
-
-      // Restore environment
-      if (originalEnv !== undefined) {
-        process.env.DOCS_MCP_EMBEDDING_MODEL = originalEnv;
-      } else {
-        delete process.env.DOCS_MCP_EMBEDDING_MODEL;
-      }
-    });
-
-    it("should default to openai when no provider specified", () => {
-      // Mock environment variable
-      const originalEnv = process.env.DOCS_MCP_EMBEDDING_MODEL;
-      process.env.DOCS_MCP_EMBEDDING_MODEL = "text-embedding-3-small";
-
-      const context = getEmbeddingModelContext();
-
-      expect(context.aiEmbeddingProvider).toBe("openai");
-      expect(context.aiEmbeddingModel).toBe("text-embedding-3-small");
-      expect(context.aiEmbeddingDimensions).toBe(1536); // Known dimension
-
-      // Restore environment
-      if (originalEnv !== undefined) {
-        process.env.DOCS_MCP_EMBEDDING_MODEL = originalEnv;
-      } else {
-        delete process.env.DOCS_MCP_EMBEDDING_MODEL;
-      }
-    });
-
-    it("should handle unknown models gracefully", () => {
-      // Mock environment variable with unknown model
-      const originalEnv = process.env.DOCS_MCP_EMBEDDING_MODEL;
-      process.env.DOCS_MCP_EMBEDDING_MODEL = "openai:unknown-model";
-
-      const context = getEmbeddingModelContext();
-
-      expect(context.aiEmbeddingProvider).toBe("openai");
-      expect(context.aiEmbeddingModel).toBe("unknown-model");
-      expect(context.aiEmbeddingDimensions).toBeNull(); // Unknown dimension
-
-      // Restore environment
-      if (originalEnv !== undefined) {
-        process.env.DOCS_MCP_EMBEDDING_MODEL = originalEnv;
-      } else {
-        delete process.env.DOCS_MCP_EMBEDDING_MODEL;
-      }
     });
   });
 });

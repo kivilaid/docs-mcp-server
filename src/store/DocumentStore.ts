@@ -9,6 +9,7 @@ import { EMBEDDING_BATCH_CHARS, EMBEDDING_BATCH_SIZE } from "../utils/config";
 import { logger } from "../utils/logger";
 import { applyMigrations } from "./applyMigrations";
 import {
+  type EmbeddingModelConfig,
   parseEmbeddingConfig,
   setKnownModelDimensions,
 } from "./embeddings/EmbeddingConfig";
@@ -53,6 +54,7 @@ export class DocumentStore {
   private embeddings!: Embeddings;
   private readonly dbDimension: number = VECTOR_DIMENSION;
   private modelDimension!: number;
+  private readonly embeddingConfig?: EmbeddingModelConfig | null;
   private statements!: {
     getById: Database.Statement<[bigint]>;
     insertDocument: Database.Statement<
@@ -146,13 +148,16 @@ export class DocumentStore {
     }));
   }
 
-  constructor(dbPath: string) {
+  constructor(dbPath: string, embeddingConfig?: EmbeddingModelConfig | null) {
     if (!dbPath) {
       throw new StoreError("Missing required database path");
     }
 
     // Only establish database connection in constructor
     this.db = new Database(dbPath);
+
+    // Store embedding config for later initialization
+    this.embeddingConfig = embeddingConfig;
   }
 
   /**
@@ -364,9 +369,9 @@ export class DocumentStore {
   }
 
   /**
-   * Initialize the embedding model for the document store.
-   * Uses shared EmbeddingConfig to avoid code duplication with telemetry.
-   * Only performs expensive dimension detection when dimensions are unknown.
+   * Initialize the embeddings client using either provided config or environment variables.
+   * If no embedding config is provided (null), embeddings will not be initialized.
+   * This allows DocumentStore to be used without embeddings for operations that don't need them.
    *
    * Environment variables per provider:
    * - openai: OPENAI_API_KEY (and optionally OPENAI_API_BASE, OPENAI_ORG_ID)
@@ -376,8 +381,14 @@ export class DocumentStore {
    * - microsoft: Azure OpenAI credentials (AZURE_OPENAI_API_*)
    */
   private async initializeEmbeddings(): Promise<void> {
-    // Use shared config parsing
-    const config = parseEmbeddingConfig();
+    // If embedding config is explicitly null, skip embedding initialization
+    if (this.embeddingConfig === null) {
+      logger.debug("Embedding initialization skipped (explicitly disabled)");
+      return;
+    }
+
+    // Use provided config or fall back to parsing environment
+    const config = this.embeddingConfig || parseEmbeddingConfig();
 
     // Create embedding model
     this.embeddings = createEmbeddingModel(config.modelSpec);
@@ -397,6 +408,10 @@ export class DocumentStore {
     if (this.modelDimension > this.dbDimension) {
       throw new DimensionError(config.modelSpec, this.modelDimension, this.dbDimension);
     }
+
+    logger.debug(
+      `Embeddings initialized: ${config.provider}:${config.model} (${this.modelDimension}d)`,
+    );
   }
 
   /**

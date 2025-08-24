@@ -5,7 +5,12 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createCliProgram } from "./index";
-import { resolveProtocol, validatePort, validateResumeFlag } from "./utils";
+import {
+  resolveEmbeddingContext,
+  resolveProtocol,
+  validatePort,
+  validateResumeFlag,
+} from "./utils";
 
 // Mocks for execution tests will be defined below in dedicated describe block
 
@@ -75,6 +80,7 @@ describe("CLI Command Arguments Matrix", () => {
       hasProtocol: true,
       hasResume: true,
       hasReadOnly: true,
+      requiresEmbedding: true, // Default action starts servers that need search capability
     },
     mcp: {
       hasVerboseSilent: true,
@@ -83,6 +89,7 @@ describe("CLI Command Arguments Matrix", () => {
       hasProtocol: true,
       hasResume: false,
       hasReadOnly: true,
+      requiresEmbedding: true, // MCP server provides search tools
     },
     web: {
       hasVerboseSilent: true,
@@ -91,6 +98,7 @@ describe("CLI Command Arguments Matrix", () => {
       hasProtocol: false,
       hasResume: false,
       hasReadOnly: false,
+      requiresEmbedding: true, // Web interface has search functionality
     },
     worker: {
       hasVerboseSilent: true,
@@ -99,6 +107,7 @@ describe("CLI Command Arguments Matrix", () => {
       hasProtocol: false,
       hasResume: true,
       hasReadOnly: false,
+      requiresEmbedding: true, // Worker handles scraping/indexing and search
     },
     scrape: {
       hasVerboseSilent: true,
@@ -107,6 +116,7 @@ describe("CLI Command Arguments Matrix", () => {
       hasProtocol: false,
       hasResume: false,
       hasReadOnly: false,
+      requiresEmbedding: true, // Scrape needs embeddings for indexing
     },
     search: {
       hasVerboseSilent: true,
@@ -115,6 +125,7 @@ describe("CLI Command Arguments Matrix", () => {
       hasProtocol: false,
       hasResume: false,
       hasReadOnly: false,
+      requiresEmbedding: true, // Search explicitly needs embeddings
     },
     list: {
       hasVerboseSilent: true,
@@ -123,6 +134,7 @@ describe("CLI Command Arguments Matrix", () => {
       hasProtocol: false,
       hasResume: false,
       hasReadOnly: false,
+      requiresEmbedding: false, // List only queries metadata, no embeddings needed
     },
     remove: {
       hasVerboseSilent: true,
@@ -131,6 +143,7 @@ describe("CLI Command Arguments Matrix", () => {
       hasProtocol: false,
       hasResume: false,
       hasReadOnly: false,
+      requiresEmbedding: false, // Remove only deletes records, no embeddings needed
     },
     "find-version": {
       hasVerboseSilent: true,
@@ -139,6 +152,7 @@ describe("CLI Command Arguments Matrix", () => {
       hasProtocol: false,
       hasResume: false,
       hasReadOnly: false,
+      requiresEmbedding: false, // Find-version only queries metadata, no embeddings needed
     },
     "fetch-url": {
       hasVerboseSilent: true,
@@ -147,6 +161,7 @@ describe("CLI Command Arguments Matrix", () => {
       hasProtocol: false,
       hasResume: false,
       hasReadOnly: false,
+      requiresEmbedding: false, // Fetch-url is standalone, doesn't use document store
     },
   };
 
@@ -375,6 +390,43 @@ describe("CLI Validation Logic", () => {
       expect(() => validateResumeFlag(true, "http://example.com")).toThrow(
         "--resume flag is incompatible with --server-url. External workers handle their own job recovery.",
       );
+    });
+  });
+
+  describe("resolveEmbeddingContext", () => {
+    afterEach(() => {
+      // Clean up environment after each test
+      delete process.env.DOCS_MCP_EMBEDDING_MODEL;
+    });
+
+    it("should return default config when no embedding model is configured locally", () => {
+      // Ensure no env var is set
+      delete process.env.DOCS_MCP_EMBEDDING_MODEL;
+      const result = resolveEmbeddingContext();
+      expect(result).toMatchObject({
+        provider: "openai",
+        model: "text-embedding-3-small", // Default fallback
+      });
+    });
+
+    it("should return config when embedding model is configured via environment", () => {
+      process.env.DOCS_MCP_EMBEDDING_MODEL = "openai:text-embedding-ada-002";
+      const result = resolveEmbeddingContext();
+      expect(result).toMatchObject({
+        provider: "openai",
+        model: "text-embedding-ada-002",
+      });
+    });
+
+    it("should prioritize CLI args over environment variables", () => {
+      process.env.DOCS_MCP_EMBEDDING_MODEL = "openai:text-embedding-ada-002";
+      const result = resolveEmbeddingContext({
+        embeddingModel: "openai:text-embedding-3-small",
+      });
+      expect(result).toMatchObject({
+        provider: "openai",
+        model: "text-embedding-3-small",
+      });
     });
   });
 });
