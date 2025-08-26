@@ -7,6 +7,7 @@ import semver from "semver";
 import type { ScraperOptions } from "../scraper/types";
 import { GreedySplitter, SemanticMarkdownSplitter } from "../splitter";
 import type { ContentChunk, DocumentSplitter } from "../splitter/types";
+import { analytics, extractHostname, TelemetryEvent } from "../telemetry";
 import { LibraryNotFoundError, VersionNotFoundError } from "../tools";
 import {
   SPLITTER_MAX_CHUNK_SIZE,
@@ -17,6 +18,7 @@ import { logger } from "../utils/logger";
 import { getProjectRoot } from "../utils/paths";
 import { DocumentRetrieverService } from "./DocumentRetrieverService";
 import { DocumentStore } from "./DocumentStore";
+import type { EmbeddingModelConfig } from "./embeddings/EmbeddingConfig";
 import { StoreError } from "./errors";
 import type {
   DbVersionWithLibrary,
@@ -45,7 +47,7 @@ export class DocumentManagementService {
     return (version ?? "").toLowerCase();
   }
 
-  constructor() {
+  constructor(embeddingConfig?: EmbeddingModelConfig | null) {
     let dbPath: string;
     let dbDir: string;
 
@@ -84,7 +86,7 @@ export class DocumentManagementService {
       logger.error(`⚠️  Failed to create database directory ${dbDir}: ${error}`);
     }
 
-    this.store = new DocumentStore(dbPath);
+    this.store = new DocumentStore(dbPath, embeddingConfig);
     this.documentRetriever = new DocumentRetrieverService(this.store);
 
     const semanticSplitter = new SemanticMarkdownSplitter(
@@ -360,7 +362,34 @@ export class DocumentManagementService {
       `🗑️ Removing all documents from ${library}@${normalizedVersion || "[no version]"} store`,
     );
     const count = await this.store.deleteDocuments(library, normalizedVersion);
-    logger.info(`📊 Deleted ${count} documents`);
+    logger.info(`🗑️ Deleted ${count} documents`);
+  }
+
+  /**
+   * Completely removes a library version and all associated documents.
+   * Also removes the library if no other versions remain.
+   * @param library Library name
+   * @param version Version string (null/undefined for unversioned)
+   */
+  async removeVersion(library: string, version?: string | null): Promise<void> {
+    const normalizedVersion = this.normalizeVersion(version);
+    logger.info(`🗑️ Removing version: ${library}@${normalizedVersion || "[no version]"}`);
+
+    const result = await this.store.removeVersion(library, normalizedVersion, true);
+
+    logger.info(
+      `🗑️ Removed ${result.documentsDeleted} documents, version: ${result.versionDeleted}, library: ${result.libraryDeleted}`,
+    );
+
+    if (result.versionDeleted && result.libraryDeleted) {
+      logger.info(`✅ Completely removed library ${library} (was last version)`);
+    } else if (result.versionDeleted) {
+      logger.info(`✅ Removed version ${library}@${normalizedVersion || "[no version]"}`);
+    } else {
+      logger.warn(
+        `⚠️ Version ${library}@${normalizedVersion || "[no version]"} not found`,
+      );
+    }
   }
 
   /**
@@ -374,8 +403,10 @@ export class DocumentManagementService {
     version: string | null | undefined,
     document: Document,
   ): Promise<void> {
+    const processingStart = performance.now();
     const normalizedVersion = this.normalizeVersion(version);
     const url = document.metadata.url as string;
+
     if (!url || typeof url !== "string" || !url.trim()) {
       throw new StoreError("Document metadata must include a valid URL");
     }
@@ -386,22 +417,69 @@ export class DocumentManagementService {
       throw new Error("Document content cannot be empty");
     }
 
-    // Split document into semantic chunks
-    const chunks = await this.splitter.splitText(document.pageContent);
+    try {
+      // Split document into semantic chunks
+      const chunks = await this.splitter.splitText(document.pageContent);
 
-    // Convert semantic chunks to documents
-    const splitDocs = chunks.map((chunk: ContentChunk) => ({
-      pageContent: chunk.content,
-      metadata: {
-        ...document.metadata,
-        level: chunk.section.level,
-        path: chunk.section.path,
-      },
-    }));
-    logger.info(`✂️  Split document into ${splitDocs.length} chunks`);
+      // Convert semantic chunks to documents
+      const splitDocs = chunks.map((chunk: ContentChunk) => ({
+        pageContent: chunk.content,
+        metadata: {
+          ...document.metadata,
+          level: chunk.section.level,
+          path: chunk.section.path,
+        },
+      }));
+      logger.info(`✂️  Split document into ${splitDocs.length} chunks`);
 
-    // Add split documents to store
-    await this.store.addDocuments(library, normalizedVersion, splitDocs);
+      // Add split documents to store
+      await this.store.addDocuments(library, normalizedVersion, splitDocs);
+
+      // Track successful document processing
+      const processingTime = performance.now() - processingStart;
+      analytics.track(TelemetryEvent.DOCUMENT_PROCESSED, {
+        // Content characteristics (privacy-safe)
+        mimeType: document.metadata.mimeType,
+        contentSizeBytes: document.pageContent.length,
+
+        // Processing metrics
+        processingTimeMs: Math.round(processingTime),
+        chunksCreated: splitDocs.length,
+
+        // Document characteristics
+        hasTitle: !!document.metadata.title,
+        hasDescription: !!document.metadata.description,
+        urlDomain: extractHostname(url),
+        depth: document.metadata.depth,
+
+        // Library context
+        library,
+        libraryVersion: normalizedVersion || null,
+
+        // Processing efficiency
+        avgChunkSizeBytes: Math.round(document.pageContent.length / splitDocs.length),
+        processingSpeedKbPerSec: Math.round(
+          document.pageContent.length / 1024 / (processingTime / 1000),
+        ),
+      });
+    } catch (error) {
+      // Track processing failures with native error tracking
+      const processingTime = performance.now() - processingStart;
+
+      if (error instanceof Error) {
+        analytics.captureException(error, {
+          mimeType: document.metadata.mimeType,
+          contentSizeBytes: document.pageContent.length,
+          processingTimeMs: Math.round(processingTime),
+          library,
+          libraryVersion: normalizedVersion || null,
+          context: "document_processing",
+          component: DocumentManagementService.constructor.name,
+        });
+      }
+
+      throw error;
+    }
   }
 
   /**

@@ -60,4 +60,34 @@ describe("isInScope - hostname and domain", () => {
     expect(isInScope(base, diffSub, "domain")).toBe(true);
     expect(isInScope(base, diffDomain, "domain")).toBe(false);
   });
+
+  it("domain scope handles complex TLDs correctly", () => {
+    const baseCoUk = new URL("https://api.service.co.uk/docs");
+    const sameCoUk = new URL("https://www.service.co.uk/other");
+    const diffCoUk = new URL("https://different.co.uk/page");
+
+    expect(isInScope(baseCoUk, sameCoUk, "domain")).toBe(true);
+    expect(isInScope(baseCoUk, diffCoUk, "domain")).toBe(false);
+  });
+
+  it("domain scope handles GitHub Pages correctly", () => {
+    const baseGithub = new URL("https://user.github.io/repo");
+    const sameUser = new URL("https://user.github.io/other-repo");
+    const diffUser = new URL("https://otheruser.github.io/repo");
+
+    expect(isInScope(baseGithub, sameUser, "domain")).toBe(true);
+    expect(isInScope(baseGithub, diffUser, "domain")).toBe(false);
+  });
+
+  it("domain scope handles gov.uk domains correctly", () => {
+    // For .gov.uk, each service gets its own registrable domain
+    const baseGov = new URL("https://api.service.gov.uk/docs");
+    const sameGov = new URL("https://subdomain.api.service.gov.uk/assets"); // Same registrable domain
+    const diffGov = new URL("https://api.different.gov.uk/docs"); // Different registrable domain
+    const diffService = new URL("https://cdn.service.gov.uk/assets"); // Different service = different registrable domain
+
+    expect(isInScope(baseGov, sameGov, "domain")).toBe(true);
+    expect(isInScope(baseGov, diffGov, "domain")).toBe(false);
+    expect(isInScope(baseGov, diffService, "domain")).toBe(false);
+  });
 });

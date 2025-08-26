@@ -18,12 +18,15 @@ export async function fetchUrlAction(
 
   const headers = parseHeaders(options.header);
   const fetchUrlTool = new FetchUrlTool(new HttpFetcher(), new FileFetcher());
+
+  // Call the tool directly - tracking is now handled inside the tool
   const content = await fetchUrlTool.execute({
     url,
     followRedirects: options.followRedirects,
     scrapeMode: options.scrapeMode,
     headers: Object.keys(headers).length > 0 ? headers : undefined,
   });
+
   console.log(content);
 }
 

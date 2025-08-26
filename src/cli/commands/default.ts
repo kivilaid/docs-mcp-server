@@ -16,6 +16,7 @@ import {
   createPipelineWithCallbacks,
   ensurePlaywrightBrowsersInstalled,
   parseAuthConfig,
+  resolveEmbeddingContext,
   resolveProtocol,
   setupLogging,
   validateAuthConfig,
@@ -98,7 +99,9 @@ export function createDefaultAction(program: Command): Command {
           // Ensure browsers are installed
           ensurePlaywrightBrowsersInstalled();
 
-          const docService = await createLocalDocumentManagement();
+          // Resolve embedding configuration for local execution (default action needs embeddings)
+          const embeddingConfig = resolveEmbeddingContext();
+          const docService = await createLocalDocumentManagement(embeddingConfig);
           const pipelineOptions: PipelineOptions = {
             recoverJobs: options.resume || false, // Use --resume flag for job recovery
             concurrency: 3,

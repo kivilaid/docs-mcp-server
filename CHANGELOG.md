@@ -1,3 +1,49 @@
+# [1.22.0](https://github.com/arabold/docs-mcp-server/compare/v1.21.1...v1.22.0) (2025-08-24)
+
+
+### Bug Fixes
+
+* **api:** add removeVersion mutation to document management API ([0eb6ae8](https://github.com/arabold/docs-mcp-server/commit/0eb6ae85af1fd0d6cdb73f825b4a6f7c365bea56))
+* **embeddings:** add ModelConfigurationError handling for missing OPENAI_API_KEY ([4460700](https://github.com/arabold/docs-mcp-server/commit/4460700d12916023c9c79cc409b315602de3ccbf)), closes [#188](https://github.com/arabold/docs-mcp-server/issues/188)
+* **mcpService:** fix excessive session creation in MCP HTTP transport ([39e05bd](https://github.com/arabold/docs-mcp-server/commit/39e05bd08aff47fd1f6c157554a68ee18fd0e53a)), closes [#190](https://github.com/arabold/docs-mcp-server/issues/190)
+
+
+### Features
+
+* **telemetry:** add type-safe telemetry event tracking and enhance analytics methods ([75b4004](https://github.com/arabold/docs-mcp-server/commit/75b4004d32711aadbaf3a8b98f10fe74cbe3dfcf))
+* **telemetry:** enhance error tracking with PostHog's native exception capture ([d938134](https://github.com/arabold/docs-mcp-server/commit/d9381345f88cd42741d5dbabd2abc19709890070)), closes [#192](https://github.com/arabold/docs-mcp-server/issues/192)
+* **telemetry:** enhance PostHog client with automatic property conversion and standardization ([cdb191c](https://github.com/arabold/docs-mcp-server/commit/cdb191cf5f60a379d9d9e428022832fbd7dd986c))
+* **telemetry:** enhance session context with embedding model information and initialization ([337bc39](https://github.com/arabold/docs-mcp-server/commit/337bc3972b084aa358e7d20d3a8f3d09626615d8)), closes [#191](https://github.com/arabold/docs-mcp-server/issues/191)
+
+## [1.21.1](https://github.com/arabold/docs-mcp-server/compare/v1.21.0...v1.21.1) (2025-08-24)
+
+
+### Bug Fixes
+
+* **ci:** add vite plugin to include shebang and make index.js executable ([b5087a8](https://github.com/arabold/docs-mcp-server/commit/b5087a82fab3cf790c72911b695041c9ea8d0eaa))
+
+# [1.21.0](https://github.com/arabold/docs-mcp-server/compare/v1.20.0...v1.21.0) (2025-08-23)
+
+
+### Bug Fixes
+
+* **auth:** validate tokens using userinfo endpoint ([0084123](https://github.com/arabold/docs-mcp-server/commit/008412386c00671b232015cabd58c9d71e1fc302))
+* **document-management:** rename version to libraryVersion for clarity ([80be3f9](https://github.com/arabold/docs-mcp-server/commit/80be3f944fe48aad17647839e6ff199bb7466746))
+* **tests:** correct casing in SessionTracker mock and update comment for clarity ([f4bfa14](https://github.com/arabold/docs-mcp-server/commit/f4bfa1419d3717abfa064aef7e349daa980f321a))
+
+
+### Features
+
+* adds OAuth2/OIDC authentication and scope control ([2ed3ed5](https://github.com/arabold/docs-mcp-server/commit/2ed3ed5f358cee800e37a61a4b3272cc6d39448d))
+* implement default exclusion patterns for documentation scraping ([d927e21](https://github.com/arabold/docs-mcp-server/commit/d927e2151b174643610a13c9b3aa95fed3cf4409))
+* implement privacy-first telemetry and analytics tracking ([0144c50](https://github.com/arabold/docs-mcp-server/commit/0144c5065f1bcd8f99716fd142f60d00338b0ade))
+* **remove-tool:** implement complete library version removal functionality ([9d6f957](https://github.com/arabold/docs-mcp-server/commit/9d6f957e433e2c3e8c28b618fe3a7f63bef8d552)), closes [#185](https://github.com/arabold/docs-mcp-server/issues/185)
+* **telemetry:** enhance telemetry integration with session tracking and user agent categorization ([bdd9dba](https://github.com/arabold/docs-mcp-server/commit/bdd9dba2e600b04ca5d733c5048fde8f8946fd3b))
+* **telemetry:** implement telemetry configuration and analytics service ([ffb3f32](https://github.com/arabold/docs-mcp-server/commit/ffb3f320357b50ca6e241842a44e82de769c1996))
+* **telemetry:** integrate PostHog analytics configuration and update related functions ([c5c7e41](https://github.com/arabold/docs-mcp-server/commit/c5c7e418aed848cc50598ef27fb6a681166ea25e))
+* **telemetry:** introduce comprehensive telemetry system for user tracking and analytics ([cdbc3fb](https://github.com/arabold/docs-mcp-server/commit/cdbc3fb7c06f9bb2db456b171684e0f7ba2d3c55))
+* **telemetry:** support custom installation ID storage path ([b688b35](https://github.com/arabold/docs-mcp-server/commit/b688b3570da4011f52ff984e8f23b2dc897de06a))
+
 # [1.20.0](https://github.com/arabold/docs-mcp-server/compare/v1.19.0...v1.20.0) (2025-08-16)
 
 

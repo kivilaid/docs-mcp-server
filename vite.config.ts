@@ -1,10 +1,33 @@
 import { defineConfig } from "vitest/config";
 import path from 'path';
+import fs from 'fs';
 import packageJson from "./package.json";
 
 export default defineConfig({
   plugins: [
+    // Plugin to preserve shebang in the built file
+    {
+      name: 'preserve-shebang',
+      generateBundle(options, bundle) {
+        const indexBundle = bundle['index.js'];
+        if (indexBundle && indexBundle.type === 'chunk' && indexBundle.code) {
+          // Add shebang to the beginning of the file
+          indexBundle.code = '#!/usr/bin/env node\n' + indexBundle.code;
+        }
+      },
+      writeBundle(options) {
+        // Make the index.js file executable after writing
+        const indexPath = path.join(options.dir || 'dist', 'index.js');
+        if (fs.existsSync(indexPath)) {
+          fs.chmodSync(indexPath, 0o755);
+        }
+      }
+    }
   ],
+  define: {
+    // Inject environment variables at build time - MUST be set during CI/CD
+    '__POSTHOG_API_KEY__': JSON.stringify(process.env.POSTHOG_API_KEY || ''),
+  },
   resolve: {
     // Keep existing resolve extensions
     extensions: [".ts", ".tsx", ".js", ".jsx", ".json"],

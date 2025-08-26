@@ -1,5 +1,6 @@
 // Utility for scope filtering, extracted from WebScraperStrategy
 import type { URL } from "node:url";
+import { extractPrimaryDomain } from "../../utils/url";
 
 /**
  * Compute the effective base directory for scope=subpages.
@@ -41,8 +42,10 @@ export function isInScope(
     case "hostname":
       return baseUrl.hostname === targetUrl.hostname;
     case "domain": {
-      const getDomain = (host: string) => host.split(".").slice(-2).join(".");
-      return getDomain(baseUrl.hostname) === getDomain(targetUrl.hostname);
+      return (
+        extractPrimaryDomain(baseUrl.hostname) ===
+        extractPrimaryDomain(targetUrl.hostname)
+      );
     }
     default:
       return false;

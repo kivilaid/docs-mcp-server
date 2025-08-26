@@ -22,7 +22,11 @@ export type EmbeddingProvider = "openai" | "vertex" | "gemini" | "aws" | "micros
  */
 export class UnsupportedProviderError extends Error {
   constructor(provider: string) {
-    super(`Unsupported embedding provider: ${provider}`);
+    super(
+      `❌ Unsupported embedding provider: ${provider}\n` +
+        "   Supported providers: openai, vertex, gemini, aws, microsoft\n" +
+        "   See README.md for configuration options or run with --help for more details.",
+    );
     this.name = "UnsupportedProviderError";
   }
 }
@@ -68,6 +72,13 @@ export function createEmbeddingModel(providerAndModel: string): Embeddings {
 
   switch (provider) {
     case "openai": {
+      if (!process.env.OPENAI_API_KEY) {
+        throw new ModelConfigurationError(
+          "❌ Missing API key for embedding provider\n" +
+            "   Please set OPENAI_API_KEY or configure an alternative embedding model.\n" +
+            "   See README.md for configuration options or run with --help for more details.",
+        );
+      }
       const config: Partial<OpenAIEmbeddingsParams> & { configuration?: ClientOptions } =
         {
           ...baseConfig,
@@ -85,7 +96,9 @@ export function createEmbeddingModel(providerAndModel: string): Embeddings {
     case "vertex": {
       if (!process.env.GOOGLE_APPLICATION_CREDENTIALS) {
         throw new ModelConfigurationError(
-          "GOOGLE_APPLICATION_CREDENTIALS environment variable is required for Google Cloud Vertex AI",
+          "❌ Missing credentials for Google Cloud Vertex AI\n" +
+            "   Please set GOOGLE_APPLICATION_CREDENTIALS or configure an alternative embedding model.\n" +
+            "   See README.md for configuration options or run with --help for more details.",
         );
       }
       return new VertexAIEmbeddings({
@@ -97,7 +110,9 @@ export function createEmbeddingModel(providerAndModel: string): Embeddings {
     case "gemini": {
       if (!process.env.GOOGLE_API_KEY) {
         throw new ModelConfigurationError(
-          "GOOGLE_API_KEY environment variable is required for Google AI (Gemini)",
+          "❌ Missing API key for Google AI (Gemini)\n" +
+            "   Please set GOOGLE_API_KEY or configure an alternative embedding model.\n" +
+            "   See README.md for configuration options or run with --help for more details.",
         );
       }
       // Create base embeddings and wrap with FixedDimensionEmbeddings since Gemini

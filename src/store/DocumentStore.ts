@@ -8,6 +8,12 @@ import type { DocumentMetadata } from "../types";
 import { EMBEDDING_BATCH_CHARS, EMBEDDING_BATCH_SIZE } from "../utils/config";
 import { logger } from "../utils/logger";
 import { applyMigrations } from "./applyMigrations";
+import { EmbeddingConfig, type EmbeddingModelConfig } from "./embeddings/EmbeddingConfig";
+import {
+  createEmbeddingModel,
+  ModelConfigurationError,
+  UnsupportedProviderError,
+} from "./embeddings/EmbeddingFactory";
 import { ConnectionError, DimensionError, StoreError } from "./errors";
 import type { StoredScraperOptions } from "./types";
 import {
@@ -45,6 +51,7 @@ export class DocumentStore {
   private embeddings!: Embeddings;
   private readonly dbDimension: number = VECTOR_DIMENSION;
   private modelDimension!: number;
+  private readonly embeddingConfig?: EmbeddingModelConfig | null;
   private statements!: {
     getById: Database.Statement<[bigint]>;
     insertDocument: Database.Statement<
@@ -81,6 +88,11 @@ export class DocumentStore {
     updateVersionScraperOptions: Database.Statement<[string, string, number]>;
     getVersionWithOptions: Database.Statement<[number]>;
     getVersionsBySourceUrl: Database.Statement<[string]>;
+    // Version and library deletion statements
+    deleteVersionById: Database.Statement<[number]>;
+    deleteLibraryById: Database.Statement<[number]>;
+    countVersionsByLibraryId: Database.Statement<[number]>;
+    getVersionId: Database.Statement<[string, string]>;
   };
 
   /**
@@ -133,13 +145,16 @@ export class DocumentStore {
     }));
   }
 
-  constructor(dbPath: string) {
+  constructor(dbPath: string, embeddingConfig?: EmbeddingModelConfig | null) {
     if (!dbPath) {
       throw new StoreError("Missing required database path");
     }
 
     // Only establish database connection in constructor
     this.db = new Database(dbPath);
+
+    // Store embedding config for later initialization
+    this.embeddingConfig = embeddingConfig;
   }
 
   /**
@@ -319,6 +334,17 @@ export class DocumentStore {
       getVersionsBySourceUrl: this.db.prepare<[string]>(
         "SELECT v.*, l.name as library_name FROM versions v JOIN libraries l ON v.library_id = l.id WHERE v.source_url = ? ORDER BY v.created_at DESC",
       ),
+      // Version and library deletion statements
+      deleteVersionById: this.db.prepare<[number]>("DELETE FROM versions WHERE id = ?"),
+      deleteLibraryById: this.db.prepare<[number]>("DELETE FROM libraries WHERE id = ?"),
+      countVersionsByLibraryId: this.db.prepare<[number]>(
+        "SELECT COUNT(*) as count FROM versions WHERE library_id = ?",
+      ),
+      getVersionId: this.db.prepare<[string, string]>(
+        `SELECT v.id, v.library_id FROM versions v
+         JOIN libraries l ON v.library_id = l.id
+         WHERE l.name = ? AND COALESCE(v.name, '') = COALESCE(?, '')`,
+      ),
     };
     this.statements = statements;
   }
@@ -340,31 +366,77 @@ export class DocumentStore {
   }
 
   /**
-   * Initializes embeddings client using environment variables for configuration.
+   * Initialize the embeddings client using either provided config or environment variables.
+   * If no embedding config is provided (null), embeddings will not be initialized.
+   * This allows DocumentStore to be used without embeddings for operations that don't need them.
    *
-   * The embedding model is configured using DOCS_MCP_EMBEDDING_MODEL environment variable.
-   * Format: "provider:model_name" (e.g., "google:text-embedding-004") or just "model_name"
-   * for OpenAI (default).
-   *
-   * Supported providers and their required environment variables:
+   * Environment variables per provider:
    * - openai: OPENAI_API_KEY (and optionally OPENAI_API_BASE, OPENAI_ORG_ID)
-   * - google: GOOGLE_APPLICATION_CREDENTIALS (path to service account JSON)
-   * - aws: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION (or BEDROCK_AWS_REGION)
+   * - vertex: GOOGLE_APPLICATION_CREDENTIALS (path to service account JSON)
+   * - gemini: GOOGLE_API_KEY
+   * - aws: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION
    * - microsoft: Azure OpenAI credentials (AZURE_OPENAI_API_*)
    */
   private async initializeEmbeddings(): Promise<void> {
-    const modelSpec = process.env.DOCS_MCP_EMBEDDING_MODEL || "text-embedding-3-small";
+    // If embedding config is explicitly null, skip embedding initialization
+    if (this.embeddingConfig === null) {
+      logger.debug("Embedding initialization skipped (explicitly disabled)");
+      return;
+    }
 
-    // Import dynamically to avoid circular dependencies
-    const { createEmbeddingModel } = await import("./embeddings/EmbeddingFactory");
-    this.embeddings = createEmbeddingModel(modelSpec);
+    // Use provided config or fall back to parsing environment
+    const config = this.embeddingConfig || EmbeddingConfig.parseEmbeddingConfig();
 
-    // Determine the model's actual dimension by embedding a test string
-    const testVector = await this.embeddings.embedQuery("test");
-    this.modelDimension = testVector.length;
+    // Create embedding model
+    try {
+      this.embeddings = createEmbeddingModel(config.modelSpec);
 
-    if (this.modelDimension > this.dbDimension) {
-      throw new DimensionError(modelSpec, this.modelDimension, this.dbDimension);
+      // Use known dimensions if available, otherwise detect via test query
+      if (config.dimensions !== null) {
+        this.modelDimension = config.dimensions;
+      } else {
+        // Fallback: determine the model's actual dimension by embedding a test string
+        const testVector = await this.embeddings.embedQuery("test");
+        this.modelDimension = testVector.length;
+
+        // Cache the discovered dimensions for future use
+        EmbeddingConfig.setKnownModelDimensions(config.model, this.modelDimension);
+      }
+
+      if (this.modelDimension > this.dbDimension) {
+        throw new DimensionError(config.modelSpec, this.modelDimension, this.dbDimension);
+      }
+
+      logger.debug(
+        `Embeddings initialized: ${config.provider}:${config.model} (${this.modelDimension}d)`,
+      );
+    } catch (error) {
+      // Handle model-related errors with helpful messages
+      if (error instanceof Error) {
+        if (
+          error.message.includes("does not exist") ||
+          error.message.includes("MODEL_NOT_FOUND")
+        ) {
+          throw new ModelConfigurationError(
+            `❌ Invalid embedding model: ${config.model}\n` +
+              `   The model "${config.model}" is not available or you don't have access to it.\n` +
+              "   See README.md for supported models or run with --help for more details.",
+          );
+        }
+        if (
+          error.message.includes("API key") ||
+          error.message.includes("401") ||
+          error.message.includes("authentication")
+        ) {
+          throw new ModelConfigurationError(
+            `❌ Authentication failed for ${config.provider} embedding provider\n` +
+              "   Please check your API key configuration.\n" +
+              "   See README.md for configuration options or run with --help for more details.",
+          );
+        }
+      }
+      // Re-throw other embedding errors (like DimensionError) as-is
+      throw error;
     }
   }
 
@@ -396,8 +468,12 @@ export class DocumentStore {
       // 4. Initialize embeddings client (await to catch errors)
       await this.initializeEmbeddings();
     } catch (error) {
-      // Re-throw StoreError directly, wrap others in ConnectionError
-      if (error instanceof StoreError) {
+      // Re-throw StoreError, ModelConfigurationError, and UnsupportedProviderError directly
+      if (
+        error instanceof StoreError ||
+        error instanceof ModelConfigurationError ||
+        error instanceof UnsupportedProviderError
+      ) {
         throw error;
       }
       throw new ConnectionError("Failed to initialize database connection", error);
@@ -868,6 +944,70 @@ export class DocumentStore {
       return result.changes;
     } catch (error) {
       throw new ConnectionError("Failed to delete documents by URL", error);
+    }
+  }
+
+  /**
+   * Completely removes a library version and all associated documents.
+   * Optionally removes the library if no other versions remain.
+   * @param library Library name
+   * @param version Version string (empty string for unversioned)
+   * @param removeLibraryIfEmpty Whether to remove the library if no versions remain
+   * @returns Object with counts of deleted documents, version deletion status, and library deletion status
+   */
+  async removeVersion(
+    library: string,
+    version: string,
+    removeLibraryIfEmpty = true,
+  ): Promise<{
+    documentsDeleted: number;
+    versionDeleted: boolean;
+    libraryDeleted: boolean;
+  }> {
+    try {
+      const normalizedLibrary = library.toLowerCase();
+      const normalizedVersion = version.toLowerCase();
+
+      // First, get the version ID and library ID
+      const versionResult = this.statements.getVersionId.get(
+        normalizedLibrary,
+        normalizedVersion,
+      ) as { id: number; library_id: number } | undefined;
+
+      if (!versionResult) {
+        // Version doesn't exist, return zero counts
+        return { documentsDeleted: 0, versionDeleted: false, libraryDeleted: false };
+      }
+
+      const { id: versionId, library_id: libraryId } = versionResult;
+
+      // Delete all documents for this version
+      const documentsDeleted = await this.deleteDocuments(library, version);
+
+      // Delete the version record
+      const versionDeleteResult = this.statements.deleteVersionById.run(versionId);
+      const versionDeleted = versionDeleteResult.changes > 0;
+
+      let libraryDeleted = false;
+
+      // Check if we should remove the library
+      if (removeLibraryIfEmpty && versionDeleted) {
+        // Count remaining versions for this library
+        const countResult = this.statements.countVersionsByLibraryId.get(libraryId) as
+          | { count: number }
+          | undefined;
+        const remainingVersions = countResult?.count ?? 0;
+
+        if (remainingVersions === 0) {
+          // No versions left, delete the library
+          const libraryDeleteResult = this.statements.deleteLibraryById.run(libraryId);
+          libraryDeleted = libraryDeleteResult.changes > 0;
+        }
+      }
+
+      return { documentsDeleted, versionDeleted, libraryDeleted };
+    } catch (error) {
+      throw new ConnectionError("Failed to remove version", error);
     }
   }
 

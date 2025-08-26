@@ -309,6 +309,8 @@ This architecture allows independent scaling of processing (workers) and user in
 
 ## Configuration
 
+Commands that perform search or indexing operations require embedding configuration to be explicitly set via environment variables.
+
 The Docs MCP Server is configured via environment variables. Set these in your shell, Docker, or MCP client config.
 
 | Variable                           | Description                                           |
@@ -410,6 +412,51 @@ npx @arabold/docs-mcp-server@latest
 For more architectural details, see the [ARCHITECTURE.md](ARCHITECTURE.md).
 
 For enterprise authentication and security features, see the [Authentication Guide](docs/authentication.md).
+
+## Telemetry
+
+The Docs MCP Server includes privacy-first telemetry to help improve the product. We collect anonymous usage data to understand how the tool is used and identify areas for improvement.
+
+### What We Collect
+
+- Command usage patterns and success rates
+- Tool execution metrics (counts, durations, error types)
+- Pipeline job statistics (progress, completion rates)
+- Service configuration patterns (auth enabled, read-only mode)
+- Performance metrics (response times, processing efficiency)
+- Protocol usage (stdio vs HTTP, transport modes)
+
+### What We DON'T Collect
+
+- Search query content or user input
+- URLs being scraped or accessed
+- Document content or scraped data
+- Authentication tokens or credentials
+- Personal information or identifying data
+
+### Disabling Telemetry
+
+You can disable telemetry collection entirely:
+
+**Option 1: CLI Flag**
+
+```bash
+npx @arabold/docs-mcp-server@latest --no-telemetry
+```
+
+**Option 2: Environment Variable**
+
+```bash
+DOCS_MCP_TELEMETRY=false npx @arabold/docs-mcp-server@latest
+```
+
+**Option 3: Docker**
+
+```bash
+docker run -e DOCS_MCP_TELEMETRY=false ghcr.io/arabold/docs-mcp-server:latest
+```
+
+For more details about our telemetry practices, see the [Telemetry Guide](docs/telemetry.md).
 
 ## Development
 

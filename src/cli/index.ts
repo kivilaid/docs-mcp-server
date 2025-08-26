@@ -4,6 +4,12 @@
 
 import { Command, Option } from "commander";
 import packageJson from "../../package.json";
+import {
+  analytics,
+  createCliSession,
+  shouldEnableTelemetry,
+  TelemetryConfig,
+} from "../telemetry";
 import { LogLevel, setLogLevel } from "../utils/logger";
 import { createDefaultAction } from "./commands/default";
 import { createFetchUrlCommand } from "./commands/fetchUrl";
@@ -33,15 +39,40 @@ export function createCliProgram(): Command {
       new Option("--verbose", "Enable verbose (debug) logging").conflicts("silent"),
     )
     .addOption(new Option("--silent", "Disable all logging except errors"))
+    .addOption(new Option("--no-telemetry", "Disable telemetry collection"))
     .enablePositionalOptions()
     .allowExcessArguments(false)
     .showHelpAfterError(true);
 
   // Set up global options handling
-  program.hook("preAction", (thisCommand, _actionCommand) => {
+  program.hook("preAction", async (thisCommand, actionCommand) => {
     const globalOptions: GlobalOptions = thisCommand.opts();
+
+    // Setup logging
     if (globalOptions.silent) setLogLevel(LogLevel.ERROR);
     else if (globalOptions.verbose) setLogLevel(LogLevel.DEBUG);
+
+    // Initialize telemetry if enabled
+    if (shouldEnableTelemetry()) {
+      const commandName = actionCommand.name();
+
+      // Create session without embedding context - commands will provide this themselves
+      const session = createCliSession(commandName, {
+        authEnabled: false, // CLI doesn't use auth
+        readOnly: false,
+      });
+      analytics.startSession(session);
+    } else {
+      TelemetryConfig.getInstance().disable();
+    }
+  });
+
+  // Cleanup telemetry on command completion
+  program.hook("postAction", async () => {
+    if (analytics.isEnabled()) {
+      analytics.endSession();
+      await analytics.shutdown();
+    }
   });
 
   // Register all commands

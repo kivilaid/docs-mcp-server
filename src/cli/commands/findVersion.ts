@@ -15,13 +15,21 @@ export async function findVersionAction(
   const globalOptions = command.parent?.opts() || {};
   setupLogging(globalOptions);
   const serverUrl = options.serverUrl;
-  const docService = await createDocumentManagement({ serverUrl });
+
+  // Find version command doesn't need embeddings - explicitly disable for local execution
+  const docService = await createDocumentManagement({
+    serverUrl,
+    embeddingConfig: serverUrl ? undefined : null,
+  });
   try {
     const findVersionTool = new FindVersionTool(docService);
+
+    // Call the tool directly - tracking is now handled inside the tool
     const versionInfo = await findVersionTool.execute({
       library,
       targetVersion: options.version,
     });
+
     if (!versionInfo) throw new Error("Failed to get version information");
     console.log(versionInfo);
   } finally {

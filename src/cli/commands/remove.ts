@@ -14,16 +14,21 @@ export async function removeAction(
   const globalOptions = command.parent?.opts() || {};
   setupLogging(globalOptions);
   const serverUrl = options.serverUrl;
-  const docService = await createDocumentManagement({ serverUrl });
+
+  // Remove command doesn't need embeddings - explicitly disable for local execution
+  const docService = await createDocumentManagement({
+    serverUrl,
+    embeddingConfig: serverUrl ? undefined : null,
+  });
   const { version } = options;
   try {
+    // Call the document service directly - we could convert this to use RemoveTool if needed
     await docService.removeAllDocuments(library, version);
-    console.log(
-      `✅ Successfully removed documents for ${library}${version ? `@${version}` : " (unversioned)"}.`,
-    );
+
+    console.log(`✅ Successfully removed ${library}${version ? `@${version}` : ""}.`);
   } catch (error) {
     console.error(
-      `❌ Failed to remove documents for ${library}${version ? `@${version}` : " (unversioned)"}:`,
+      `❌ Failed to remove ${library}${version ? `@${version}` : ""}:`,
       error instanceof Error ? error.message : String(error),
     );
     throw error;

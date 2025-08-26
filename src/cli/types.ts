@@ -12,6 +12,7 @@ import type { IDocumentManagement } from "../store/trpc/interfaces";
 export interface GlobalOptions {
   verbose?: boolean;
   silent?: boolean;
+  noTelemetry?: boolean;
 }
 
 /**

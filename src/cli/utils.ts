@@ -11,6 +11,10 @@ import type { IPipeline, PipelineOptions } from "../pipeline";
 import { PipelineFactory } from "../pipeline";
 import type { DocumentManagementService } from "../store";
 import {
+  EmbeddingConfig,
+  type EmbeddingModelConfig,
+} from "../store/embeddings/EmbeddingConfig";
+import {
   DEFAULT_HTTP_PORT,
   DEFAULT_MAX_CONCURRENCY,
   DEFAULT_PROTOCOL,
@@ -19,6 +23,16 @@ import {
 import { LogLevel, logger, setLogLevel } from "../utils/logger";
 import { getProjectRoot } from "../utils/paths";
 import type { GlobalOptions } from "./types";
+
+/**
+ * Embedding context that can be passed to session creation.
+ * Simplified subset of EmbeddingModelConfig for telemetry purposes.
+ */
+export interface EmbeddingContext {
+  aiEmbeddingProvider: string;
+  aiEmbeddingModel: string;
+  aiEmbeddingDimensions: number | null;
+}
 
 /**
  * Ensures that the Playwright browsers are installed, unless a system Chromium path is set.
@@ -147,7 +161,7 @@ export async function createPipelineWithCallbacks(
   pipeline.setCallbacks({
     onJobProgress: async (job, progress) => {
       logger.debug(
-        `📊 Job ${job.id} progress: ${progress.pagesScraped}/${progress.totalPages} pages`,
+        `Job ${job.id} progress: ${progress.pagesScraped}/${progress.totalPages} pages`,
       );
     },
     onJobStatusChange: async (job) => {
@@ -216,6 +230,7 @@ export const CLI_DEFAULTS = {
   HTTP_PORT: DEFAULT_HTTP_PORT,
   WEB_PORT: DEFAULT_WEB_PORT,
   MAX_CONCURRENCY: DEFAULT_MAX_CONCURRENCY,
+  TELEMETRY: true,
 } as const;
 
 /**
@@ -333,5 +348,28 @@ export function warnHttpUsage(authConfig: AuthConfig | undefined, port: number):
       "⚠️  Authentication is enabled but running over HTTP in production. " +
         "Consider using HTTPS for security.",
     );
+  }
+}
+
+/**
+ * Resolves embedding configuration from environment variables and CLI args.
+ * This function always attempts to resolve embedding configuration regardless of deployment mode.
+ * @param cliArgs Future: CLI arguments that might override environment
+ * @returns Embedding configuration or null if config is unavailable
+ */
+export function resolveEmbeddingContext(cliArgs?: {
+  embeddingModel?: string;
+}): EmbeddingModelConfig | null {
+  try {
+    // Future: CLI args take precedence over environment
+    const modelSpec = cliArgs?.embeddingModel || process.env.DOCS_MCP_EMBEDDING_MODEL;
+
+    logger.debug("Resolving embedding configuration");
+    const config = EmbeddingConfig.parseEmbeddingConfig(modelSpec);
+
+    return config;
+  } catch (error) {
+    logger.debug(`Failed to resolve embedding configuration: ${error}`);
+    return null;
   }
 }

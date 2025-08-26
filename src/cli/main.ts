@@ -1,10 +1,16 @@
 /**
  * CLI main entry point with global shutdown and error handling.
+ * Analytics is initialized immediately when imported for proper telemetry across all services.
  */
 
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { IPipeline } from "../pipeline";
+import {
+  ModelConfigurationError,
+  UnsupportedProviderError,
+} from "../store/embeddings/EmbeddingFactory";
 import type { IDocumentManagement } from "../store/trpc/interfaces";
+import { analytics } from "../telemetry";
 import { logger } from "../utils/logger";
 import { createCliProgram } from "./index";
 
@@ -53,6 +59,12 @@ const sigintHandler = async (): Promise<void> => {
       logger.debug("SIGINT: DocumentManagementService shut down.");
     }
 
+    // Shutdown analytics
+    if (analytics.isEnabled()) {
+      await analytics.shutdown();
+      logger.debug("SIGINT: Analytics shut down.");
+    }
+
     logger.info("✅ Graceful shutdown completed");
     process.exit(0);
   } catch (error) {
@@ -99,7 +111,17 @@ export async function runCli(): Promise<void> {
 
     await program.parseAsync(process.argv);
   } catch (error) {
-    logger.error(`❌ Error in CLI: ${error}`);
+    // Handle embedding configuration errors with clean, helpful messages
+    if (
+      error instanceof ModelConfigurationError ||
+      error instanceof UnsupportedProviderError
+    ) {
+      // These errors already have properly formatted messages
+      logger.error(error.message);
+    } else {
+      logger.error(`❌ Error in CLI: ${error}`);
+    }
+
     if (!isShuttingDown) {
       isShuttingDown = true;
 

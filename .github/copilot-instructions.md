@@ -43,6 +43,7 @@
 - Prefer a specific type or `unknown` over `any`.
 - Do not use non-null assertions (`!`). Use optional chaining (`?.`) or nullish coalescing (`??`).
 - Follow `biome` for formatting and import order.
+- Always place `import` statements at the top of the file.
 
 ## Web UI
 
@@ -60,6 +61,7 @@
 ## Testing
 
 - Consider maintainability and efforts when writing tests.
+- Always create unit test files alongside the source file with `.test.ts` suffix.
 - Focus on high value, low effort tests first. Defer complex mocking, complex state management testing and concurrent processing unless explicitly requested by the user.
 - Always test the intended bevavior, not the implementation details.
 - Avoid timing sensitive tests unless absolutely necessary.

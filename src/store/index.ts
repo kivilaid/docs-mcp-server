@@ -1,3 +1,6 @@
+import { DocumentManagementClient } from "./DocumentManagementClient";
+import { DocumentManagementService } from "./DocumentManagementService";
+import type { EmbeddingModelConfig } from "./embeddings/EmbeddingConfig";
 import type { IDocumentManagement } from "./trpc/interfaces";
 
 export * from "./DocumentManagementClient";
@@ -7,16 +10,15 @@ export * from "./errors";
 export * from "./trpc/interfaces";
 
 /** Factory to create a document management implementation */
-export async function createDocumentManagement(options: { serverUrl?: string } = {}) {
+export async function createDocumentManagement(
+  options: { serverUrl?: string; embeddingConfig?: EmbeddingModelConfig | null } = {},
+) {
   if (options.serverUrl) {
-    const { DocumentManagementClient } = await import("./DocumentManagementClient");
     const client = new DocumentManagementClient(options.serverUrl);
     await client.initialize();
     return client as IDocumentManagement;
   }
-  const service = new (
-    await import("./DocumentManagementService")
-  ).DocumentManagementService();
+  const service = new DocumentManagementService(options.embeddingConfig);
   await service.initialize();
   return service as IDocumentManagement;
 }
@@ -25,10 +27,10 @@ export async function createDocumentManagement(options: { serverUrl?: string } =
  * Creates and initializes a local DocumentManagementService instance.
  * Use this only when constructing an in-process PipelineManager (worker path).
  */
-export async function createLocalDocumentManagement() {
-  const service = new (
-    await import("./DocumentManagementService")
-  ).DocumentManagementService();
+export async function createLocalDocumentManagement(
+  embeddingConfig?: EmbeddingModelConfig | null,
+) {
+  const service = new DocumentManagementService(embeddingConfig);
   await service.initialize();
   return service;
 }

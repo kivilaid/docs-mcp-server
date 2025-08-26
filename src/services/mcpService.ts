@@ -13,6 +13,7 @@ import { createMcpServerInstance } from "../mcp/mcpServer";
 import { initializeTools } from "../mcp/tools";
 import type { IPipeline } from "../pipeline/trpc/interfaces";
 import type { IDocumentManagement } from "../store/trpc/interfaces";
+import { analytics, createMcpSession } from "../telemetry";
 import { logger } from "../utils/logger";
 
 /**
@@ -53,9 +54,26 @@ export async function registerMcpService(
         const transport = new SSEServerTransport("/messages", reply.raw);
         sseTransports[transport.sessionId] = transport;
 
+        // Track MCP session for analytics
+        if (analytics.isEnabled()) {
+          const session = createMcpSession({
+            protocol: "http",
+            transport: "sse",
+            authEnabled: !!authManager,
+            readOnly,
+            servicesEnabled: ["mcp"],
+            // Embedding context will be resolved by the service that starts MCP
+          });
+          analytics.startSession(session);
+        }
+
         reply.raw.on("close", () => {
           delete sseTransports[transport.sessionId];
           transport.close();
+          // End telemetry session when connection closes
+          if (analytics.isEnabled()) {
+            analytics.endSession();
+          }
         });
 
         await mcpServer.connect(transport);

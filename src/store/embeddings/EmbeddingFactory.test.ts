@@ -55,6 +55,21 @@ describe("createEmbeddingModel", () => {
     });
   });
 
+  test("should throw ModelConfigurationError for OpenAI without OPENAI_API_KEY", () => {
+    vi.stubGlobal("process", {
+      env: {
+        // Missing OPENAI_API_KEY
+      },
+    });
+
+    expect(() => createEmbeddingModel("text-embedding-3-small")).toThrow(
+      ModelConfigurationError,
+    );
+    expect(() => createEmbeddingModel("openai:text-embedding-3-small")).toThrow(
+      ModelConfigurationError,
+    );
+  });
+
   test("should correctly parse model names containing colons or slashes", () => {
     const model = createEmbeddingModel(
       "openai:jeffh/intfloat-multilingual-e5-large-instruct:f16",
